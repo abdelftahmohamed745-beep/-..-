@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "doctors": {
+      "title": "doctors",
+      "description": "Doctor profile and clinic settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "specialty": { "type": "string" },
+        "clinicName": { "type": "string" },
+        "qrCodeId": { "type": "string" },
+        "subscriptionStatus": { "type": "string" },
+        "trialEndDate": { "type": "string" },
+        "subscriptionEndDate": { "type": "string" },
+        "avgConsultTime": { "type": "number" },
+        "workHours": {
+          "type": "object",
+          "properties": {
+            "open": { "type": "string" },
+            "close": { "type": "string" },
+            "maxPatientsPerDay": { "type": "number" }
+          }
+        },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "name", "specialty"]
+    },
+    "patients": {
+      "title": "queues/{doctorId}/patients",
+      "description": "Patients in queue for a doctor",
+      "type": "object",
+      "properties": {
+        "sequenceNumber": { "type": "number" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "calledAt": { "type": "string" },
+        "doneAt": { "type": "string" }
+      },
+      "required": ["sequenceNumber", "name", "phone", "status"]
+    }
+  }
+}

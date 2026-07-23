@@ -1,0 +1,237 @@
+import React from 'react';
+import { Stethoscope, QrCode, CreditCard, Settings, LogOut, UserCheck, Sparkles, ExternalLink, Building2, ShieldAlert, Bell } from 'lucide-react';
+import { DoctorProfile } from '../types';
+
+export type NavTabType = 'dashboard' | 'directory' | 'clinic' | 'booking' | 'ticket' | 'subscription' | 'auth' | 'admin';
+
+interface NavbarProps {
+  currentDoctor: DoctorProfile | null;
+  activeTab: NavTabType;
+  onNavigate: (tab: NavTabType) => void;
+  onOpenQRModal: () => void;
+  onOpenSettingsModal: () => void;
+  onOpenNotificationModal?: () => void;
+  onSignOut: () => void;
+  onSelectDemoDoctor?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({
+  currentDoctor,
+  activeTab,
+  onNavigate,
+  onOpenQRModal,
+  onOpenSettingsModal,
+  onOpenNotificationModal,
+  onSignOut,
+  onSelectDemoDoctor
+}) => {
+  return (
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          
+          {/* Brand Logo & Main Nav Tabs */}
+          <div className="flex items-center gap-4 sm:gap-6">
+            <button
+              onClick={() => onNavigate('directory')}
+              className="flex items-center gap-2.5 text-right group focus:outline-hidden"
+            >
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-sky-500/20 group-hover:scale-105 transition-transform">
+                <Stethoscope className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-xl text-slate-900 tracking-tight font-['Tajawal',sans-serif]">
+                    دوري
+                  </span>
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-500 font-medium block -mt-1">
+                  نظام حجز وتتبع العيادات
+                </span>
+              </div>
+            </button>
+
+            {/* Nav Tabs */}
+            <nav className="hidden md:flex items-center gap-1">
+              <button
+                onClick={() => onNavigate('directory')}
+                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
+                  activeTab === 'directory'
+                    ? 'bg-sky-50 text-sky-700 font-black border border-sky-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Building2 className="w-4 h-4 text-sky-600" />
+                <span>أطباء وعيادات</span>
+              </button>
+
+              {currentDoctor && (
+                <button
+                  onClick={() => onNavigate('dashboard')}
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${
+                    activeTab === 'dashboard'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  لوحة تحكم عيادتي
+                </button>
+              )}
+
+              <button
+                onClick={() => onNavigate('subscription')}
+                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${
+                  activeTab === 'subscription'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                الاشتراكات والباقات
+              </button>
+
+              <button
+                onClick={() => onNavigate('admin')}
+                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1 ${
+                  activeTab === 'admin'
+                    ? 'bg-rose-900 text-white shadow-xs'
+                    : 'text-rose-700 hover:text-rose-900 hover:bg-rose-50'
+                }`}
+                title="لوحة تحكم إدارة المنصة"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>إدارة المنصة</span>
+              </button>
+            </nav>
+          </div>
+
+          {/* Right Navigation Actions */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            
+            {/* Near-Turn Notification Bell Button */}
+            {onOpenNotificationModal && (
+              <button
+                onClick={onOpenNotificationModal}
+                className="p-2 text-slate-600 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition relative"
+                title="إعدادات ورسائل إشعارات قرب الدور"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-sky-500 rounded-full animate-ping" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-sky-600 rounded-full" />
+              </button>
+            )}
+            
+            {/* Quick Demo Doctor Loader Pill if no doctor logged in */}
+            {!currentDoctor && onSelectDemoDoctor && (
+              <button
+                onClick={onSelectDemoDoctor}
+                className="hidden lg:flex items-center gap-1.5 text-xs bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold px-3 py-1.5 rounded-full border border-sky-200/60 transition"
+                title="تحميل عيادة نموذجية للاختبار السريع"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                <span>عيادة نموذجية</span>
+              </button>
+            )}
+
+            {currentDoctor ? (
+              <>
+                {/* Subscription Badge */}
+                <button
+                  onClick={() => onNavigate('subscription')}
+                  className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition border ${
+                    currentDoctor.subscriptionStatus === 'active'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                      : currentDoctor.subscriptionStatus === 'trial'
+                      ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                      : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                  }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>
+                    {currentDoctor.subscriptionStatus === 'active'
+                      ? 'اشتراك نشط'
+                      : currentDoctor.subscriptionStatus === 'trial'
+                      ? 'تجريبي'
+                      : 'منتهي'}
+                  </span>
+                </button>
+
+                {/* Patient View Preview Button */}
+                <button
+                  onClick={() => onNavigate('booking')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${
+                    activeTab === 'booking'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                  title="معاينة صفحة حجز المريض كأنك قمت بمسح QR Code"
+                >
+                  <ExternalLink className="w-4 h-4 text-sky-500" />
+                  <span className="hidden sm:inline">معاينة صفحة الحجز</span>
+                </button>
+
+                {/* QR Code Action */}
+                <button
+                  onClick={onOpenQRModal}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition"
+                  title="عرض وطباعة QR Code العيادة"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span className="hidden sm:inline">رمز QR</span>
+                </button>
+
+                {/* Settings */}
+                <button
+                  onClick={onOpenSettingsModal}
+                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"
+                  title="إعدادات العيادة وتعديل الملف"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+
+                {/* Sign Out */}
+                <button
+                  onClick={onSignOut}
+                  className="p-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition"
+                  title="تسجيل الخروج"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onNavigate('directory')}
+                  className={`md:hidden px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                    activeTab === 'directory'
+                      ? 'bg-sky-600 text-white'
+                      : 'bg-sky-50 text-sky-700'
+                  }`}
+                >
+                  أطباء وعيادات
+                </button>
+
+                {/* Clear Doctor Login Button (Requirement 5) */}
+                <button
+                  onClick={() => onNavigate('auth')}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition shadow-sm ${
+                    activeTab === 'auth'
+                      ? 'bg-slate-900 text-white ring-2 ring-slate-900/20'
+                      : 'bg-slate-900 hover:bg-slate-800 text-white'
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4 text-sky-400" />
+                  <span>دخول الأطباء</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </header>
+  );
+};

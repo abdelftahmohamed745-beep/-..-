@@ -6,14 +6,6 @@ import { DoctorProfile } from '../types';
 import { getDoctorSeoData } from '../utils/seo';
 
 function getFirebaseConfig() {
-  try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    }
-  } catch (err) {
-    console.error('Failed to read firebase-applet-config.json:', err);
-  }
   return {
     projectId: 'prefab-groove-502023-t4',
     firestoreDatabaseId: 'ai-studio-f8a934fa-e4dd-4561-8d66-6ad00154589f',
@@ -31,17 +23,26 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
+function parseFirestoreValue(val: any): any {
+  if (!val || typeof val !== 'object') return null;
+  if ('stringValue' in val) return val.stringValue;
+  if ('booleanValue' in val) return val.booleanValue;
+  if ('integerValue' in val) return parseInt(val.integerValue, 10);
+  if ('doubleValue' in val) return parseFloat(val.doubleValue);
+  if ('arrayValue' in val) {
+    return (val.arrayValue.values || []).map((item: any) => parseFirestoreValue(item));
+  }
+  if ('mapValue' in val) {
+    return parseFirestoreFields(val.mapValue.fields || {});
+  }
+  return null;
+}
+
 function parseFirestoreFields(fields: Record<string, any>): DoctorProfile {
   const docObj: Record<string, any> = {};
+  if (!fields) return docObj as DoctorProfile;
   for (const [key, val] of Object.entries(fields)) {
-    if (!val) continue;
-    if ('stringValue' in val) docObj[key] = val.stringValue;
-    else if ('booleanValue' in val) docObj[key] = val.booleanValue;
-    else if ('integerValue' in val) docObj[key] = parseInt(val.integerValue, 10);
-    else if ('doubleValue' in val) docObj[key] = parseFloat(val.doubleValue);
-    else if ('arrayValue' in val) {
-      docObj[key] = (val.arrayValue.values || []).map((item: any) => item.stringValue || item);
-    }
+    docObj[key] = parseFirestoreValue(val);
   }
   return docObj as DoctorProfile;
 }
@@ -55,7 +56,35 @@ export async function fetchDoctorProfileServer(docId: string): Promise<DoctorPro
     return null;
   }
 
-  // Attempt 1: Firebase JS SDK getDoc
+  // Attempt 1: Ultra-fast REST API fetch
+  try {
+    const fbConfig = getFirebaseConfig();
+    const projectId = fbConfig.projectId;
+    const databaseId = fbConfig.firestoreDatabaseId || '(default)';
+    const apiKey = fbConfig.apiKey;
+
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/doctors/${encodeURIComponent(sanitizedDocId)}?key=${apiKey}`;
+
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.fields) {
+        const doctor = parseFirestoreFields(data.fields);
+        doctor.uid = doctor.uid || sanitizedDocId;
+
+        // Check if active
+        if (doctor.isActive === false) {
+          return null;
+        }
+
+        return doctor;
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching doctor via REST API in server prerender, trying JS SDK fallback:', err);
+  }
+
+  // Attempt 2: Firebase JS SDK fallback
   try {
     const docRef = doc(db, "doctors", sanitizedDocId);
     const snap = await getDoc(docRef);
@@ -68,41 +97,10 @@ export async function fetchDoctorProfileServer(docId: string): Promise<DoctorPro
       return data;
     }
   } catch (sdkErr) {
-    console.warn('Firebase SDK fetch in server prerender failed, trying REST API fallback:', sdkErr);
+    console.error('Firebase SDK fetch in server prerender failed:', sdkErr);
   }
 
-  // Attempt 2: REST API fallback
-  const fbConfig = getFirebaseConfig();
-  const projectId = fbConfig.projectId;
-  const databaseId = fbConfig.firestoreDatabaseId || '(default)';
-  const apiKey = fbConfig.apiKey;
-
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/doctors/${encodeURIComponent(sanitizedDocId)}?key=${apiKey}`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      return null;
-    }
-
-    const data = await res.json();
-    if (!data || !data.fields) {
-      return null;
-    }
-
-    const doctor = parseFirestoreFields(data.fields);
-    doctor.uid = doctor.uid || sanitizedDocId;
-
-    // Check if active
-    if (doctor.isActive === false) {
-      return null;
-    }
-
-    return doctor;
-  } catch (err) {
-    console.error('Error fetching doctor in server prerender REST API:', err);
-    return null;
-  }
+  return null;
 }
 
 export function generate404Html(rootDir: string, docId: string): string {

@@ -1,6 +1,16 @@
+import fs from 'fs';
+import path from 'path';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { DoctorProfile } from '../types';
+
+function getFirebaseConfig() {
+  return {
+    projectId: 'prefab-groove-502023-t4',
+    firestoreDatabaseId: 'ai-studio-f8a934fa-e4dd-4561-8d66-6ad00154589f',
+    apiKey: 'AIzaSyCcS-iNhEkZ80ryW6AGS854ERxXBklYSyE'
+  };
+}
 
 function escapeXml(str: string): string {
   if (!str) return '';
@@ -18,37 +28,97 @@ export async function generateSitemapXml(): Promise<string> {
     { loc: `${baseUrl}/` }
   ];
 
-  try {
-    const querySnap = await getDocs(collection(db, 'doctors'));
-    querySnap.forEach((docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as DoctorProfile;
-        const docId = docSnap.id || data.uid;
+  let fetchedByRest = false;
 
-        // Include only active clinics
-        if (docId && data.isActive !== false) {
-          let lastmod: string | undefined = undefined;
-          const rawDate = (data as any).updatedAt || data.createdAt;
-          if (rawDate) {
-            try {
-              const parsed = new Date(rawDate);
-              if (!isNaN(parsed.getTime())) {
-                lastmod = parsed.toISOString();
+  // Attempt 1: REST runQuery fetch (fastest in serverless)
+  try {
+    const fbConfig = getFirebaseConfig();
+    const projectId = fbConfig.projectId;
+    const databaseId = fbConfig.firestoreDatabaseId || '(default)';
+    const apiKey = fbConfig.apiKey;
+
+    const queryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery?key=${apiKey}`;
+    const res = await fetch(queryUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'doctors' }]
+        }
+      })
+    });
+
+    if (res.ok) {
+      const items = await res.json();
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          if (item && item.document && item.document.name) {
+            const docNamePath = item.document.name;
+            const docId = docNamePath.split('/').pop() || '';
+            const fields = item.document.fields || {};
+
+            const isActiveVal = fields.isActive ? fields.isActive.booleanValue : true;
+            if (docId && isActiveVal !== false) {
+              let lastmod: string | undefined = undefined;
+              const rawDate = fields.updatedAt?.stringValue || fields.createdAt?.stringValue;
+              if (rawDate) {
+                try {
+                  const parsed = new Date(rawDate);
+                  if (!isNaN(parsed.getTime())) {
+                    lastmod = parsed.toISOString();
+                  }
+                } catch (e) {
+                  // Ignore invalid dates
+                }
               }
-            } catch (e) {
-              // Ignore invalid dates
+
+              urls.push({
+                loc: `${baseUrl}/clinic/${encodeURIComponent(docId)}`,
+                lastmod
+              });
             }
           }
-
-          urls.push({
-            loc: `${baseUrl}/clinic/${encodeURIComponent(docId)}`,
-            lastmod
-          });
         }
+        fetchedByRest = true;
       }
-    });
+    }
   } catch (err) {
-    console.error('Error fetching doctors for sitemap:', err);
+    console.warn('REST runQuery in sitemap failed, falling back to JS SDK:', err);
+  }
+
+  // Attempt 2: Firebase JS SDK fallback
+  if (!fetchedByRest) {
+    try {
+      const querySnap = await getDocs(collection(db, 'doctors'));
+      querySnap.forEach((docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as DoctorProfile;
+          const docId = docSnap.id || data.uid;
+
+          if (docId && data.isActive !== false) {
+            let lastmod: string | undefined = undefined;
+            const rawDate = (data as any).updatedAt || data.createdAt;
+            if (rawDate) {
+              try {
+                const parsed = new Date(rawDate);
+                if (!isNaN(parsed.getTime())) {
+                  lastmod = parsed.toISOString();
+                }
+              } catch (e) {
+                // Ignore invalid dates
+              }
+            }
+
+            urls.push({
+              loc: `${baseUrl}/clinic/${encodeURIComponent(docId)}`,
+              lastmod
+            });
+          }
+        }
+      });
+    } catch (err) {
+      console.error('Error fetching doctors for sitemap via JS SDK:', err);
+    }
   }
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;

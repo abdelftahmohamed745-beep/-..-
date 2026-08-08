@@ -21,7 +21,7 @@ export const QRModal: React.FC<QRModalProps> = ({
 
   if (!isOpen) return null;
 
-  const bookingUrl = `${window.location.origin}/?doc=${doctor.uid}`;
+  const bookingUrl = `${window.location.origin}/clinic/${doctor.uid}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(bookingUrl);

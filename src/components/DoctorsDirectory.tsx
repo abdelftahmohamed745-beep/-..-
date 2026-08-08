@@ -73,21 +73,21 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
     <div className="max-w-7xl mx-auto px-4 py-8">
       
       {/* Header Title Section */}
-      <div className="text-center max-w-3xl mx-auto mb-10">
+      <header className="text-center max-w-3xl mx-auto mb-10">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200/80 text-sky-700 font-bold text-xs mb-3">
           <Stethoscope className="w-4 h-4 text-sky-600" />
           <span>الدليل الطبي الذكي</span>
         </div>
         <h1 className="text-2xl sm:text-4xl font-black text-slate-900 font-['Tajawal',sans-serif] tracking-tight">
-          أطباء وعيادات
+          دوري — نظام إدارة العيادات وحجز المواعيد وتتبع أدوار المرضى
         </h1>
-        <p className="text-slate-600 text-xs sm:text-sm mt-2">
-          ابحث عن أفضل الأطباء والعيادات التخصصية، تواصل مباشرة وحجز دورك في الطابور الرقمي المباشر
+        <p className="text-slate-600 text-xs sm:text-sm mt-2 leading-relaxed">
+          ابحث عن أفضل الأطباء والعيادات التخصصية، تواصل مباشرة وحجز دورك في الطابور الرقمي المباشر عبر منصة دوري لإدارة العيادات وتنظيم مواعيد الأطباء.
         </p>
-      </div>
+      </header>
 
       {/* Search & Filter Bar */}
-      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border border-slate-200/80 mb-10">
+      <section aria-label="البحث والفلترة" className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border border-slate-200/80 mb-10">
         <div className="flex flex-col md:flex-row items-center gap-4">
           
           {/* Text Search Input */}
@@ -130,9 +130,10 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
           </div>
 
         </div>
-      </div>
+      </section>
 
       {/* Doctor Cards Grid */}
+      <section aria-label="قائمة الأطباء والعيادات">
       {loading ? (
         <div className="py-16 text-center">
           <div className="w-10 h-10 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -300,13 +301,14 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
           })}
         </div>
       )}
+      </section>
 
       {/* Admin General Platform Phone Footer Banner */}
-      <div className="mt-12 p-6 bg-slate-900 text-white rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-slate-800">
+      <section aria-label="الانضمام لمنصة دوري" className="mt-12 p-6 bg-slate-900 text-white rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-slate-800">
         <div className="text-right">
-          <h4 className="font-bold text-sm text-sky-300 font-['Tajawal',sans-serif]">
+          <h2 className="font-bold text-sm text-sky-300 font-['Tajawal',sans-serif]">
             هل أنت طبيب وتريد الانضمام لدليل منصة دوري؟
-          </h4>
+          </h2>
           <p className="text-xs text-slate-300 mt-1">
             سجل عيادتك مجاناً واستمتع بنظام حجز وإدارة طابور الانتظار المباشر.
           </p>
@@ -320,7 +322,7 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
           <MessageCircle className="w-4 h-4 fill-current" />
           <span>تواصل مع الإدارة (01032120351)</span>
         </a>
-      </div>
+      </section>
 
     </div>
   );

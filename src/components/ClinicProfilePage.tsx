@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { DoctorProfile, DoctorRating } from '../types';
 import { getDoctorProfile, formatPhoneNumberForUrl, getDoctorRatings } from '../services/firebaseService';
+import { setPageSeo, getDoctorSeoData, DEFAULT_HOMEPAGE_SEO } from '../utils/seo';
 
 interface ClinicProfilePageProps {
   doctorId: string;
@@ -50,11 +51,23 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
         setDoctor(profile);
         setRatings(rList);
         setLoading(false);
+
+        if (profile) {
+          setPageSeo(getDoctorSeoData(profile));
+        } else {
+          setPageSeo({
+            title: 'العيادة غير موجودة | منصة دوري',
+            description: 'لم نتمكن من العثور على العيادة أو الطبيب المطلوب في منصة دوري.',
+            canonicalUrl: `https://nine-vert-34.vercel.app/clinic/${doctorId}`,
+            robots: 'noindex, nofollow'
+          });
+        }
       }
     }
     load();
     return () => {
       isMounted = false;
+      setPageSeo(DEFAULT_HOMEPAGE_SEO);
     };
   }, [doctorId]);
 
@@ -95,7 +108,7 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
   const hasWhatsapp = Boolean(cleanWhatsapp && cleanWhatsapp.length > 5);
 
   const handleCopyClinicLink = () => {
-    const url = `${window.location.origin}?doc=${doctor.uid}`;
+    const url = `${window.location.origin}/clinic/${doctor.uid}`;
     navigator.clipboard.writeText(url);
     onShowToast("تم نسخ رابط صفحة العيادة بنجاح", "", "success");
   };

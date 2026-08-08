@@ -1,6 +1,8 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import { renderClinicHtml } from "./src/server/prerenderClinic";
+import { generateSitemapXml } from "./src/server/generateSitemap";
 
 async function startServer() {
   const app = express();
@@ -116,6 +118,42 @@ async function startServer() {
     }
 
     res.json({ allowed: true });
+  });
+
+  // Dynamic Sitemap Route
+  app.get("/sitemap.xml", async (req, res) => {
+    try {
+      const xml = await generateSitemapXml();
+      res.setHeader("Content-Type", "application/xml; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800");
+      res.status(200).send(xml);
+    } catch (err) {
+      console.error("Express sitemap error:", err);
+      const fallbackXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://nine-vert-34.vercel.app/</loc>\n  </url>\n</urlset>`;
+      res.setHeader("Content-Type", "application/xml; charset=utf-8");
+      res.status(200).send(fallbackXml);
+    }
+  });
+
+  // Clinic SEO Prerender Route
+  app.get("/clinic/:docId", async (req, res) => {
+    try {
+      const docId = req.params.docId;
+      const rootDir = process.cwd();
+      const result = await renderClinicHtml(rootDir, docId);
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (result.status === 200) {
+        res.setHeader("Cache-Control", "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400");
+      } else {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
+
+      res.status(result.status).send(result.html);
+    } catch (err) {
+      console.error("Express clinic prerender error:", err);
+      res.status(500).send('<!doctype html><html lang="ar" dir="rtl"><head><title>خطأ في الخادم</title></head><body><h1>500 - حدث خطأ غير متوقع</h1></body></html>');
+    }
   });
 
   // Vite middleware for development vs Production static files

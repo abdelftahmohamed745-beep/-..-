@@ -30,6 +30,7 @@ import { NotificationSettingsModal } from './components/NotificationSettingsModa
 import { ToastContainer } from './components/Toast';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { MessageSquare, ArrowRight } from 'lucide-react';
+import { setPageSeo, DEFAULT_HOMEPAGE_SEO } from './utils/seo';
 
 interface NavState {
   tab: NavTabType;
@@ -75,11 +76,27 @@ export default function App() {
       setNavHistory((prev) => [...prev, currentState]);
     }
 
+    const targetDoctorId = options?.doctorId !== undefined ? options.doctorId : selectedDoctorId;
+    const targetClinicDoctorId = options?.clinicDoctorId !== undefined ? options.clinicDoctorId : viewClinicDoctorId;
+    const targetPatientId = options?.patientId !== undefined ? options.patientId : selectedPatientId;
+
     if (options?.doctorId !== undefined) setSelectedDoctorId(options.doctorId);
     if (options?.clinicDoctorId !== undefined) setViewClinicDoctorId(options.clinicDoctorId);
     if (options?.patientId !== undefined) setSelectedPatientId(options.patientId);
 
     setActiveTab(newTab);
+
+    // Sync clean URL bar in browser
+    if (typeof window !== 'undefined') {
+      if (newTab === 'clinic' && targetClinicDoctorId) {
+        const cleanPath = `/clinic/${encodeURIComponent(targetClinicDoctorId)}`;
+        if (window.location.pathname !== cleanPath) {
+          window.history.pushState({ tab: 'clinic', doctorId: targetClinicDoctorId }, '', cleanPath);
+        }
+      } else if (newTab === 'directory' && window.location.pathname !== '/') {
+        window.history.pushState({ tab: 'directory' }, '', '/');
+      }
+    }
   };
 
   // Back Button Handler (Goes 1 step back in navigation history)
@@ -99,6 +116,14 @@ export default function App() {
     setSelectedDoctorId(previousState.selectedDoctorId);
     setViewClinicDoctorId(previousState.viewClinicDoctorId);
     setSelectedPatientId(previousState.selectedPatientId);
+
+    if (typeof window !== 'undefined') {
+      if (previousState.tab === 'clinic' && previousState.viewClinicDoctorId) {
+        window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.viewClinicDoctorId)}`);
+      } else if (previousState.tab === 'directory') {
+        window.history.replaceState(null, '', '/');
+      }
+    }
   };
 
   // Modals state
@@ -126,9 +151,24 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Parse URL query params on load
-  useEffect(() => {
+  // Parse URL route or query params on load and navigation
+  const parseUrlRoute = () => {
+    if (typeof window === 'undefined') return;
+
+    const pathname = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
+
+    // Check clean route: /clinic/:docId
+    const clinicMatch = pathname.match(/^\/clinic\/([^/?#]+)/);
+    if (clinicMatch && clinicMatch[1]) {
+      const docId = decodeURIComponent(clinicMatch[1]);
+      setSelectedDoctorId(docId);
+      setViewClinicDoctorId(docId);
+      setActiveTab('clinic');
+      return;
+    }
+
+    // Check legacy query params: ?doc=<docId>
     const docParam = params.get('doc');
     const ticketParam = params.get('ticket');
     const viewParam = params.get('view');
@@ -146,11 +186,27 @@ export default function App() {
         setActiveTab('booking');
       }
     } else {
-      // Check local storage for recent ticket
       // Clean up test accounts automatically from Firestore
       purgeTestAccounts().catch(console.error);
     }
+  };
+
+  useEffect(() => {
+    parseUrlRoute();
+
+    const handlePopState = () => {
+      parseUrlRoute();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'directory') {
+      setPageSeo(DEFAULT_HOMEPAGE_SEO);
+    }
+  }, [activeTab]);
 
   // Firebase Auth State Listener
   useEffect(() => {
@@ -160,9 +216,10 @@ export default function App() {
         if (docProfile) {
           setCurrentDoctor(docProfile);
 
-          // If user didn't explicitly open patient link, navigate to dashboard
+          // If user didn't explicitly open patient or clinic link, navigate to dashboard
           const params = new URLSearchParams(window.location.search);
-          if (!params.get('doc')) {
+          const isClinicRoute = window.location.pathname.startsWith('/clinic/');
+          if (!params.get('doc') && !isClinicRoute) {
             setActiveTab('dashboard');
           }
         }

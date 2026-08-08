@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/clinic/:docId", "destination": "/api/clinic-render?docId=:docId" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

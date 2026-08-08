@@ -1,15 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { DoctorProfile } from '../types';
 import { getDoctorSeoData } from '../utils/seo';
 
 function getFirebaseConfig() {
   return {
-    projectId: 'prefab-groove-502023-t4',
-    firestoreDatabaseId: 'ai-studio-f8a934fa-e4dd-4561-8d66-6ad00154589f',
-    apiKey: 'AIzaSyCcS-iNhEkZ80ryW6AGS854ERxXBklYSyE'
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'prefab-groove-502023-t4',
+    firestoreDatabaseId: process.env.VITE_FIREBASE_DATABASE_ID || 'ai-studio-f8a934fa-e4dd-4561-8d66-6ad00154589f',
+    apiKey: process.env.VITE_FIREBASE_API_KEY || 'AIzaSyCcS-iNhEkZ80ryW6AGS854ERxXBklYSyE'
   };
 }
 
@@ -56,7 +54,7 @@ export async function fetchDoctorProfileServer(docId: string): Promise<DoctorPro
     return null;
   }
 
-  // Attempt 1: Ultra-fast REST API fetch
+  // Ultra-fast, server-safe REST API fetch
   try {
     const fbConfig = getFirebaseConfig();
     const projectId = fbConfig.projectId;
@@ -81,23 +79,7 @@ export async function fetchDoctorProfileServer(docId: string): Promise<DoctorPro
       }
     }
   } catch (err) {
-    console.warn('Error fetching doctor via REST API in server prerender, trying JS SDK fallback:', err);
-  }
-
-  // Attempt 2: Firebase JS SDK fallback
-  try {
-    const docRef = doc(db, "doctors", sanitizedDocId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data() as DoctorProfile;
-      data.uid = data.uid || sanitizedDocId;
-      if (data.isActive === false) {
-        return null;
-      }
-      return data;
-    }
-  } catch (sdkErr) {
-    console.error('Firebase SDK fetch in server prerender failed:', sdkErr);
+    console.warn('Error fetching doctor via REST API in server prerender:', err);
   }
 
   return null;

@@ -2,7 +2,7 @@ import { renderClinicHtml } from '../src/server/prerenderClinic';
 
 export default async function handler(req: any, res: any) {
   try {
-    let docId = (req.query.docId as string) || '';
+    let docId = (req.query?.docId as string) || '';
 
     if (!docId && req.url) {
       const match = req.url.match(/\/clinic\/([^/?#]+)/);

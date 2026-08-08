@@ -1,14 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase/config';
-import { DoctorProfile } from '../types';
 
 function getFirebaseConfig() {
   return {
-    projectId: 'prefab-groove-502023-t4',
-    firestoreDatabaseId: 'ai-studio-f8a934fa-e4dd-4561-8d66-6ad00154589f',
-    apiKey: 'AIzaSyCcS-iNhEkZ80ryW6AGS854ERxXBklYSyE'
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'prefab-groove-502023-t4',
+    firestoreDatabaseId: process.env.VITE_FIREBASE_DATABASE_ID || 'ai-studio-f8a934fa-e4dd-4561-8d66-6ad00154589f',
+    apiKey: process.env.VITE_FIREBASE_API_KEY || 'AIzaSyCcS-iNhEkZ80ryW6AGS854ERxXBklYSyE'
   };
 }
 
@@ -83,42 +80,7 @@ export async function generateSitemapXml(): Promise<string> {
       }
     }
   } catch (err) {
-    console.warn('REST runQuery in sitemap failed, falling back to JS SDK:', err);
-  }
-
-  // Attempt 2: Firebase JS SDK fallback
-  if (!fetchedByRest) {
-    try {
-      const querySnap = await getDocs(collection(db, 'doctors'));
-      querySnap.forEach((docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data() as DoctorProfile;
-          const docId = docSnap.id || data.uid;
-
-          if (docId && data.isActive !== false) {
-            let lastmod: string | undefined = undefined;
-            const rawDate = (data as any).updatedAt || data.createdAt;
-            if (rawDate) {
-              try {
-                const parsed = new Date(rawDate);
-                if (!isNaN(parsed.getTime())) {
-                  lastmod = parsed.toISOString();
-                }
-              } catch (e) {
-                // Ignore invalid dates
-              }
-            }
-
-            urls.push({
-              loc: `${baseUrl}/clinic/${encodeURIComponent(docId)}`,
-              lastmod
-            });
-          }
-        }
-      });
-    } catch (err) {
-      console.error('Error fetching doctors for sitemap via JS SDK:', err);
-    }
+    console.warn('REST runQuery in sitemap failed:', err);
   }
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;

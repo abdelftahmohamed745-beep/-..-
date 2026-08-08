@@ -3,7 +3,7 @@ import { Globe, ArrowLeft, MessageSquare, Sparkles } from 'lucide-react';
 
 export const CustomWebsiteSection: React.FC = () => {
   const customWebsiteMessage = "مرحبًا، أريد إنشاء موقع خاص بي. أريد معرفة التفاصيل والأسعار.";
-  const whatsappUrl = `https://wa.me/9647813745417?text=${encodeURIComponent(customWebsiteMessage)}`;
+  const whatsappUrl = `https://wa.me/201032120351?text=${encodeURIComponent(customWebsiteMessage)}`;
 
   return (
     <div className="bg-gradient-to-br from-slate-900 via-sky-950 to-slate-900 text-white rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-xl relative overflow-hidden my-8">

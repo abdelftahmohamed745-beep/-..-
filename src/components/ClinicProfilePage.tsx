@@ -14,10 +14,12 @@ import {
   Info,
   DollarSign,
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  Star,
+  MessageSquare
 } from 'lucide-react';
-import { DoctorProfile } from '../types';
-import { getDoctorProfile, formatPhoneNumberForUrl } from '../services/firebaseService';
+import { DoctorProfile, DoctorRating } from '../types';
+import { getDoctorProfile, formatPhoneNumberForUrl, getDoctorRatings } from '../services/firebaseService';
 
 interface ClinicProfilePageProps {
   doctorId: string;
@@ -33,15 +35,20 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
   onShowToast
 }) => {
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
+  const [ratings, setRatings] = useState<DoctorRating[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     async function load() {
       setLoading(true);
-      const profile = await getDoctorProfile(doctorId);
+      const [profile, rList] = await Promise.all([
+        getDoctorProfile(doctorId),
+        getDoctorRatings(doctorId)
+      ]);
       if (isMounted) {
         setDoctor(profile);
+        setRatings(rList);
         setLoading(false);
       }
     }
@@ -142,9 +149,24 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
 
           {/* Doctor Info */}
           <div className="flex-1 space-y-3">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 border border-sky-100 text-sky-700 rounded-full text-xs font-bold">
-              <Stethoscope className="w-3.5 h-3.5" />
-              <span>{doctor.specialty}</span>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 border border-sky-100 text-sky-700 rounded-full text-xs font-bold">
+                <Stethoscope className="w-3.5 h-3.5" />
+                <span>{doctor.specialty}</span>
+              </div>
+
+              {doctor.ratingAverage && doctor.ratingAverage > 0 ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-900 rounded-full text-xs font-black">
+                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                  <span>{doctor.ratingAverage} / 5</span>
+                  <span className="text-slate-400 font-normal">({doctor.ratingCount || ratings.length} تقييم)</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1 px-3 py-1 bg-slate-50 border border-slate-200 text-slate-500 rounded-full text-xs font-semibold">
+                  <Star className="w-3.5 h-3.5 text-slate-400" />
+                  <span>لا يوجد تقييمات بعد</span>
+                </div>
+              )}
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 font-['Tajawal',sans-serif]">
@@ -349,13 +371,13 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
             <div className="text-[11px] text-slate-400 space-y-1">
               <span className="font-bold text-slate-200 block">للدعم وإدارة منصة دوري:</span>
               <a
-                href="https://wa.me/9647813745417"
+                href="https://wa.me/201032120351"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-emerald-400 hover:underline flex items-center gap-1 font-bold"
               >
                 <MessageCircle className="w-3 h-3 fill-current" />
-                <span>+964 781 374 5417 (واتساب الإدارة)</span>
+                <span>01032120351 (واتساب الإدارة)</span>
               </a>
             </div>
 
@@ -363,6 +385,91 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
 
         </div>
 
+      </div>
+
+      {/* Patient Reviews & Ratings Section */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-full text-xs font-bold border border-amber-200 mb-2">
+              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>تقييمات وآراء المرضى الحقيقية</span>
+            </div>
+            <h3 className="text-xl font-extrabold text-slate-900 font-['Tajawal',sans-serif]">
+              انطباعات مرضى {doctor.clinicName}
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              يتم جمع التقييمات تلقائياً من المرضى بعد اكتمال كشفهم الطبي بنجاح عبر النظام
+            </p>
+          </div>
+
+          {/* Score Summary Box */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 p-4 rounded-2xl text-center shrink-0 w-full sm:w-auto">
+            <div className="text-3xl font-black text-amber-900 font-['Tajawal',sans-serif] flex items-center justify-center gap-1 dir-ltr">
+              <Star className="w-7 h-7 text-amber-500 fill-amber-500" />
+              <span>{doctor.ratingAverage ? doctor.ratingAverage : "0.0"}</span>
+            </div>
+            <div className="text-xs font-bold text-amber-800 mt-1">
+              {ratings.length > 0 ? `بناءً على ${ratings.length} تقييم` : "لا يوجد تقييمات حتى الآن"}
+            </div>
+          </div>
+        </div>
+
+        {/* Reviews List */}
+        {ratings.length === 0 ? (
+          <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <h4 className="font-bold text-slate-700 text-sm mb-1">لا توجد آراء مسجلة لهذا الطبيب بعد</h4>
+            <p className="text-xs text-slate-500">
+              تظهر التقييمات هنا بعد قيام المرضى بتقييم زيارتهم عند انتهاء الدور
+            </p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {ratings.map((rev) => {
+              const reviewDate = rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('ar-EG', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }) : '';
+
+              return (
+                <div key={rev.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-xs sm:text-sm font-['Tajawal',sans-serif]">
+                      {rev.patientName || "مريض"}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {reviewDate}
+                    </span>
+                  </div>
+
+                  {/* Stars */}
+                  <div className="flex items-center gap-1 dir-ltr">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        className={`w-4 h-4 ${
+                          s <= rev.stars ? 'text-amber-400 fill-amber-400' : 'text-slate-200'
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  {rev.comment ? (
+                    <p className="text-xs text-slate-700 leading-relaxed font-medium bg-white p-3 rounded-xl border border-slate-100">
+                      "{rev.comment}"
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">
+                      (تقييم بالنجوم بدون تعليق نصي)
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
     </div>

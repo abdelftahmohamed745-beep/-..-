@@ -12,7 +12,6 @@ interface NavbarProps {
   onOpenSettingsModal: () => void;
   onOpenNotificationModal?: () => void;
   onSignOut: () => void;
-  onSelectDemoDoctor?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,8 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenQRModal,
   onOpenSettingsModal,
   onOpenNotificationModal,
-  onSignOut,
-  onSelectDemoDoctor
+  onSignOut
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
@@ -121,18 +119,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-sky-500 rounded-full animate-ping" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-sky-600 rounded-full" />
-              </button>
-            )}
-            
-            {/* Quick Demo Doctor Loader Pill if no doctor logged in */}
-            {!currentDoctor && onSelectDemoDoctor && (
-              <button
-                onClick={onSelectDemoDoctor}
-                className="hidden lg:flex items-center gap-1.5 text-xs bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold px-3 py-1.5 rounded-full border border-sky-200/60 transition"
-                title="تحميل عيادة نموذجية للاختبار السريع"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-                <span>عيادة نموذجية</span>
               </button>
             )}
 

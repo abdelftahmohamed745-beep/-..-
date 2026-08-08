@@ -19,6 +19,8 @@ import {
 import { PatientRecord, DoctorProfile } from '../types';
 import { subscribeToPatientTicket, updatePatientStatus } from '../services/firebaseService';
 import { playTurnNotificationSound, speakText } from '../utils/audio';
+import { StarRatingComponent } from './StarRatingComponent';
+import { PatientFollowUpSection } from './PatientFollowUpSection';
 
 interface PatientTicketProps {
   doctorId: string;
@@ -355,6 +357,37 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
         </div>
 
       </motion.div>
+
+      {/* Patient Star Rating & Review Section (Only rendered when status is 'done') */}
+      {isDone && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6"
+        >
+          <StarRatingComponent
+            doctorId={doctor.uid}
+            patientRecordId={patient.id}
+            patientName={patient.name}
+            patientPhone={patient.phone}
+            onShowToast={onShowToast}
+          />
+        </motion.div>
+      )}
+
+      {/* Patient Follow-Up Appointments Section */}
+      {patient.phone && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-6"
+        >
+          <PatientFollowUpSection
+            patientPhone={patient.phone}
+            onShowToast={onShowToast}
+          />
+        </motion.div>
+      )}
 
     </div>
   );

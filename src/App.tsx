@@ -4,12 +4,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './firebase/config';
 import {
   getDoctorProfile,
-  seedDemoDoctorAndQueue,
-  DEMO_DOCTOR_ID
+  purgeTestAccounts
 } from './services/firebaseService';
 import { DoctorProfile, ToastMessage } from './types';
 
@@ -42,8 +42,8 @@ export default function App() {
   const [currentDoctor, setCurrentDoctor] = useState<DoctorProfile | null>(null);
   const [activeTab, setActiveTab] = useState<NavTabType>('directory');
   
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(DEMO_DOCTOR_ID);
-  const [viewClinicDoctorId, setViewClinicDoctorId] = useState<string>(DEMO_DOCTOR_ID);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
+  const [viewClinicDoctorId, setViewClinicDoctorId] = useState<string>('');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
   // Navigation History Stack
@@ -147,10 +147,8 @@ export default function App() {
       }
     } else {
       // Check local storage for recent ticket
-      const savedTicket = localStorage.getItem(`dawry_ticket_${DEMO_DOCTOR_ID}`);
-      if (savedTicket) {
-        setSelectedPatientId(savedTicket);
-      }
+      // Clean up test accounts automatically from Firestore
+      purgeTestAccounts().catch(console.error);
     }
   }, []);
 
@@ -158,12 +156,10 @@ export default function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        let docProfile = await getDoctorProfile(user.uid);
-        if (!docProfile && user.uid === DEMO_DOCTOR_ID) {
-          docProfile = await seedDemoDoctorAndQueue();
-        }
+        const docProfile = await getDoctorProfile(user.uid);
         if (docProfile) {
           setCurrentDoctor(docProfile);
+
           // If user didn't explicitly open patient link, navigate to dashboard
           const params = new URLSearchParams(window.location.search);
           if (!params.get('doc')) {
@@ -177,16 +173,6 @@ export default function App() {
 
     return () => unsub();
   }, []);
-
-  // Handle Demo Doctor quick load button
-  const handleSelectDemoDoctor = async () => {
-    const demoDoc = await seedDemoDoctorAndQueue();
-    setCurrentDoctor(demoDoc);
-    setSelectedDoctorId(DEMO_DOCTOR_ID);
-    setViewClinicDoctorId(DEMO_DOCTOR_ID);
-    setActiveTab('dashboard');
-    addToast("أهلاً بعودتك للعيادة النموذجية!", "تم تحميل لوحة تحكم د. أسامة عبد الرحمن", "success");
-  };
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -207,8 +193,8 @@ export default function App() {
         activeTab={activeTab}
         onNavigate={(tab) => {
           if (tab === 'booking') {
-            const docId = currentDoctor?.uid || DEMO_DOCTOR_ID;
-            const lastTicket = localStorage.getItem(`dawry_ticket_${docId}`);
+            const docId = currentDoctor?.uid || selectedDoctorId;
+            const lastTicket = docId ? localStorage.getItem(`dawry_ticket_${docId}`) : null;
             if (lastTicket && selectedPatientId) {
               navigateTo('ticket', { doctorId: docId });
             } else {
@@ -222,7 +208,6 @@ export default function App() {
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
         onSignOut={handleSignOut}
-        onSelectDemoDoctor={handleSelectDemoDoctor}
       />
 
       {/* Main Content Area */}
@@ -242,127 +227,137 @@ export default function App() {
           </div>
         )}
 
-        {/* Doctors Directory Tab (Default Landing View for patients) */}
-        {activeTab === 'directory' && (
-          <DoctorsDirectory
-            onSelectDoctorClinic={(docId) => {
-              navigateTo('clinic', { clinicDoctorId: docId });
-            }}
-            onBookTurn={(docId) => {
-              navigateTo('booking', { doctorId: docId });
-            }}
-            onShowToast={addToast}
-          />
-        )}
-
-        {/* Single Clinic Public Profile Page */}
-        {activeTab === 'clinic' && (
-          <ClinicProfilePage
-            doctorId={viewClinicDoctorId}
-            onBookTurn={(docId) => {
-              navigateTo('booking', { doctorId: docId });
-            }}
-            onBackToDirectory={() => handleGoBack()}
-            onShowToast={addToast}
-          />
-        )}
-
-        {/* Doctor's Private Dashboard */}
-        {activeTab === 'dashboard' && (
-          currentDoctor ? (
-            currentDoctor.isActive === false ? (
-              <div className="max-w-xl mx-auto px-4 py-16 text-center">
-                <div className="bg-amber-50 rounded-3xl p-8 border border-amber-200 shadow-xl">
-                  <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <span className="font-black text-xl">!</span>
-                  </div>
-                  <h2 className="text-lg font-bold text-amber-900 mb-2">الحساب غير نشط حالياً</h2>
-                  <p className="text-xs text-amber-800 leading-relaxed mb-6">
-                    تم إيقاف حساب عيادتك مؤقتاً من قبل إدارة المنصة. يرجى التواصل مع الدعم الفني لتفعيل الحساب.
-                  </p>
-                  <a
-                    href="https://wa.me/9647813745417"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-500 transition shadow-md"
-                  >
-                    <span>تواصل مع الدعم الفني (+964 781 374 5417)</span>
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <DoctorDashboard
-                doctor={currentDoctor}
-                onOpenQRModal={() => setIsQRModalOpen(true)}
-                onOpenScannerModal={() => setIsScannerModalOpen(true)}
-                onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
-                onNavigateSubscription={() => navigateTo('subscription')}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+          >
+            {/* Doctors Directory Tab (Default Landing View for patients) */}
+            {activeTab === 'directory' && (
+              <DoctorsDirectory
+                onSelectDoctorClinic={(docId) => {
+                  navigateTo('clinic', { clinicDoctorId: docId });
+                }}
+                onBookTurn={(docId) => {
+                  navigateTo('booking', { doctorId: docId });
+                }}
                 onShowToast={addToast}
               />
-            )
-          ) : (
-            <AuthPage
-              onDoctorLoggedIn={(doc) => {
-                setCurrentDoctor(doc);
-                navigateTo('dashboard');
-              }}
-              onShowToast={addToast}
-              onSelectPatientBookingView={() => {
-                navigateTo('directory', { doctorId: DEMO_DOCTOR_ID });
-              }}
-            />
-          )
-        )}
+            )}
 
-        {/* Platform Admin Dashboard */}
-        {activeTab === 'admin' && (
-          <AdminDashboard onShowToast={addToast} />
-        )}
+            {/* Single Clinic Public Profile Page */}
+            {activeTab === 'clinic' && (
+              <ClinicProfilePage
+                doctorId={viewClinicDoctorId}
+                onBookTurn={(docId) => {
+                  navigateTo('booking', { doctorId: docId });
+                }}
+                onBackToDirectory={() => handleGoBack()}
+                onShowToast={addToast}
+              />
+            )}
 
-        {/* Patient Live Booking View */}
-        {activeTab === 'booking' && (
-          <PatientBooking
-            doctorId={selectedDoctorId}
-            onBookingSuccess={(patientId) => {
-              navigateTo('ticket', { patientId });
-            }}
-            onShowToast={addToast}
-            onBackToDoctorLogin={() => navigateTo('auth')}
-          />
-        )}
+            {/* Doctor's Private Dashboard */}
+            {activeTab === 'dashboard' && (
+              currentDoctor ? (
+                currentDoctor.isActive === false ? (
+                  <div className="max-w-xl mx-auto px-4 py-16 text-center">
+                    <div className="bg-amber-50 rounded-3xl p-8 border border-amber-200 shadow-xl">
+                      <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                        <span className="font-black text-xl">!</span>
+                      </div>
+                      <h2 className="text-lg font-bold text-amber-900 mb-2">الحساب غير نشط حالياً</h2>
+                      <p className="text-xs text-amber-800 leading-relaxed mb-6">
+                        تم إيقاف حساب عيادتك مؤقتاً من قبل إدارة المنصة. يرجى التواصل مع الدعم الفني لتفعيل الحساب.
+                      </p>
+                      <a
+                        href="https://wa.me/201032120351"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-500 transition shadow-md"
+                      >
+                        <span>تواصل مع الدعم الفني (01032120351)</span>
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <DoctorDashboard
+                    doctor={currentDoctor}
+                    onOpenQRModal={() => setIsQRModalOpen(true)}
+                    onOpenScannerModal={() => setIsScannerModalOpen(true)}
+                    onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+                    onNavigateSubscription={() => navigateTo('subscription')}
+                    onShowToast={addToast}
+                  />
+                )
+              ) : (
+                <AuthPage
+                  onDoctorLoggedIn={(doc) => {
+                    setCurrentDoctor(doc);
+                    navigateTo('dashboard');
+                  }}
+                  onShowToast={addToast}
+                  onSelectPatientBookingView={() => {
+                    navigateTo('directory');
+                  }}
+                />
+              )
+            )}
 
-        {/* Patient Ticket & Live Queue Monitor View */}
-        {activeTab === 'ticket' && selectedPatientId && (
-          <PatientTicket
-            doctorId={selectedDoctorId}
-            patientId={selectedPatientId}
-            onNewBooking={() => navigateTo('booking')}
-            onShowToast={addToast}
-          />
-        )}
+            {/* Platform Admin Dashboard */}
+            {activeTab === 'admin' && (
+              <AdminDashboard onShowToast={addToast} />
+            )}
 
-        {/* Subscription & Plans View */}
-        {activeTab === 'subscription' && (
-          <SubscriptionPage
-            doctor={currentDoctor}
-            onBackToDashboard={() => handleGoBack()}
-            onShowToast={addToast}
-          />
-        )}
+            {/* Patient Live Booking View */}
+            {activeTab === 'booking' && (
+              <PatientBooking
+                doctorId={selectedDoctorId}
+                onBookingSuccess={(patientId) => {
+                  navigateTo('ticket', { patientId });
+                }}
+                onShowToast={addToast}
+                onBackToDoctorLogin={() => navigateTo('auth')}
+              />
+            )}
 
-        {/* Doctor Login & Signup Auth View */}
-        {activeTab === 'auth' && (
-          <AuthPage
-            onDoctorLoggedIn={(doc) => {
-              setCurrentDoctor(doc);
-              navigateTo('dashboard');
-            }}
-            onShowToast={addToast}
-            onSelectPatientBookingView={() => {
-              navigateTo('directory', { doctorId: DEMO_DOCTOR_ID });
-            }}
-          />
-        )}
+            {/* Patient Ticket & Live Queue Monitor View */}
+            {activeTab === 'ticket' && selectedPatientId && (
+              <PatientTicket
+                doctorId={selectedDoctorId}
+                patientId={selectedPatientId}
+                onNewBooking={() => navigateTo('booking')}
+                onShowToast={addToast}
+              />
+            )}
+
+            {/* Subscription & Plans View */}
+            {activeTab === 'subscription' && (
+              <SubscriptionPage
+                doctor={currentDoctor}
+                onBackToDashboard={() => handleGoBack()}
+                onShowToast={addToast}
+              />
+            )}
+
+            {/* Doctor Login & Signup Auth View */}
+            {activeTab === 'auth' && (
+              <AuthPage
+                onDoctorLoggedIn={(doc) => {
+                  setCurrentDoctor(doc);
+                  navigateTo('dashboard');
+                }}
+                onShowToast={addToast}
+                onSelectPatientBookingView={() => {
+                  navigateTo('directory');
+                }}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
 
       </main>
 
@@ -377,13 +372,13 @@ export default function App() {
           </div>
           
           <a
-            href="https://wa.me/9647813745417"
+            href="https://wa.me/201032120351"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full font-bold transition border border-emerald-200/80"
           >
             <MessageSquare className="w-3.5 h-3.5 text-emerald-600 fill-current" />
-            <span>واتساب دعم وإدارة منصة دوري: 5417 374 781 964+</span>
+            <span>واتساب دعم وإدارة منصة دوري: 01032120351</span>
           </a>
 
           <div className="flex items-center gap-3 text-slate-500">

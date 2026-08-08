@@ -23,7 +23,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
 
   const getWhatsAppSubscriptionLink = (planName: string) => {
     const text = `مرحبًا، أريد تفعيل اشتراك. اسم الباقة: ${planName}`;
-    return `https://wa.me/9647813745417?text=${encodeURIComponent(text)}`;
+    return `https://wa.me/201032120351?text=${encodeURIComponent(text)}`;
   };
 
   return (
@@ -84,7 +84,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl transition shadow-sm"
         >
           <MessageSquare className="w-4 h-4 fill-current" />
-          <span>تواصل للتفعيل عبر واتساب (+964 781 374 5417)</span>
+          <span>تواصل للتفعيل عبر واتساب (01032120351)</span>
         </a>
       </div>
 

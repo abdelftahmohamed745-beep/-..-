@@ -7,12 +7,10 @@ import {
 import { auth } from '../firebase/config';
 import {
   createDoctorProfile,
-  getDoctorProfile,
-  seedDemoDoctorAndQueue,
-  DEMO_DOCTOR_ID
+  getDoctorProfile
 } from '../services/firebaseService';
 import { DoctorProfile } from '../types';
-import { Stethoscope, Sparkles, Mail, Lock, User, Building, ArrowLeft, ShieldCheck, MessageSquare } from 'lucide-react';
+import { Stethoscope, Mail, Lock, User, Building, ArrowLeft, ShieldCheck, MessageSquare } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 
 interface AuthPageProps {
@@ -33,21 +31,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [specialty, setSpecialty] = useState('طب أطفال وباطنة');
   const [clinicName, setClinicName] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // One-Click Demo Doctor Sign In
-  const handleDemoSignIn = async () => {
-    setLoading(true);
-    try {
-      const demoDoc = await seedDemoDoctorAndQueue();
-      setLoading(false);
-      onShowToast("أهلاً بك دكتور أسامة! 🎉", "تم تسجيل الدخول في العيادة النموذجية بنجاح", "success");
-      onDoctorLoggedIn(demoDoc);
-    } catch (err) {
-      console.error("Demo sign-in error:", err);
-      setLoading(false);
-      onShowToast("خطأ في الدخول التجريبي", "تعذر إعداد بيانات العيادة النموذجية", "error");
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,33 +72,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       
-      {/* Quick Demo Hero Banner */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-gradient-to-r from-sky-600 via-sky-500 to-teal-500 text-white p-6 rounded-3xl shadow-xl mb-6 text-center relative overflow-hidden"
-      >
-        <div className="flex justify-center mb-2">
-          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center font-bold">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-        </div>
-        <h2 className="text-xl font-black font-['Tajawal',sans-serif]">
-          تجربة النظام كطبيب فوراً بضغطة واحدة
-        </h2>
-        <p className="text-xs text-sky-100 mt-1 mb-4">
-          لا داعي لإنشاء حساب أو إدخال بيانات للاختبار!
-        </p>
-        <button
-          onClick={handleDemoSignIn}
-          disabled={loading}
-          className="w-full py-3 bg-white text-slate-900 font-extrabold text-sm rounded-2xl hover:bg-slate-100 transition shadow-lg active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <Stethoscope className="w-4 h-4 text-sky-600" />
-          <span>{loading ? 'جاري التحضير...' : 'دخول تجريبي كطبيب فوري 🚀'}</span>
-        </button>
-      </motion.div>
-
       {/* Main Login / Signup Card */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200/90 mb-8">
         

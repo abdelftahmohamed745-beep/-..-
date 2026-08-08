@@ -19,17 +19,22 @@ import {
   ChevronRight,
   ChevronLeft,
   Calendar,
-  Zap
+  Zap,
+  Star,
+  MessageSquare
 } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
-import { DoctorProfile, PatientRecord, PatientStatus } from '../types';
+import { DoctorProfile, PatientRecord, PatientStatus, DoctorRating, FollowUpAppointment } from '../types';
 import {
   subscribeToDoctorQueue,
   callNextPatient,
   updatePatientStatus,
-  bookPatient
+  bookPatient,
+  getDoctorRatings
 } from '../services/firebaseService';
 import { playTurnNotificationSound, speakText } from '../utils/audio';
+import { DoctorFollowUpManager } from './DoctorFollowUpManager';
+import { CreateFollowUpModal } from './CreateFollowUpModal';
 
 interface DoctorDashboardProps {
   doctor: DoctorProfile;
@@ -54,11 +59,30 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isCallingNext, setIsCallingNext] = useState(false);
 
+  // Dashboard section mode: 'queue' or 'followups'
+  const [activeSection, setActiveSection] = useState<'queue' | 'followups'>('queue');
+
+  // Quick follow-up modal for queue patient
+  const [quickFollowUpPatient, setQuickFollowUpPatient] = useState<{ name: string; phone: string } | null>(null);
+
   // Manual Walk-In Registration Modal state
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+
+  // Ratings & Reviews state for Doctor
+  const [doctorRatings, setDoctorRatings] = useState<DoctorRating[]>([]);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+
+  // Load Doctor Ratings
+  useEffect(() => {
+    async function loadRatings() {
+      const rList = await getDoctorRatings(doctor.uid);
+      setDoctorRatings(rList);
+    }
+    loadRatings();
+  }, [doctor.uid]);
 
   // Real-time Firestore Queue Subscription
   useEffect(() => {
@@ -251,7 +275,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
       </div>
 
       {/* Stats Grid Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         
         {/* Waiting */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
@@ -311,10 +335,69 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           </div>
         </div>
 
+        {/* Doctor Rating Card */}
+        <button
+          onClick={() => setShowReviewsModal(true)}
+          className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-5 rounded-2xl border border-amber-200/90 shadow-xs flex items-center justify-between hover:border-amber-400 transition text-right group cursor-pointer"
+        >
+          <div>
+            <div className="text-xs text-amber-900 font-bold flex items-center gap-1">
+              <span>تقييم العيادة</span>
+              <span className="text-[10px] text-amber-700 underline group-hover:text-amber-900">(عرض)</span>
+            </div>
+            <div className="text-2xl font-black text-amber-950 font-['Tajawal',sans-serif] mt-1 flex items-center gap-1 dir-ltr">
+              <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+              <span>{doctor.ratingAverage ? doctor.ratingAverage : "0.0"}</span>
+            </div>
+            <div className="text-[10px] text-amber-800 font-medium mt-0.5">
+              {doctorRatings.length} تقييم مريض
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold shadow-xs">
+            <Star className="w-5 h-5 fill-current" />
+          </div>
+        </button>
+
       </div>
 
-      {/* Main Queue Management Section */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* Section Navigation Tabs */}
+      <div className="flex items-center gap-2 bg-slate-200/60 p-1.5 rounded-2xl max-w-md">
+        <button
+          onClick={() => setActiveSection('queue')}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+            activeSection === 'queue'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-4 h-4 text-sky-600" />
+          <span>طابور اليوم ({patients.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('followups')}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+            activeSection === 'followups'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Calendar className="w-4 h-4 text-sky-600" />
+          <span>مواعيد إعادة الكشف 📅</span>
+        </button>
+      </div>
+
+      {activeSection === 'followups' ? (
+        <DoctorFollowUpManager
+          doctorId={doctor.uid}
+          doctorName={doctor.name}
+          clinicId={doctor.uid}
+          clinicName={doctor.clinicName}
+          onShowToast={onShowToast}
+        />
+      ) : (
+        /* Main Queue Management Section */
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         
         {/* Controls Toolbar */}
         <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -541,6 +624,16 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                             إعادة للطابور
                           </button>
                         )}
+
+                        {/* Quick Follow Up Appointment Registration */}
+                        <button
+                          onClick={() => setQuickFollowUpPatient({ name: patient.name, phone: patient.phone })}
+                          className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                          title="حجز موعد إعادة كشف للمريض"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                          <span>إعادة كشف</span>
+                        </button>
                       </div>
 
                     </motion.div>
@@ -552,6 +645,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         </div>
 
       </div>
+      )}
 
       {/* Custom Website Agency Section */}
       <CustomWebsiteSection />
@@ -611,6 +705,101 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* Doctor Patient Reviews & Ratings Modal */}
+      {showReviewsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 text-right animate-in fade-in zoom-in-95 duration-200">
+            
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
+                  <Star className="w-4 h-4 fill-current" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base font-['Tajawal',sans-serif]">
+                    تقييمات وآراء المرضى
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    التقييم العام: {doctor.ratingAverage || "0.0"} / 5 (إجمالي {doctorRatings.length} تقييم)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowReviewsModal(false)}
+                className="text-slate-400 hover:text-slate-700 text-xs font-bold px-3 py-1 bg-slate-100 rounded-lg"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            {/* Ratings List */}
+            {doctorRatings.length === 0 ? (
+              <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <MessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-500 font-medium">لا يوجد تقييمات حتى الآن من المرضى</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto pl-1">
+                {doctorRatings.map((rev) => (
+                  <div key={rev.id} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 text-xs font-['Tajawal',sans-serif]">
+                        {rev.patientName || "مريض"}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString('ar-EG') : ''}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 dir-ltr">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          className={`w-3.5 h-3.5 ${
+                            s <= rev.stars ? 'text-amber-400 fill-amber-400' : 'text-slate-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    {rev.comment && (
+                      <p className="text-xs text-slate-700 bg-white p-2.5 rounded-xl border border-slate-100 font-medium">
+                        "{rev.comment}"
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 pt-3 border-t border-slate-100 text-left">
+              <button
+                onClick={() => setShowReviewsModal(false)}
+                className="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition"
+              >
+                إغلاق
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Quick Follow-up Modal for patient from queue */}
+      {quickFollowUpPatient && (
+        <CreateFollowUpModal
+          isOpen={!!quickFollowUpPatient}
+          onClose={() => setQuickFollowUpPatient(null)}
+          doctorId={doctor.uid}
+          doctorName={doctor.name}
+          clinicId={doctor.uid}
+          clinicName={doctor.clinicName}
+          initialPatientName={quickFollowUpPatient.name}
+          initialPatientPhone={quickFollowUpPatient.phone}
+          onShowToast={onShowToast}
+        />
       )}
 
     </div>

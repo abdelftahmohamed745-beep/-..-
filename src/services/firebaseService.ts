@@ -14,7 +14,7 @@ import {
   limit
 } from "firebase/firestore";
 import { db } from "../firebase/config";
-import { DoctorProfile, PatientRecord, PatientStatus, SubscriptionStatus, NotificationTimingPreference } from "../types";
+import { DoctorProfile, PatientRecord, PatientStatus, SubscriptionStatus, NotificationTimingPreference, DoctorRating, FollowUpAppointment, FollowUpAppointmentStatus, FollowUpReminderSettings } from "../types";
 import {
   sanitizeInput,
   isValidPhoneNumber,
@@ -537,64 +537,421 @@ export async function deleteDoctorAccountByAdmin(doctorId: string, adminUid: str
   }
 }
 
-// Seed Demo Doctor and realistic sample Queue
-export async function seedDemoDoctorAndQueue(): Promise<DoctorProfile> {
-  const doctorId = DEMO_DOCTOR_ID;
-  const existing = await getDoctorProfile(doctorId);
-  if (existing) {
-    return existing;
+// Purge all test accounts and demo data from database securely
+export async function purgeTestAccounts(): Promise<{ success: boolean; deletedCount: number }> {
+  try {
+    let deletedCount = 0;
+    
+    // 1. Delete default demo doctor doc
+    const demoDocRef = doc(db, "doctors", DEMO_DOCTOR_ID);
+    const demoSnap = await getDoc(demoDocRef);
+    if (demoSnap.exists()) {
+      await deleteDoc(demoDocRef);
+      deletedCount++;
+    }
+
+    // 2. Query any doctors marked as test/demo
+    const querySnap = await getDocs(collection(db, "doctors"));
+    for (const docSnap of querySnap.docs) {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as DoctorProfile;
+        if (
+          docSnap.id === DEMO_DOCTOR_ID ||
+          data.uid === DEMO_DOCTOR_ID ||
+          data.name?.includes("تجريبي") ||
+          data.name?.includes("أسامة عبد الرحمن") ||
+          data.qrCodeId?.includes("DEMO")
+        ) {
+          // Delete patients in subcollection queue
+          try {
+            const patientsSnap = await getDocs(collection(db, "queues", docSnap.id, "patients"));
+            for (const pDoc of patientsSnap.docs) {
+              await deleteDoc(pDoc.ref);
+            }
+          } catch (e) {
+            console.error("Error deleting queue patients:", e);
+          }
+
+          // Delete doctor document
+          await deleteDoc(docSnap.ref);
+          deletedCount++;
+        }
+      }
+    }
+
+    // 3. Delete demo follow up appointments
+    try {
+      const followUpsSnap = await getDocs(
+        query(collection(db, "followUpAppointments"), where("doctorId", "==", DEMO_DOCTOR_ID))
+      );
+      for (const fDoc of followUpsSnap.docs) {
+        await deleteDoc(fDoc.ref);
+      }
+    } catch (e) {
+      console.error("Error purging demo follow-up appointments:", e);
+    }
+
+    console.log(`Purged ${deletedCount} test accounts from database.`);
+    return { success: true, deletedCount };
+  } catch (err) {
+    console.error("Error purging test accounts:", err);
+    return { success: false, deletedCount: 0 };
+  }
+}
+
+// Check if a patient ticket has already been rated
+export async function checkTicketRated(patientRecordId: string): Promise<DoctorRating | null> {
+  try {
+    const q = query(
+      collection(db, "ratings"),
+      where("patientRecordId", "==", patientRecordId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const docSnap = snap.docs[0];
+      return { id: docSnap.id, ...docSnap.data() } as DoctorRating;
+    }
+    return null;
+  } catch (err) {
+    console.error("Error checking ticket rating:", err);
+    return null;
+  }
+}
+
+// Submit a new doctor rating and update average stats
+export async function addDoctorRating(params: {
+  doctorId: string;
+  patientRecordId: string;
+  patientName: string;
+  patientPhone?: string;
+  stars: number;
+  comment?: string;
+}): Promise<DoctorRating> {
+  const { doctorId, patientRecordId, patientName, patientPhone, stars, comment } = params;
+
+  if (stars < 1 || stars > 5) {
+    throw new Error("التقييم يجب أن يكون بين 1 و 5 نجوم");
   }
 
-  const now = new Date();
-  const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days active trial
+  // 1. Prevent double rating for same booking
+  const existingRating = await checkTicketRated(patientRecordId);
+  if (existingRating) {
+    throw new Error("لقد قمت بإرسال تقييمك لهذه الزيارة من قبل. شكرًا لك!");
+  }
 
-  const demoDoctor: DoctorProfile = {
-    uid: doctorId,
-    name: "د. أسامة عبد الرحمن",
-    specialty: "استشاري الباطنة والجهاز الهضمي",
-    clinicName: "مركز الشفاء الطبي - عيادة الباطنة",
-    qrCodeId: "QR-DEMO-CLINIC",
-    phone: "01012345678",
-    address: "شارع التحرير، الدقي، الجيزة",
-    subscriptionStatus: "active",
-    trialEndDate: trialEnd.toISOString(),
-    subscriptionEndDate: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    avgConsultTime: 10,
-    workHours: {
-      open: "10:00",
-      close: "22:00",
-      maxPatientsPerDay: 40,
-      daysOfWeek: ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس"]
-    },
-    createdAt: now.toISOString()
+  const cleanName = sanitizeInput(patientName || "مريض");
+  const cleanComment = comment ? sanitizeInput(comment) : "";
+  const nowIso = new Date().toISOString();
+
+  const ratingData: Omit<DoctorRating, 'id'> = {
+    doctorId,
+    patientRecordId,
+    patientName: cleanName,
+    patientPhone: patientPhone ? patientPhone.trim() : "",
+    stars: Math.round(stars),
+    comment: cleanComment,
+    createdAt: nowIso
   };
 
-  await setDoc(doc(db, "doctors", doctorId), demoDoctor);
+  // 2. Save to 'ratings' collection
+  const docRef = await addDoc(collection(db, "ratings"), ratingData);
+  const newRating: DoctorRating = { id: docRef.id, ...ratingData };
 
-  // Add 5 sample patients for today
-  const today = getTodayDateString();
-  const samplePatients = [
-    { seq: 1, name: "أحمد محمود الفولي", phone: "01098765432", status: 'done' as PatientStatus },
-    { seq: 2, name: "سارة حسن عبد الله", phone: "01122334455", status: 'called' as PatientStatus },
-    { seq: 3, name: "محمود علي إبراهيم", phone: "01234567890", status: 'waiting' as PatientStatus },
-    { seq: 4, name: "رانيا يوسف طه", phone: "01555443322", status: 'waiting' as PatientStatus },
-    { seq: 5, name: "عمر خالد العريفي", phone: "01066778899", status: 'waiting' as PatientStatus }
-  ];
+  // 3. Recalculate average rating & total count for the doctor
+  recalculateDoctorRatingStats(doctorId).catch(console.error);
 
-  for (const item of samplePatients) {
-    const pData: Omit<PatientRecord, 'id'> = {
-      doctorId,
-      sequenceNumber: item.seq,
-      name: item.name,
-      phone: item.phone,
-      status: item.status,
-      date: today,
-      createdAt: new Date(now.getTime() - (30 - item.seq * 5) * 60000).toISOString(),
-      calledAt: item.status === 'called' || item.status === 'done' ? new Date(now.getTime() - 10 * 60000).toISOString() : undefined,
-      doneAt: item.status === 'done' ? new Date(now.getTime() - 2 * 60000).toISOString() : undefined
-    };
-    await addDoc(collection(db, "queues", doctorId, "patients"), pData);
+  // Write audit log
+  writeAuditLog("ADD_DOCTOR_RATING", "PATIENT_PUBLIC", doctorId, {
+    stars,
+    ratingId: docRef.id
+  });
+
+  return newRating;
+}
+
+// Fetch all ratings for a given doctor
+export async function getDoctorRatings(doctorId: string): Promise<DoctorRating[]> {
+  try {
+    const q = query(
+      collection(db, "ratings"),
+      where("doctorId", "==", doctorId)
+    );
+    const snap = await getDocs(q);
+    const list: DoctorRating[] = [];
+    snap.forEach((d) => {
+      list.push({ id: d.id, ...d.data() } as DoctorRating);
+    });
+    // Sort by createdAt descending
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return list;
+  } catch (err) {
+    console.error("Error fetching doctor ratings:", err);
+    return [];
+  }
+}
+
+// Recalculate doctor rating average and count
+export async function recalculateDoctorRatingStats(doctorId: string): Promise<{ avg: number; count: number }> {
+  try {
+    const ratings = await getDoctorRatings(doctorId);
+    const count = ratings.length;
+    if (count === 0) {
+      await updateDoc(doc(db, "doctors", doctorId), { ratingAverage: 0, ratingCount: 0 });
+      return { avg: 0, count: 0 };
+    }
+
+    const totalStars = ratings.reduce((acc, r) => acc + r.stars, 0);
+    const avg = parseFloat((totalStars / count).toFixed(1));
+
+    await updateDoc(doc(db, "doctors", doctorId), { ratingAverage: avg, ratingCount: count });
+    return { avg, count };
+  } catch (err) {
+    console.error("Error recalculating rating stats:", err);
+    return { avg: 0, count: 0 };
+  }
+}
+
+// ==========================================
+// FOLLOW-UP APPOINTMENTS (مواعيد إعادة الكشف)
+// ==========================================
+
+// Validate date and time are not in the past
+export function isDateTimeInPast(dateStr: string, timeStr: string): boolean {
+  try {
+    const appointmentDateTime = new Date(`${dateStr}T${timeStr}:00`);
+    const now = new Date();
+    return appointmentDateTime.getTime() < now.getTime() - 60000; // allow 1 min margin
+  } catch {
+    return false;
+  }
+}
+
+// Create a new follow-up appointment
+export async function createFollowUpAppointment(params: {
+  patientName: string;
+  patientPhone: string;
+  patientId?: string;
+  doctorId: string;
+  doctorName?: string;
+  clinicId?: string;
+  clinicName?: string;
+  appointmentDate: string; // YYYY-MM-DD
+  appointmentTime: string; // HH:mm
+  notes?: string;
+  reason?: string;
+  reminderSettings?: FollowUpReminderSettings;
+}): Promise<FollowUpAppointment> {
+  const {
+    patientName,
+    patientPhone,
+    patientId,
+    doctorId,
+    doctorName,
+    clinicId,
+    clinicName,
+    appointmentDate,
+    appointmentTime,
+    notes,
+    reason,
+    reminderSettings
+  } = params;
+
+  if (!patientName || !patientName.trim()) {
+    throw new Error("اسم المريض مطلوب لحجز موعد إعادة الكشف");
   }
 
-  return demoDoctor;
+  if (!patientPhone || !patientPhone.trim()) {
+    throw new Error("رقم هاتف المريض مطلوب");
+  }
+
+  if (!appointmentDate || !appointmentTime) {
+    throw new Error("يرجى تحديد تاريخ ووقت موعد إعادة الكشف");
+  }
+
+  if (isDateTimeInPast(appointmentDate, appointmentTime)) {
+    throw new Error("لا يمكن إنشاء موعد إعادة كشف بتاريخ أو وقت في الماضي");
+  }
+
+  const cleanName = sanitizeInput(patientName);
+  const cleanPhone = patientPhone.trim();
+  const cleanNotes = notes ? sanitizeInput(notes) : "";
+  const cleanReason = reason ? sanitizeInput(reason) : "";
+  const nowIso = new Date().toISOString();
+
+  const appointmentData: Omit<FollowUpAppointment, 'id'> = {
+    patientId: patientId || "",
+    patientName: cleanName,
+    patientPhone: cleanPhone,
+    doctorId,
+    doctorName: doctorName || "الطبيب",
+    clinicId: clinicId || doctorId,
+    clinicName: clinicName || "العيادة",
+    appointmentDate,
+    appointmentTime,
+    notes: cleanNotes,
+    reason: cleanReason,
+    reminderSettings: reminderSettings || { oneDayBefore: true, twoHoursBefore: true },
+    appointmentStatus: 'upcoming',
+    createdAt: nowIso
+  };
+
+  const docRef = await addDoc(collection(db, "followUpAppointments"), appointmentData);
+  const newAppointment: FollowUpAppointment = { id: docRef.id, ...appointmentData };
+
+  writeAuditLog("CREATE_FOLLOWUP_APPOINTMENT", "DOCTOR", doctorId, {
+    appointmentId: docRef.id,
+    patientName: cleanName,
+    appointmentDate,
+    appointmentTime
+  });
+
+  return newAppointment;
 }
+
+// Subscribe to doctor's follow-up appointments
+export function subscribeToDoctorFollowUps(
+  doctorId: string,
+  callback: (appointments: FollowUpAppointment[]) => void
+) {
+  const q = query(
+    collection(db, "followUpAppointments"),
+    where("doctorId", "==", doctorId)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: FollowUpAppointment[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() } as FollowUpAppointment);
+      });
+      list.sort((a, b) => {
+        const dtA = new Date(`${a.appointmentDate}T${a.appointmentTime}`).getTime();
+        const dtB = new Date(`${b.appointmentDate}T${b.appointmentTime}`).getTime();
+        return dtA - dtB;
+      });
+      callback(list);
+    },
+    (err) => {
+      console.error("Error subscribing to doctor follow-ups:", err);
+      callback([]);
+    }
+  );
+}
+
+// Get patient follow-up appointments by phone or patientId
+export async function getPatientFollowUpAppointments(phone: string): Promise<FollowUpAppointment[]> {
+  try {
+    const cleanPhone = phone.trim();
+    if (!cleanPhone) return [];
+
+    const q = query(
+      collection(db, "followUpAppointments"),
+      where("patientPhone", "==", cleanPhone)
+    );
+
+    const snapshot = await getDocs(q);
+    const list: FollowUpAppointment[] = [];
+    snapshot.forEach((d) => {
+      list.push({ id: d.id, ...d.data() } as FollowUpAppointment);
+    });
+
+    list.sort((a, b) => {
+      const dtA = new Date(`${a.appointmentDate}T${a.appointmentTime}`).getTime();
+      const dtB = new Date(`${b.appointmentDate}T${b.appointmentTime}`).getTime();
+      return dtA - dtB;
+    });
+
+    return list;
+  } catch (err) {
+    console.error("Error getting patient follow-ups:", err);
+    return [];
+  }
+}
+
+// Real-time subscriber for patient follow-up appointments by phone
+export function subscribeToPatientFollowUps(
+  phone: string,
+  callback: (appointments: FollowUpAppointment[]) => void
+) {
+  const cleanPhone = phone.trim();
+  if (!cleanPhone) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, "followUpAppointments"),
+    where("patientPhone", "==", cleanPhone)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: FollowUpAppointment[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() } as FollowUpAppointment);
+      });
+      list.sort((a, b) => {
+        const dtA = new Date(`${a.appointmentDate}T${a.appointmentTime}`).getTime();
+        const dtB = new Date(`${b.appointmentDate}T${b.appointmentTime}`).getTime();
+        return dtA - dtB;
+      });
+      callback(list);
+    },
+    (err) => {
+      console.error("Error subscribing to patient follow-ups:", err);
+      callback([]);
+    }
+  );
+}
+
+// Update follow-up appointment status (Doctor / Patient)
+export async function updateFollowUpAppointmentStatus(
+  appointmentId: string,
+  status: FollowUpAppointmentStatus
+): Promise<void> {
+  const docRef = doc(db, "followUpAppointments", appointmentId);
+  await updateDoc(docRef, {
+    appointmentStatus: status,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+// Update full follow-up appointment details (Doctor)
+export async function updateFollowUpAppointment(
+  appointmentId: string,
+  updates: Partial<FollowUpAppointment>
+): Promise<void> {
+  if (updates.appointmentDate && updates.appointmentTime) {
+    if (isDateTimeInPast(updates.appointmentDate, updates.appointmentTime)) {
+      throw new Error("لا يمكن تعديل الموعد إلى تاريخ أو وقت في الماضي");
+    }
+  }
+
+  const docRef = doc(db, "followUpAppointments", appointmentId);
+  await updateDoc(docRef, {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+// Patient requests a reschedule
+export async function requestRescheduleFollowUp(
+  appointmentId: string,
+  newDate: string,
+  newTime: string
+): Promise<void> {
+  if (isDateTimeInPast(newDate, newTime)) {
+    throw new Error("التاريخ والوقت المقترحان يجب أن يكونا في المستقبل");
+  }
+
+  const docRef = doc(db, "followUpAppointments", appointmentId);
+  await updateDoc(docRef, {
+    rescheduleRequested: true,
+    requestedNewDate: newDate,
+    requestedNewTime: newTime,
+    updatedAt: new Date().toISOString()
+  });
+}
+

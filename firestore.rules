@@ -56,6 +56,15 @@ service cloud.firestore {
       ]);
     }
 
+    function isValidRatingCreate() {
+      let data = request.resource.data;
+      return data.doctorId is string
+        && data.patientRecordId is string
+        && data.stars is number
+        && data.stars >= 1
+        && data.stars <= 5;
+    }
+
     // Doctors collection
     match /doctors/{doctorId} {
       // Public directory read allowed for all visitors/patients
@@ -110,6 +119,25 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if true;
       allow update, delete: if false;
+    }
+
+    // Ratings & Reviews collection
+    match /ratings/{ratingId} {
+      allow read: if true; // Public read for clinic reviews & averages
+      allow create: if isValidRatingCreate();
+      allow update, delete: if isAdmin();
+    }
+
+    // Follow Up Appointments collection
+    match /followUpAppointments/{appointmentId} {
+      allow read: if true;
+      allow create: if request.resource.data.patientName is string
+        && request.resource.data.patientPhone is string
+        && request.resource.data.doctorId is string
+        && request.resource.data.appointmentDate is string
+        && request.resource.data.appointmentTime is string;
+      allow update: if true; // Allows patient to confirm/cancel/reschedule and doctor to update status
+      allow delete: if isOwner(resource.data.doctorId) || isAdmin();
     }
 
     // Default deny fallback

@@ -11,10 +11,11 @@ import {
   Sparkles,
   UserCheck,
   ShieldCheck,
-  Info
+  Info,
+  Star
 } from 'lucide-react';
 import { DoctorProfile } from '../types';
-import { getAllDoctors, formatPhoneNumberForUrl, seedDemoDoctorAndQueue, DEMO_DOCTOR_ID } from '../services/firebaseService';
+import { getAllDoctors, formatPhoneNumberForUrl } from '../services/firebaseService';
 
 interface DoctorsDirectoryProps {
   onSelectDoctorClinic: (doctorId: string) => void;
@@ -36,13 +37,7 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
     let isMounted = true;
     async function loadDirectory() {
       setLoading(true);
-      let list = await getAllDoctors();
-      
-      // If list is empty, ensure demo doctor is seeded and available
-      if (list.length === 0) {
-        const demoDoc = await seedDemoDoctorAndQueue();
-        list = [demoDoc];
-      }
+      const list = await getAllDoctors();
 
       if (isMounted) {
         setDoctors(list);
@@ -192,9 +187,25 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
                     )}
 
                     <div className="space-y-1">
-                      <span className="inline-block px-2.5 py-0.5 bg-sky-50 text-sky-700 font-bold text-[11px] rounded-full border border-sky-100">
-                        {doc.specialty}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-block px-2.5 py-0.5 bg-sky-50 text-sky-700 font-bold text-[11px] rounded-full border border-sky-100">
+                          {doc.specialty}
+                        </span>
+
+                        {doc.ratingAverage && doc.ratingAverage > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-900 font-extrabold text-[11px] rounded-full border border-amber-200">
+                            <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                            <span>{doc.ratingAverage}</span>
+                            <span className="text-slate-400 font-normal">({doc.ratingCount})</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-50 text-slate-500 font-bold text-[10px] rounded-full border border-slate-200">
+                            <Star className="w-3 h-3 text-slate-400" />
+                            <span>جديد</span>
+                          </span>
+                        )}
+                      </div>
+
                       <h3 className="font-extrabold text-slate-900 text-base font-['Tajawal',sans-serif] group-hover:text-sky-600 transition">
                         {doc.name}
                       </h3>
@@ -301,13 +312,13 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
           </p>
         </div>
         <a
-          href="https://wa.me/9647813745417?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D9%8B%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%A5%D8%B6%D8%A7%D9%81%D8%A9%20%D8%B9%D9%8A%D8%A7%D8%AF%D8%AA%D9%8A%20%D8%A5%D9%84%D9%89%20%D8%AF%D9%84%D9%8A%D9%84%20%D8%A3%D8%B0%D9%83%D9%8A%D8%A7%D8%A1%20%D8%AF%D9%88%D8%B1%D9%8A"
+          href="https://wa.me/201032120351?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D9%8B%D8%8C%20%D8%A3%D8%B1%D9%8A%D8%AF%20%D8%A5%D8%B6%D8%A7%D9%81%D8%A9%20%D8%B9%D9%8A%D8%A7%D8%AF%D8%AA%D9%8A%20%D8%A5%D9%84%D9%89%20%D8%AF%D9%84%D9%8A%D9%84%20%D8%A3%D8%B0%D9%83%D9%8A%D8%A7%D8%A1%20%D8%AF%D9%88%D8%B1%D9%8A"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition shadow-lg shrink-0"
         >
           <MessageCircle className="w-4 h-4 fill-current" />
-          <span>تواصل مع الإدارة (+964 781 374 5417)</span>
+          <span>تواصل مع الإدارة (01032120351)</span>
         </a>
       </div>
 

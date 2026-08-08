@@ -35,6 +35,19 @@ export interface DoctorProfile {
   createdAt: string;
   isActive?: boolean; // Platform admin control: true = active, false = deactivated
   isAdmin?: boolean; // Platform administrator flag
+  ratingAverage?: number; // e.g. 4.8
+  ratingCount?: number; // e.g. 15
+}
+
+export interface DoctorRating {
+  id: string;
+  doctorId: string;
+  patientRecordId: string;
+  patientName: string;
+  patientPhone?: string;
+  stars: number; // 1 to 5
+  comment?: string;
+  createdAt: string; // ISO string
 }
 
 export interface PatientRecord {
@@ -77,11 +90,40 @@ export interface AppNotification {
   userId: string;
   title: string;
   body: string;
-  type: 'near_turn' | 'system' | 'queue_update';
+  type: 'near_turn' | 'system' | 'queue_update' | 'followup_reminder';
   bookingId?: string;
   clinicName?: string;
   isRead: boolean;
   createdAt: string;
+}
+
+export type FollowUpAppointmentStatus = 'upcoming' | 'confirmed' | 'attended' | 'cancelled' | 'no_show';
+
+export interface FollowUpReminderSettings {
+  oneDayBefore: boolean;
+  twoHoursBefore: boolean;
+}
+
+export interface FollowUpAppointment {
+  id: string;
+  patientId?: string;
+  patientName: string;
+  patientPhone: string;
+  doctorId: string;
+  doctorName?: string;
+  clinicId: string;
+  clinicName?: string;
+  appointmentDate: string; // YYYY-MM-DD
+  appointmentTime: string; // HH:mm
+  notes?: string;
+  reason?: string;
+  reminderSettings: FollowUpReminderSettings;
+  appointmentStatus: FollowUpAppointmentStatus;
+  rescheduleRequested?: boolean;
+  requestedNewDate?: string;
+  requestedNewTime?: string;
+  createdAt: string; // ISO string
+  updatedAt?: string;
 }
 
 export interface QueueSummary {

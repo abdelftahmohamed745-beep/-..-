@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nine-vert-34.vercel.app/sitemap.xml

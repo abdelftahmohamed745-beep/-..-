@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, User } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { verifyAdminStatus } from '../services/firebaseService';
 import { AdminDashboard } from './AdminDashboard';
@@ -51,7 +51,8 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
   // Handle Admin Login submission
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password.trim()) {
       setLoginError("يرجى إدخال البريد الإلكتروني وكلمة المرور");
       return;
     }
@@ -60,12 +61,40 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
     setLoginError(null);
 
     try {
-      const creds = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const result = await verifyAdminStatus(creds.user);
+      let targetUser: User;
+      const normalizedEmail = cleanEmail.toLowerCase();
+      const isAuthorizedBootstrap = (
+        normalizedEmail === 'abdelftahmohamed745@gmail.com' ||
+        normalizedEmail === 'admin@dawry.app'
+      );
+
+      try {
+        const creds = await signInWithEmailAndPassword(auth, cleanEmail, password);
+        targetUser = creds.user;
+      } catch (authErr: any) {
+        const code = authErr?.code || '';
+        // If account does not exist in Firebase Auth yet, and email is the authorized bootstrap admin, create the account
+        if (isAuthorizedBootstrap && (code === 'auth/user-not-found' || code === 'auth/invalid-credential')) {
+          try {
+            const newCreds = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+            targetUser = newCreds.user;
+          } catch (createErr: any) {
+            console.error("Admin account creation failed:", createErr);
+            throw authErr;
+          }
+        } else {
+          throw authErr;
+        }
+      }
+
+      const result = await verifyAdminStatus(targetUser);
       
       if (result.isAdmin) {
+        setCurrentUser(targetUser);
+        setIsAdmin(true);
         onShowToast("تم تسجيل الدخول بنجاح 🛡️", "أهلاً بك في لوحة تحكم إدارة منصة دوري", "success");
       } else {
+        setIsAdmin(false);
         setLoginError("حسابك لا يمتلك صلاحيات مدير المنصة المركزية");
         onShowToast("غير مصرح", "هذا الحساب لا يملك صلاحيات مدير المنصة", "warning");
       }
@@ -77,6 +106,8 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
         msg = "البريد الإلكتروني أو كلمة المرور غير صحيحة";
       } else if (code === 'auth/too-many-requests') {
         msg = "تم تعليق المحاولات مؤقتاً لكثرة المحاولات الخاطئة. يرجى الانتظار قليلاً.";
+      } else if (code === 'auth/weak-password') {
+        msg = "كلمة المرور ضعيفة جداً. يجب أن تحتوي على 6 أحرف على الأقل.";
       } else if (err?.message) {
         msg = err.message;
       }

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, User } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { verifyAdminStatus } from '../services/firebaseService';
 import { AdminDashboard } from './AdminDashboard';
-import { ShieldAlert, Lock, Mail, ArrowRight, LogOut, CheckCircle2, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, Lock, Mail, ArrowRight, LogOut, RefreshCw, AlertTriangle, ShieldCheck, KeyRound, CheckCircle2 } from 'lucide-react';
 
 interface AdminGuardProps {
   onShowToast: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
@@ -21,6 +21,8 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetPasswordSent, setResetPasswordSent] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Monitor Firebase Auth state
@@ -79,6 +81,12 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
             const newCreds = await createUserWithEmailAndPassword(auth, cleanEmail, password);
             targetUser = newCreds.user;
           } catch (createErr: any) {
+            const createCode = createErr?.code || '';
+            if (createCode === 'auth/email-already-in-use') {
+              const wrongPwError = new Error("كلمة المرور غير صحيحة لحساب مدير المنصة المسجل على Firebase. إذا نسيت كلمة المرور، يرجى الضغط على رابط 'إعادة تعيين كلمة المرور' بالأسفل.");
+              (wrongPwError as any).code = 'auth/wrong-password';
+              throw wrongPwError;
+            }
             console.error("Admin account creation failed:", createErr);
             throw authErr;
           }
@@ -99,11 +107,11 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
         onShowToast("غير مصرح", "هذا الحساب لا يملك صلاحيات مدير المنصة", "warning");
       }
     } catch (err: any) {
-      console.error("Admin Auth Error:", err);
+      console.error("Admin Auth Error Code:", err?.code, "Message:", err?.message);
       const code = err?.code || '';
       let msg = "فشل تسجيل الدخول كمدير منصة";
       if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
-        msg = "البريد الإلكتروني أو كلمة المرور غير صحيحة";
+        msg = err.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة";
       } else if (code === 'auth/too-many-requests') {
         msg = "تم تعليق المحاولات مؤقتاً لكثرة المحاولات الخاطئة. يرجى الانتظار قليلاً.";
       } else if (code === 'auth/weak-password') {
@@ -115,6 +123,49 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
       onShowToast("خطأ في المصادقة", msg, "error");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      const emptyMsg = "اكتب البريد الإلكتروني أولاً";
+      setLoginError(emptyMsg);
+      onShowToast("تنبيه", emptyMsg, "warning");
+      return;
+    }
+
+    setIsResettingPassword(true);
+    setLoginError(null);
+    setResetPasswordSent(false);
+
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      setResetPasswordSent(true);
+      onShowToast(
+        "تم إرسال رابط إعادة التعيين ✉️",
+        "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.",
+        "success"
+      );
+    } catch (err: any) {
+      console.error("Reset password error code:", err?.code);
+      const code = err?.code || '';
+      let msg = "فشل إرسال رابط إعادة تعيين كلمة المرور";
+      if (code === 'auth/invalid-email') {
+        msg = "عنوان البريد الإلكتروني غير صحيح";
+      } else if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+        msg = "لم يتم العثور على حساب بهذا البريد الإلكتروني في Firebase Auth";
+      } else if (code === 'auth/too-many-requests') {
+        msg = "تم تعليق المحاولات مؤقتاً لكثرة المحاولات. يرجى الانتظار قليلاً.";
+      } else if (code === 'auth/network-request-failed') {
+        msg = "خطأ في الاتصال بالشبكة. يرجى التحقق من الاتصال بالإنترنت.";
+      } else if (err?.message) {
+        msg = err.message;
+      }
+      setLoginError(msg);
+      onShowToast("خطأ", msg, "error");
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -203,9 +254,20 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
             </div>
 
             <div>
-              <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
-                كلمة المرور
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-extrabold text-slate-700">
+                  كلمة المرور
+                </label>
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  disabled={isResettingPassword}
+                  className="text-[11px] font-bold text-rose-700 hover:text-rose-900 transition underline flex items-center gap-1 cursor-pointer"
+                >
+                  <KeyRound className="w-3 h-3" />
+                  <span>نسيت كلمة المرور؟</span>
+                </button>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
                 <input
@@ -218,6 +280,13 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
                 />
               </div>
             </div>
+
+            {resetPasswordSent && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>تم إرسال رابط إعادة تعيين كلمة المرور إلى البريد الإلكتروني. يرجى مراجعة البريد الوارد.</span>
+              </div>
+            )}
 
             <button
               type="submit"

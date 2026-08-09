@@ -140,11 +140,20 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
     setResetPasswordSent(false);
 
     try {
-      const actionCodeSettings = {
-        url: window.location.origin + '/admin',
-        handleCodeInApp: false,
-      };
-      await sendPasswordResetEmail(auth, cleanEmail, actionCodeSettings);
+      try {
+        const actionCodeSettings = {
+          url: window.location.origin + '/admin',
+          handleCodeInApp: false,
+        };
+        await sendPasswordResetEmail(auth, cleanEmail, actionCodeSettings);
+      } catch (firstErr: any) {
+        if (firstErr?.code === 'auth/unauthorized-continue-uri') {
+          console.warn("Unauthorized continue URI for custom domain, falling back to default Firebase reset link handler...");
+          await sendPasswordResetEmail(auth, cleanEmail);
+        } else {
+          throw firstErr;
+        }
+      }
       setResetPasswordSent(true);
       onShowToast(
         "تم إرسال رابط إعادة التعيين ✉️",

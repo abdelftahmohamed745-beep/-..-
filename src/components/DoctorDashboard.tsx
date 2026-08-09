@@ -21,20 +21,26 @@ import {
   Calendar,
   Zap,
   Star,
-  MessageSquare
+  MessageSquare,
+  DollarSign
 } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
-import { DoctorProfile, PatientRecord, PatientStatus, DoctorRating, FollowUpAppointment } from '../types';
+import { DoctorProfile, PatientRecord, PatientStatus, DoctorRating, FollowUpAppointment, ClinicMember } from '../types';
 import {
   subscribeToDoctorQueue,
   callNextPatient,
   updatePatientStatus,
   bookPatient,
-  getDoctorRatings
+  getDoctorRatings,
+  getUserClinicMember
 } from '../services/firebaseService';
 import { playTurnNotificationSound, speakText } from '../utils/audio';
 import { DoctorFollowUpManager } from './DoctorFollowUpManager';
 import { CreateFollowUpModal } from './CreateFollowUpModal';
+import { ClinicTeamManager } from './ClinicTeamManager';
+import { ClinicFinanceManager } from './ClinicFinanceManager';
+import { hasPermission } from '../utils/permissions';
+import { auth } from '../firebase/config';
 
 interface DoctorDashboardProps {
   doctor: DoctorProfile;
@@ -59,8 +65,27 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isCallingNext, setIsCallingNext] = useState(false);
 
-  // Dashboard section mode: 'queue' or 'followups'
-  const [activeSection, setActiveSection] = useState<'queue' | 'followups'>('queue');
+  // Dashboard section mode: 'queue', 'followups', 'team', or 'finance'
+  const [activeSection, setActiveSection] = useState<'queue' | 'followups' | 'team' | 'finance'>('queue');
+  const [selectedPatientForPayment, setSelectedPatientForPayment] = useState<PatientRecord | null>(null);
+
+  // Clinic Member & Permissions State
+  const [currentMember, setCurrentMember] = useState<ClinicMember | null>(null);
+  const [isDoctorOwnerFallback, setIsDoctorOwnerFallback] = useState(false);
+
+  useEffect(() => {
+    async function loadMemberInfo() {
+      if (auth.currentUser) {
+        const { member, isPrimaryOwner } = await getUserClinicMember(auth.currentUser);
+        setCurrentMember(member);
+        setIsDoctorOwnerFallback(isPrimaryOwner);
+      } else {
+        // Fallback for single-doctor clinic viewing
+        setIsDoctorOwnerFallback(true);
+      }
+    }
+    loadMemberInfo();
+  }, [doctor.uid]);
 
   // Quick follow-up modal for queue patient
   const [quickFollowUpPatient, setQuickFollowUpPatient] = useState<{ name: string; phone: string } | null>(null);
@@ -361,10 +386,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
       </div>
 
       {/* Section Navigation Tabs */}
-      <div className="flex items-center gap-2 bg-slate-200/60 p-1.5 rounded-2xl max-w-md">
+      <div className="flex items-center gap-2 bg-slate-200/60 p-1.5 rounded-2xl max-w-2xl overflow-x-auto">
         <button
           onClick={() => setActiveSection('queue')}
-          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+          className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
             activeSection === 'queue'
               ? 'bg-white text-slate-900 shadow-xs'
               : 'text-slate-600 hover:text-slate-900'
@@ -376,18 +401,61 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
         <button
           onClick={() => setActiveSection('followups')}
-          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-2 cursor-pointer ${
+          className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
             activeSection === 'followups'
               ? 'bg-white text-slate-900 shadow-xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
           <Calendar className="w-4 h-4 text-sky-600" />
-          <span>مواعيد إعادة الكشف 📅</span>
+          <span>إعادة الكشف 📅</span>
         </button>
+
+        <button
+          onClick={() => setActiveSection('team')}
+          className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            activeSection === 'team'
+              ? 'bg-white text-slate-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-4 h-4 text-purple-600" />
+          <span>فريق العمل 👥</span>
+        </button>
+
+        {hasPermission(currentMember, 'VIEW_FINANCE', isDoctorOwnerFallback) && (
+          <button
+            onClick={() => setActiveSection('finance')}
+            className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeSection === 'finance'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+            <span>المالية 💵</span>
+          </button>
+        )}
       </div>
 
-      {activeSection === 'followups' ? (
+      {activeSection === 'finance' ? (
+        <ClinicFinanceManager
+          currentMember={currentMember}
+          organizationId={doctor.uid}
+          isDoctorOwnerFallback={isDoctorOwnerFallback}
+          doctor={doctor}
+          patientsList={patients}
+          initialPatientForPayment={selectedPatientForPayment}
+          onShowToast={onShowToast}
+        />
+      ) : activeSection === 'team' ? (
+        <ClinicTeamManager
+          currentMember={currentMember}
+          organizationId={doctor.uid}
+          isDoctorOwnerFallback={isDoctorOwnerFallback}
+          onShowToast={onShowToast}
+        />
+      ) : activeSection === 'followups' ? (
         <DoctorFollowUpManager
           doctorId={doctor.uid}
           doctorName={doctor.name}
@@ -634,6 +702,21 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                           <Calendar className="w-3.5 h-3.5 text-sky-600" />
                           <span>إعادة كشف</span>
                         </button>
+
+                        {/* Quick Payment Registration */}
+                        {hasPermission(currentMember, 'VIEW_FINANCE', isDoctorOwnerFallback) && (
+                          <button
+                            onClick={() => {
+                              setSelectedPatientForPayment(patient);
+                              setActiveSection('finance');
+                            }}
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                            title="تسجيل دفع رسوم الكشف"
+                          >
+                            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>الدفع 💵</span>
+                          </button>
+                        )}
                       </div>
 
                     </motion.div>

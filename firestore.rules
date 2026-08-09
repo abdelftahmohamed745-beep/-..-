@@ -11,9 +11,40 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // STRICT CUSTOM CLAIMS ONLY (Requirement 1 & 7)
+    // ADMIN CHECK: Custom claims, Admins collection doc, Doctor doc, or Admin email
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.admin == true;
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true) ||
+        (exists(/databases/$(database)/documents/doctors/$(request.auth.uid)) && get(/databases/$(database)/documents/doctors/$(request.auth.uid)).data.isAdmin == true) ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'admin@dawry.app')
+      );
+    }
+
+    // ORGANIZATION & CLINIC MEMBER ACCESS HELPERS
+    function isOrgMember(orgId) {
+      return isAuthenticated() && (
+        request.auth.uid == orgId ||
+        isAdmin() ||
+        (
+          exists(/databases/$(database)/documents/clinic_members/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/clinic_members/$(request.auth.uid)).data.organizationId == orgId &&
+          get(/databases/$(database)/documents/clinic_members/$(request.auth.uid)).data.status == 'active'
+        )
+      );
+    }
+
+    function isOrgOwner(orgId) {
+      return isAuthenticated() && (
+        request.auth.uid == orgId ||
+        isAdmin() ||
+        (
+          exists(/databases/$(database)/documents/clinic_members/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/clinic_members/$(request.auth.uid)).data.organizationId == orgId &&
+          get(/databases/$(database)/documents/clinic_members/$(request.auth.uid)).data.role == 'OWNER' &&
+          get(/databases/$(database)/documents/clinic_members/$(request.auth.uid)).data.status == 'active'
+        )
+      );
     }
 
     function isValidDoctorUpdate() {
@@ -88,13 +119,102 @@ service cloud.firestore {
       // Create: Validated ticket creation with required payload fields
       allow create: if isValidPatientCreate();
 
-      // Update: Doctor owner or admin can update; or patient cancelling their ticket
-      allow update: if (isOwner(doctorId) && isValidPatientUpdate()) 
+      // Update: Doctor owner, clinic member, or admin can update; or patient cancelling their ticket
+      allow update: if (isOrgMember(doctorId) && isValidPatientUpdate()) 
         || isAdmin() 
         || (resource.data.phone == request.resource.data.phone && request.resource.data.status == 'cancelled');
 
-      // Delete: Only clinic doctor or admin
-      allow delete: if isOwner(doctorId) || isAdmin();
+      // Delete: Clinic doctor owner/member or admin
+      allow delete: if isOrgMember(doctorId) || isAdmin();
+    }
+
+    // Clinic Members collection
+    match /clinic_members/{memberId} {
+      allow read: if isAuthenticated();
+      allow create: if isOrgOwner(request.resource.data.organizationId) 
+        || isAdmin()
+        || (
+          isOwner(memberId) &&
+          request.resource.data.role != 'OWNER' &&
+          request.resource.data.status == 'active'
+        );
+      allow update: if isOrgOwner(resource.data.organizationId) || isAdmin() || (
+        isOwner(memberId) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'customPermissions', 'organizationId', 'status', 'invitedBy'])
+      );
+      allow delete: if isOrgOwner(resource.data.organizationId) || isAdmin();
+    }
+
+    // Clinic Invitations collection
+    match /clinic_invitations/{invitationId} {
+      // Allow reading invitations so invited user can view invitation details before accepting
+      allow read: if true;
+
+      // Creation allowed for Clinic Owner or Admin
+      allow create: if (isOrgOwner(request.resource.data.organizationId) || isAdmin())
+        && request.resource.data.role != 'OWNER'
+        && request.resource.data.status == 'pending';
+
+      // Updates allowed for Owner/Admin OR authenticated invited user accepting invitation matching email
+      allow update: if isOrgOwner(resource.data.organizationId) || isAdmin() || (
+        isAuthenticated() &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.acceptedByUid == request.auth.uid &&
+        request.resource.data.organizationId == resource.data.organizationId &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.customPermissions == resource.data.customPermissions &&
+        (request.auth.token.email != null && request.auth.token.email.lower() == resource.data.invitedEmail.lower())
+      );
+
+      // Deletion allowed for Clinic Owner or Admin
+      allow delete: if isOrgOwner(resource.data.organizationId) || isAdmin();
+    }
+
+    // Organizations collection & subcollections
+    match /organizations/{orgId} {
+      allow read: if isOrgMember(orgId);
+      allow create, update: if isOrgOwner(orgId);
+
+      match /members/{memberId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgOwner(orgId) || isAdmin() || (
+          isOwner(memberId) &&
+          request.resource.data.role != 'OWNER' &&
+          request.resource.data.status == 'active'
+        );
+        allow update: if isOrgOwner(orgId) || (
+          isOwner(memberId) &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'customPermissions', 'organizationId', 'status', 'invitedBy'])
+        );
+        allow delete: if isOrgOwner(orgId);
+      }
+
+      match /audit_logs/{logId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+        allow update, delete: if false;
+      }
+
+      // Services subcollection
+      match /services/{serviceId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update: if isOrgMember(orgId);
+        allow delete: if isOrgOwner(orgId) || isAdmin();
+      }
+
+      // Transactions subcollection
+      match /transactions/{transactionId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update: if isOrgMember(orgId);
+        allow delete: if isOrgOwner(orgId) || isAdmin();
+      }
+
+      // Expenses subcollection
+      match /expenses/{expenseId} {
+        allow read: if isOrgMember(orgId);
+        allow create, update, delete: if isOrgMember(orgId);
+      }
     }
 
     // User FCM Tokens collection
@@ -138,6 +258,20 @@ service cloud.firestore {
         && request.resource.data.appointmentTime is string;
       allow update: if true; // Allows patient to confirm/cancel/reschedule and doctor to update status
       allow delete: if isOwner(resource.data.doctorId) || isAdmin();
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isOwner(adminId) || isAdmin();
+      allow create, update: if isOwner(adminId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Subscription Logs collection
+    match /subscription_logs/{logId} {
+      allow read: if isAuthenticated() || isAdmin();
+      allow create, update: if isAuthenticated() || isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Default deny fallback

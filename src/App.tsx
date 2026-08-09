@@ -22,11 +22,12 @@ import { PatientBooking } from './components/PatientBooking';
 import { PatientTicket } from './components/PatientTicket';
 import { SubscriptionPage } from './components/SubscriptionPage';
 import { AuthPage } from './components/AuthPage';
-import { AdminDashboard } from './components/AdminDashboard';
+import { AdminGuard } from './components/AdminGuard';
 import { QRModal } from './components/QRModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
+import { ClinicInvitationAcceptModal } from './components/ClinicInvitationAcceptModal';
 import { ToastContainer } from './components/Toast';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { MessageSquare, ArrowRight } from 'lucide-react';
@@ -93,6 +94,10 @@ export default function App() {
         if (window.location.pathname !== cleanPath) {
           window.history.pushState({ tab: 'clinic', doctorId: targetClinicDoctorId }, '', cleanPath);
         }
+      } else if (newTab === 'admin') {
+        if (window.location.pathname !== '/admin') {
+          window.history.pushState({ tab: 'admin' }, '', '/admin');
+        }
       } else if (newTab === 'directory' && window.location.pathname !== '/') {
         window.history.pushState({ tab: 'directory' }, '', '/');
       }
@@ -120,6 +125,8 @@ export default function App() {
     if (typeof window !== 'undefined') {
       if (previousState.tab === 'clinic' && previousState.viewClinicDoctorId) {
         window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.viewClinicDoctorId)}`);
+      } else if (previousState.tab === 'admin') {
+        window.history.replaceState(null, '', '/admin');
       } else if (previousState.tab === 'directory') {
         window.history.replaceState(null, '', '/');
       }
@@ -131,6 +138,7 @@ export default function App() {
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
 
   // Toasts state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -157,6 +165,18 @@ export default function App() {
 
     const pathname = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
+
+    // Check invitation token query param: ?invite=<token>
+    const inviteParam = params.get('invite');
+    if (inviteParam) {
+      setPendingInviteToken(inviteParam);
+    }
+
+    // Check clean route: /admin
+    if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+      setActiveTab('admin');
+      return;
+    }
 
     // Check clean route: /clinic/:docId
     const clinicMatch = pathname.match(/^\/clinic\/([^/?#]+)/);
@@ -216,10 +236,11 @@ export default function App() {
         if (docProfile) {
           setCurrentDoctor(docProfile);
 
-          // If user didn't explicitly open patient or clinic link, navigate to dashboard
+          // If user didn't explicitly open patient, clinic, or admin link, navigate to dashboard
           const params = new URLSearchParams(window.location.search);
           const isClinicRoute = window.location.pathname.startsWith('/clinic/');
-          if (!params.get('doc') && !isClinicRoute) {
+          const isAdminRoute = window.location.pathname.startsWith('/admin');
+          if (!params.get('doc') && !isClinicRoute && !isAdminRoute) {
             setActiveTab('dashboard');
           }
         }
@@ -364,9 +385,12 @@ export default function App() {
               )
             )}
 
-            {/* Platform Admin Dashboard */}
+            {/* Platform Protected Admin Guard & Dashboard */}
             {activeTab === 'admin' && (
-              <AdminDashboard onShowToast={addToast} />
+              <AdminGuard
+                onShowToast={addToast}
+                onNavigateHome={() => navigateTo('directory')}
+              />
             )}
 
             {/* Patient Live Booking View */}
@@ -479,6 +503,35 @@ export default function App() {
             onShowToast={addToast}
           />
         </>
+      )}
+
+      {/* Clinic Invitation Acceptance Modal */}
+      {pendingInviteToken && (
+        <ClinicInvitationAcceptModal
+          invitationToken={pendingInviteToken}
+          currentUser={auth.currentUser}
+          onAccepted={async () => {
+            const urlWithoutInvite = new URL(window.location.href);
+            urlWithoutInvite.searchParams.delete('invite');
+            window.history.replaceState(null, '', urlWithoutInvite.pathname + urlWithoutInvite.search);
+            setPendingInviteToken(null);
+
+            if (auth.currentUser) {
+              const docProfile = await getDoctorProfile(auth.currentUser.uid);
+              if (docProfile) {
+                setCurrentDoctor(docProfile);
+              }
+            }
+            setActiveTab('dashboard');
+          }}
+          onClose={() => {
+            const urlWithoutInvite = new URL(window.location.href);
+            urlWithoutInvite.searchParams.delete('invite');
+            window.history.replaceState(null, '', urlWithoutInvite.pathname + urlWithoutInvite.search);
+            setPendingInviteToken(null);
+          }}
+          onShowToast={addToast}
+        />
       )}
 
     </div>

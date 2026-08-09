@@ -28,6 +28,38 @@
       },
       "required": ["uid", "name", "specialty"]
     },
+    "clinicMembers": {
+      "title": "clinicMembers",
+      "description": "Clinic members and team roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "role": { "type": "string", "enum": ["OWNER", "DOCTOR", "SECRETARY", "STAFF"] },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "disabled", "invited"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "invitedBy": { "type": "string" }
+      },
+      "required": ["uid", "organizationId", "role", "email", "status"]
+    },
+    "auditLogs": {
+      "title": "auditLogs",
+      "description": "Audit trail for sensitive clinic organization actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "action": { "type": "string" },
+        "targetUid": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["organizationId", "actorUid", "action", "timestamp"]
+    },
     "patients": {
       "title": "queues/{doctorId}/patients",
       "description": "Patients in queue for a doctor",
@@ -95,6 +127,14 @@
     "followUpAppointments/{appointmentId}": {
       "schema": "followUpAppointments",
       "description": "Patient follow-up appointments"
+    },
+    "clinic_members/{memberId}": {
+      "schema": "clinicMembers",
+      "description": "Clinic members and staff"
+    },
+    "organizations/{organizationId}/audit_logs/{logId}": {
+      "schema": "auditLogs",
+      "description": "Organization membership audit trail"
     }
   }
 }

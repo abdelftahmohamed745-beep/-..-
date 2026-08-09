@@ -8,22 +8,32 @@ import {
   RefreshCw,
   Search,
   Building,
-  Stethoscope,
-  Phone,
   CreditCard,
   Lock,
   Unlock,
-  AlertTriangle,
   MessageCircle,
-  Sparkles
+  Copy,
+  Plus,
+  Calendar,
+  History,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+  Zap,
+  Filter
 } from 'lucide-react';
-import { DoctorProfile, SubscriptionStatus } from '../types';
+import { DoctorProfile, SubscriptionStatus, SubscriptionPlan, SubscriptionLog } from '../types';
 import {
   getAllDoctorsAdmin,
   toggleDoctorStatus,
-  updateDoctorSubscriptionByAdmin,
   deleteDoctorAccountByAdmin,
-  formatPhoneNumberForUrl
+  formatPhoneNumberForUrl,
+  generateReferenceCode,
+  activateSubscriptionByAdmin,
+  cancelSubscriptionByAdmin,
+  getAllSubscriptionLogs,
+  OFFICIAL_SUBSCRIPTION_PRICES
 } from '../services/firebaseService';
 
 interface AdminDashboardProps {
@@ -32,21 +42,53 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) => {
   const [doctors, setDoctors] = useState<DoctorProfile[]>([]);
+  const [subscriptionLogs, setSubscriptionLogs] = useState<SubscriptionLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'doctors' | 'subscriptions' | 'logs'>('doctors');
+
+  // Search & Filter state for Doctors
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'deactivated'>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const fetchDoctors = async () => {
+  // Manual Subscription Activation Modal / Form state
+  const [selectedDoctorForSub, setSelectedDoctorForSub] = useState<DoctorProfile | null>(null);
+  const [searchRefCodeInput, setSearchRefCodeInput] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('monthly');
+  const [isExtension, setIsExtension] = useState(false);
+  const [subNotes, setSubNotes] = useState('');
+  const [isSubmittingSub, setIsSubmittingSub] = useState(false);
+  const [subErrorMsg, setSubErrorMsg] = useState<string | null>(null);
+
+  // Copy Reference Code Toast Feedback
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+
+  const fetchInitialData = async () => {
     setLoading(true);
-    const list = await getAllDoctorsAdmin();
-    setDoctors(list);
-    setLoading(false);
+    try {
+      const [docList, logsList] = await Promise.all([
+        getAllDoctorsAdmin(),
+        getAllSubscriptionLogs()
+      ]);
+      setDoctors(docList);
+      setSubscriptionLogs(logsList);
+    } catch (err) {
+      console.error("Error loading admin data:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchDoctors();
+    fetchInitialData();
   }, []);
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCodeId(code);
+    onShowToast("تم نسخ الكود المرجعي", code, "success");
+    setTimeout(() => setCopiedCodeId(null), 2000);
+  };
 
   const handleToggleStatus = async (docId: string, currentStatus?: boolean) => {
     const nextStatus = currentStatus === false ? true : false;
@@ -62,20 +104,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
     } catch (err) {
       console.error(err);
       onShowToast("خطأ في تحديث حالة الحساب", "يرجى المحاولة لاحقاً", "error");
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleUpdateSubscription = async (docId: string, newSub: SubscriptionStatus) => {
-    setProcessingId(docId);
-    try {
-      await updateDoctorSubscriptionByAdmin(docId, newSub, newSub === 'active' ? 12 : 1);
-      setDoctors(doctors.map(d => d.uid === docId ? { ...d, subscriptionStatus: newSub } : d));
-      onShowToast("تم تحديث باقة اشتراك الطبيب بنجاح", `الحالة الجديدة: ${newSub}`, "success");
-    } catch (err) {
-      console.error(err);
-      onShowToast("خطأ في تحديث الاشتراك", "", "error");
     } finally {
       setProcessingId(null);
     }
@@ -98,13 +126,121 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
     }
   };
 
+  // Search clinic by Reference Code or Name or Phone
+  const handleFindClinicByRefCode = (queryStr: string) => {
+    const clean = queryStr.trim().toLowerCase();
+    setSearchRefCodeInput(queryStr);
+    setSubErrorMsg(null);
+
+    if (!clean) {
+      setSelectedDoctorForSub(null);
+      return;
+    }
+
+    const found = doctors.find(d => {
+      const ref = (d.referenceCode || generateReferenceCode(d.uid)).toLowerCase();
+      return (
+        ref === clean ||
+        ref.includes(clean) ||
+        d.name.toLowerCase().includes(clean) ||
+        d.clinicName.toLowerCase().includes(clean) ||
+        (d.phone && d.phone.includes(clean))
+      );
+    });
+
+    if (found) {
+      setSelectedDoctorForSub(found);
+      if (found.isActive === false) {
+        setSubErrorMsg("عذراً، هذه العيادة معطلة من قبل الإدارة. يرجى تفعيل الحساب أولاً من قائمة الأطباء.");
+      }
+    } else {
+      setSelectedDoctorForSub(null);
+    }
+  };
+
+  // Submit Subscription Activation
+  const handleActivateSubscription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDoctorForSub) {
+      setSubErrorMsg("يرجى اختيار أو البحث عن العيادة أولاً");
+      return;
+    }
+
+    if (selectedDoctorForSub.isActive === false) {
+      setSubErrorMsg("لا يمكن تفعيل اشتراك لعيادة غير نشطة أو معطلة");
+      return;
+    }
+
+    setIsSubmittingSub(true);
+    setSubErrorMsg(null);
+
+    try {
+      const res = await activateSubscriptionByAdmin({
+        clinicId: selectedDoctorForSub.uid,
+        plan: selectedPlan,
+        adminId: 'ADMIN_SESSION',
+        isExtension,
+        notes: subNotes.trim()
+      });
+
+      onShowToast(
+        isExtension ? "تم تمديد الاشتراك بنجاح" : "تم تفعيل الاشتراك بنجاح",
+        `كود المرجع: ${res.referenceCode} - تاريخ الانتهاء: ${new Date(res.expiresAt).toLocaleDateString('ar-EG')}`,
+        "success"
+      );
+
+      // Refresh Data
+      await fetchInitialData();
+
+      // Reset modal state
+      setSelectedDoctorForSub(null);
+      setSearchRefCodeInput('');
+      setSubNotes('');
+      setIsExtension(false);
+    } catch (err: any) {
+      console.error(err);
+      setSubErrorMsg(err.message || "حدث خطأ أثناء تفعيل الاشتراك");
+      onShowToast("فشل تفعيل الاشتراك", err.message || "", "error");
+    } finally {
+      setIsSubmittingSub(false);
+    }
+  };
+
+  // Cancel Subscription Action
+  const handleCancelSubscription = async (docId: string, doctorName: string) => {
+    if (!window.confirm(`هل أنت متأكد من إلغاء اشتراك عيادة "${doctorName}"؟`)) {
+      return;
+    }
+
+    setProcessingId(docId);
+    try {
+      await cancelSubscriptionByAdmin({
+        clinicId: docId,
+        adminId: 'ADMIN_SESSION',
+        notes: 'إلغاء أيديوي من لوحة تحكم المدير'
+      });
+
+      onShowToast("تم إلغاء الاشتراك بنجاح", doctorName, "warning");
+      await fetchInitialData();
+    } catch (err: any) {
+      console.error(err);
+      onShowToast("خطأ في إلغاء الاشتراك", err.message || "", "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // Filtered Doctors List
   const filteredDoctors = doctors.filter((doc) => {
     const q = searchQuery.toLowerCase().trim();
+    const ref = (doc.referenceCode || generateReferenceCode(doc.uid)).toLowerCase();
     const matchesSearch =
       !q ||
+      ref.includes(q) ||
       doc.name.toLowerCase().includes(q) ||
       doc.clinicName.toLowerCase().includes(q) ||
       doc.specialty.toLowerCase().includes(q) ||
+      (doc.phone && doc.phone.includes(q)) ||
       (doc.city && doc.city.toLowerCase().includes(q));
 
     if (statusFilter === 'active') return matchesSearch && doc.isActive !== false;
@@ -127,18 +263,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
               لوحة تحكم مدير منصة دوري
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              إدارة الأطباء، العيادات، تفعيل وتجميد الحسابات، وتعديل باقات الاشتراك
+              إدارة العيادات، كود المرجع الثابت لكل عيادة، وتفعيل الاشتراكات الشهرية والسنوية
             </p>
           </div>
 
           <button
-            onClick={fetchDoctors}
+            onClick={fetchInitialData}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition border border-white/10"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>تحديث القائمة</span>
+            <span>تحديث البيانات</span>
           </button>
         </div>
+      </div>
+
+      {/* Main Navigation Tabs */}
+      <div className="flex items-center gap-2 bg-slate-200/70 p-1.5 rounded-2xl mb-8 max-w-fit">
+        <button
+          onClick={() => setActiveTab('doctors')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+            activeTab === 'doctors'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>دليل الأطباء والعيادات ({doctors.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('subscriptions')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+            activeTab === 'subscriptions'
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Zap className="w-4 h-4 text-amber-400" />
+          <span>تفعيل الاشتراك المباشر</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('logs')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+            activeTab === 'logs'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <History className="w-4 h-4" />
+          <span>سجل التفعيلات السابق ({subscriptionLogs.length})</span>
+        </button>
       </div>
 
       {/* Stats Quick Cards */}
@@ -149,7 +324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-500 font-bold block">إجمالي الأطباء</span>
+              <span className="text-[11px] text-slate-500 font-bold block">إجمالي العيادات</span>
               <span className="text-xl font-black text-slate-900">{doctors.length}</span>
             </div>
           </div>
@@ -161,9 +336,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
               <CheckCircle className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-500 font-bold block">حسابات نشطة</span>
+              <span className="text-[11px] text-slate-500 font-bold block">اشتراكات مفعلة</span>
               <span className="text-xl font-black text-emerald-700">
-                {doctors.filter(d => d.isActive !== false).length}
+                {doctors.filter(d => d.subscriptionStatus === 'active').length}
               </span>
             </div>
           </div>
@@ -172,12 +347,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
         <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-              <XCircle className="w-5 h-5" />
+              <Clock className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-500 font-bold block">حسابات معطلة</span>
+              <span className="text-[11px] text-slate-500 font-bold block">فترة تجريبية (Trial)</span>
               <span className="text-xl font-black text-amber-700">
-                {doctors.filter(d => d.isActive === false).length}
+                {doctors.filter(d => d.subscriptionStatus === 'trial').length}
               </span>
             </div>
           </div>
@@ -185,217 +360,510 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
 
         <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
-              <CreditCard className="w-5 h-5" />
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
+              <XCircle className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-500 font-bold block">اشتراكات مدفوعة</span>
-              <span className="text-xl font-black text-purple-700">
-                {doctors.filter(d => d.subscriptionStatus === 'active').length}
+              <span className="text-[11px] text-slate-500 font-bold block">منتهي / ملغى</span>
+              <span className="text-xl font-black text-rose-700">
+                {doctors.filter(d => d.subscriptionStatus === 'expired' || d.subscriptionStatus === 'cancelled').length}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Search & Filter */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs mb-6 flex flex-col sm:flex-row items-center gap-4">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ابحث باسم الطبيب، التخصص، أو العيادة..."
-            className="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-          />
-        </div>
+      {/* TAB 1: DOCTORS DIRECTORY */}
+      {activeTab === 'doctors' && (
+        <div>
+          {/* Search & Filter */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs mb-6 flex flex-col sm:flex-row items-center gap-4">
+            <div className="relative flex-1 w-full">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ابحث باسم الطبيب، العيادة، الكود المرجعي (REF-XXXXXX) أو الهاتف..."
+                className="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={() => setStatusFilter('all')}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
-              statusFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            الكل ({doctors.length})
-          </button>
-          <button
-            onClick={() => setStatusFilter('active')}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
-              statusFilter === 'active' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            نشط فقط
-          </button>
-          <button
-            onClick={() => setStatusFilter('deactivated')}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
-              statusFilter === 'deactivated' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            معطل فقط
-          </button>
-        </div>
-      </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
+                  statusFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                الكل ({doctors.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('active')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
+                  statusFilter === 'active' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                نشط فقط
+              </button>
+              <button
+                onClick={() => setStatusFilter('deactivated')}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition ${
+                  statusFilter === 'deactivated' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                معطل فقط
+              </button>
+            </div>
+          </div>
 
-      {/* Doctors Table */}
-      {loading ? (
-        <div className="py-16 text-center">
-          <div className="w-10 h-10 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-slate-500 font-semibold text-xs">جاري تحميل بيانات الأطباء والعيادات...</p>
-        </div>
-      ) : filteredDoctors.length === 0 ? (
-        <div className="bg-white rounded-3xl p-10 text-center border border-slate-200">
-          <Users className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-          <h3 className="font-bold text-slate-800 text-sm">لا يوجد أطباء مطابقين للبحث</h3>
-        </div>
-      ) : (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11px] font-extrabold uppercase">
-                  <th className="py-3.5 px-4">الطبيب والعيادة</th>
-                  <th className="py-3.5 px-4">التخصص والمدينة</th>
-                  <th className="py-3.5 px-4">الاتصال المباشر</th>
-                  <th className="py-3.5 px-4">حالة الحساب</th>
-                  <th className="py-3.5 px-4">الاشتراك</th>
-                  <th className="py-3.5 px-4 text-center">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredDoctors.map((doc) => {
-                  const isDeactivated = doc.isActive === false;
-                  const phoneClean = formatPhoneNumberForUrl(doc.phone);
-                  const whatsappClean = formatPhoneNumberForUrl(doc.whatsappNumber || doc.phone);
+          {/* Doctors Table */}
+          {loading ? (
+            <div className="py-16 text-center">
+              <div className="w-10 h-10 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-slate-500 font-semibold text-xs">جاري تحميل البيانات...</p>
+            </div>
+          ) : filteredDoctors.length === 0 ? (
+            <div className="bg-white rounded-3xl p-10 text-center border border-slate-200">
+              <Users className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+              <h3 className="font-bold text-slate-800 text-sm">لا يوجد نتائج تجريبية تطابق البحث</h3>
+            </div>
+          ) : (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11px] font-extrabold uppercase">
+                      <th className="py-3.5 px-4">كود المرجع الثابت</th>
+                      <th className="py-3.5 px-4">الطبيب والعيادة</th>
+                      <th className="py-3.5 px-4">التخصص والمدينة</th>
+                      <th className="py-3.5 px-4">الاتصال المباشر</th>
+                      <th className="py-3.5 px-4">حالة الحساب</th>
+                      <th className="py-3.5 px-4">الاشتراك والانتهاء</th>
+                      <th className="py-3.5 px-4 text-center">الإجراءات والسجل</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {filteredDoctors.map((doc) => {
+                      const isDeactivated = doc.isActive === false;
+                      const refCode = doc.referenceCode || generateReferenceCode(doc.uid);
+                      const phoneClean = formatPhoneNumberForUrl(doc.phone);
+                      const whatsappClean = formatPhoneNumberForUrl(doc.whatsappNumber || doc.phone);
 
-                  return (
-                    <tr key={doc.uid} className={`hover:bg-slate-50/80 transition ${isDeactivated ? 'bg-amber-50/30' : ''}`}>
-                      
-                      {/* Doctor & Clinic Name */}
-                      <td className="py-3.5 px-4 font-bold text-slate-900">
-                        <div className="flex items-center gap-3">
-                          {doc.photoUrl ? (
-                            <img src={doc.photoUrl} alt={doc.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-xl bg-slate-800 text-white font-black flex items-center justify-center shrink-0">
-                              {doc.name ? doc.name.charAt(0) : "ط"}
-                            </div>
-                          )}
-                          <div>
-                            <span className="block font-black text-slate-900 font-['Tajawal',sans-serif]">{doc.name}</span>
-                            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                              <Building className="w-3 h-3 text-sky-600" />
-                              <span>{doc.clinicName}</span>
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Specialty & Location */}
-                      <td className="py-3.5 px-4 font-semibold text-slate-700">
-                        <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-800 rounded-md font-bold text-[11px] mb-1">
-                          {doc.specialty}
-                        </span>
-                        <span className="block text-[11px] text-slate-500">{doc.city || 'غير محدد'} - {doc.address}</span>
-                      </td>
-
-                      {/* Contact Info */}
-                      <td className="py-3.5 px-4 font-medium text-slate-600">
-                        {doc.phone ? (
-                          <a href={`tel:${phoneClean}`} className="text-sky-700 hover:underline block font-bold">
-                            {doc.phone}
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 font-normal">لم يضف رقم هاتف</span>
-                        )}
-                        {doc.whatsappNumber && (
-                          <a
-                            href={`https://wa.me/${whatsappClean}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-emerald-600 hover:underline text-[11px] flex items-center gap-1 mt-0.5"
-                          >
-                            <MessageCircle className="w-3 h-3 fill-current" />
-                            <span>{doc.whatsappNumber}</span>
-                          </a>
-                        )}
-                      </td>
-
-                      {/* Account Active / Deactivated Badge */}
-                      <td className="py-3.5 px-4 font-bold">
-                        {isDeactivated ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-[11px]">
-                            <Lock className="w-3 h-3" />
-                            <span>موقف / معطل</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[11px]">
-                            <CheckCircle className="w-3 h-3" />
-                            <span>نشط ومفعل</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Subscription Status & Actions */}
-                      <td className="py-3.5 px-4">
-                        <select
-                          value={doc.subscriptionStatus}
-                          disabled={processingId === doc.uid}
-                          onChange={(e) => handleUpdateSubscription(doc.uid, e.target.value as SubscriptionStatus)}
-                          className={`text-[11px] font-bold px-2 py-1 rounded-lg border focus:outline-hidden ${
-                            doc.subscriptionStatus === 'active'
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : doc.subscriptionStatus === 'trial'
-                              ? 'bg-amber-50 text-amber-800 border-amber-200'
-                              : 'bg-rose-50 text-rose-800 border-rose-200'
-                          }`}
-                        >
-                          <option value="trial">تجريبي (Trial)</option>
-                          <option value="active">مفعل مدفوع (Active)</option>
-                          <option value="expired">منتهي (Expired)</option>
-                        </select>
-                      </td>
-
-                      {/* Actions Buttons */}
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
+                      return (
+                        <tr key={doc.uid} className={`hover:bg-slate-50/80 transition ${isDeactivated ? 'bg-amber-50/30' : ''}`}>
                           
-                          {/* Toggle Active Status */}
-                          <button
-                            onClick={() => handleToggleStatus(doc.uid, doc.isActive)}
-                            disabled={processingId === doc.uid}
-                            className={`p-2 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
-                              isDeactivated
-                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
-                            }`}
-                            title={isDeactivated ? "تفعيل حساب الطبيب" : "إيقاف حساب الطبيب"}
-                          >
-                            {isDeactivated ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-                            <span>{isDeactivated ? 'تفعيل' : 'تجميد'}</span>
-                          </button>
+                          {/* Reference Code */}
+                          <td className="py-3.5 px-4 font-bold">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-900 rounded-lg border border-slate-200 font-mono text-xs">
+                              <span className="text-amber-700 font-black">{refCode}</span>
+                              <button
+                                onClick={() => handleCopyCode(refCode)}
+                                className="text-slate-400 hover:text-slate-800 transition"
+                                title="نسخ الكود المرجعي"
+                              >
+                                {copiedCodeId === refCode ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          </td>
 
-                          {/* Delete Account */}
-                          <button
-                            onClick={() => handleDeleteDoctor(doc.uid, doc.name)}
-                            disabled={processingId === doc.uid}
-                            className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition"
-                            title="حذف حساب الطبيب من النظام"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {/* Doctor & Clinic Name */}
+                          <td className="py-3.5 px-4 font-bold text-slate-900">
+                            <div className="flex items-center gap-3">
+                              {doc.photoUrl ? (
+                                <img src={doc.photoUrl} alt={doc.name} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-slate-800 text-white font-black flex items-center justify-center shrink-0">
+                                  {doc.name ? doc.name.charAt(0) : "ط"}
+                                </div>
+                              )}
+                              <div>
+                                <span className="block font-black text-slate-900 font-['Tajawal',sans-serif]">{doc.name}</span>
+                                <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                                  <Building className="w-3 h-3 text-sky-600" />
+                                  <span>{doc.clinicName}</span>
+                                </span>
+                              </div>
+                            </div>
+                          </td>
 
-                        </div>
+                          {/* Specialty & Location */}
+                          <td className="py-3.5 px-4 font-semibold text-slate-700">
+                            <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-800 rounded-md font-bold text-[11px] mb-1">
+                              {doc.specialty}
+                            </span>
+                            <span className="block text-[11px] text-slate-500">{doc.city || 'غير محدد'} - {doc.address}</span>
+                          </td>
+
+                          {/* Contact Info */}
+                          <td className="py-3.5 px-4 font-medium text-slate-600">
+                            {doc.phone ? (
+                              <a href={`tel:${phoneClean}`} className="text-sky-700 hover:underline block font-bold">
+                                {doc.phone}
+                              </a>
+                            ) : (
+                              <span className="text-slate-400 font-normal">لم يضف رقم هاتف</span>
+                            )}
+                            {doc.whatsappNumber && (
+                              <a
+                                href={`https://wa.me/${whatsappClean}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-emerald-600 hover:underline text-[11px] flex items-center gap-1 mt-0.5"
+                              >
+                                <MessageCircle className="w-3 h-3 fill-current" />
+                                <span>{doc.whatsappNumber}</span>
+                              </a>
+                            )}
+                          </td>
+
+                          {/* Account Status Badge */}
+                          <td className="py-3.5 px-4 font-bold">
+                            {isDeactivated ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-[11px]">
+                                <Lock className="w-3 h-3" />
+                                <span>معطل</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[11px]">
+                                <CheckCircle className="w-3 h-3" />
+                                <span>نشط</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Subscription Status & End Date */}
+                          <td className="py-3.5 px-4">
+                            <div className="space-y-1">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-black ${
+                                doc.subscriptionStatus === 'active' ? 'bg-emerald-100 text-emerald-800' :
+                                doc.subscriptionStatus === 'trial' ? 'bg-amber-100 text-amber-800' :
+                                'bg-rose-100 text-rose-800'
+                              }`}>
+                                {doc.subscriptionStatus === 'active' ? 'مفعل مدفوع' :
+                                 doc.subscriptionStatus === 'trial' ? 'تجريبي (Trial)' :
+                                 doc.subscriptionStatus === 'cancelled' ? 'ملغى' : 'منتهي'}
+                              </span>
+                              
+                              <span className="block text-[10px] text-slate-500 font-medium">
+                                {doc.subscriptionEndDate
+                                  ? `ينتهي: ${new Date(doc.subscriptionEndDate).toLocaleDateString('ar-EG')}`
+                                  : doc.trialEndDate
+                                  ? `تجريبي حتى: ${new Date(doc.trialEndDate).toLocaleDateString('ar-EG')}`
+                                  : 'غير محدد'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Actions Buttons */}
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              
+                              {/* Open Subscription Panel for this Clinic */}
+                              <button
+                                onClick={() => {
+                                  setSelectedDoctorForSub(doc);
+                                  setSearchRefCodeInput(refCode);
+                                  setActiveTab('subscriptions');
+                                }}
+                                className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[11px] font-bold transition flex items-center gap-1"
+                                title="تفعيل أو تمديد اشتراك العيادة"
+                              >
+                                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                                <span>تفعيل</span>
+                              </button>
+
+                              {/* Toggle Active Status */}
+                              <button
+                                onClick={() => handleToggleStatus(doc.uid, doc.isActive)}
+                                disabled={processingId === doc.uid}
+                                className={`p-2 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                                  isDeactivated
+                                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                                }`}
+                                title={isDeactivated ? "تفعيل حساب الطبيب" : "إيقاف حساب الطبيب"}
+                              >
+                                {isDeactivated ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                              </button>
+
+                              {/* Delete Account */}
+                              <button
+                                onClick={() => handleDeleteDoctor(doc.uid, doc.name)}
+                                disabled={processingId === doc.uid}
+                                className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition"
+                                title="حذف حساب الطبيب من النظام"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+
+                            </div>
+                          </td>
+
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: MANUAL SUBSCRIPTION ACTIVATION PANEL */}
+      {activeTab === 'subscriptions' && (
+        <div className="max-w-3xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-md">
+          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+            <div className="p-3 bg-slate-900 text-amber-400 rounded-2xl">
+              <Zap className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-900 font-['Tajawal',sans-serif]">
+                تفعيل أو تمديد اشتراك العيادة يدويًا
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                ابحث بالكود المرجعي الثابت (REF-XXXXXX) للعيادة وحدد الباقة لتأكيد التفعيل
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleActivateSubscription} className="space-y-6">
+            
+            {/* Step 1: Find Clinic by Reference Code or Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                1. ابحث عن العيادة (الكود المرجعي REF-XXXXXX أو الاسم أو الهاتف):
+              </label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <input
+                  type="text"
+                  value={searchRefCodeInput}
+                  onChange={(e) => handleFindClinicByRefCode(e.target.value)}
+                  placeholder="مثال: REF-A1B2C3 أو اسم الطبيب..."
+                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+            </div>
+
+            {/* Selected Clinic Preview Card */}
+            {selectedDoctorForSub ? (
+              <div className={`p-4 rounded-2xl border ${
+                selectedDoctorForSub.isActive === false
+                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                  : 'bg-sky-50/80 border-sky-200 text-slate-900'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-slate-500 font-bold block">العيادة المحددة:</span>
+                    <span className="text-base font-black text-slate-900 font-['Tajawal',sans-serif]">
+                      {selectedDoctorForSub.clinicName} - {selectedDoctorForSub.name}
+                    </span>
+                    <div className="text-xs text-slate-600 mt-1 flex items-center gap-3">
+                      <span>الكود: <strong className="font-mono text-amber-700">{selectedDoctorForSub.referenceCode || generateReferenceCode(selectedDoctorForSub.uid)}</strong></span>
+                      <span>•</span>
+                      <span>الهاتف: {selectedDoctorForSub.phone || 'غير محدد'}</span>
+                    </div>
+                  </div>
+
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    selectedDoctorForSub.isActive === false
+                      ? 'bg-rose-200 text-rose-900'
+                      : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {selectedDoctorForSub.isActive === false ? 'معطل' : 'نشط'}
+                  </span>
+                </div>
+              </div>
+            ) : searchRefCodeInput.trim() ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>لم يتم العثور على عيادة بهذا الكود المرجعي أو الاسم. يرجى التأكد من إدخال كود صحبح.</span>
+              </div>
+            ) : null}
+
+            {/* Step 2: Choose Official Plan (Fixed Server Prices) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-2">
+                2. اختر باقة الاشتراك الرسمية (الأسعار ثابتة ومعتمدة من النظام):
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
+                {/* Monthly Plan Option */}
+                <div
+                  onClick={() => setSelectedPlan('monthly')}
+                  className={`p-4 rounded-2xl border cursor-pointer transition ${
+                    selectedPlan === 'monthly'
+                      ? 'bg-sky-50 border-sky-500 ring-2 ring-sky-500/20'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-extrabold text-slate-900">الباقة الشهرية (Monthly)</span>
+                    <span className="text-xs bg-sky-100 text-sky-800 px-2 py-0.5 rounded-md font-bold">30 يوماً</span>
+                  </div>
+                  <div className="text-2xl font-black text-slate-900 font-['Tajawal',sans-serif]">
+                    {OFFICIAL_SUBSCRIPTION_PRICES.monthly} <span className="text-xs font-bold text-slate-500">EGP</span>
+                  </div>
+                </div>
+
+                {/* Yearly Plan Option */}
+                <div
+                  onClick={() => setSelectedPlan('yearly')}
+                  className={`p-4 rounded-2xl border cursor-pointer transition ${
+                    selectedPlan === 'yearly'
+                      ? 'bg-slate-900 text-white border-sky-400 ring-2 ring-sky-400/30'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-extrabold text-amber-400">الباقة السنوية (Yearly)</span>
+                    <span className="text-xs bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-md font-bold">12 شهراً</span>
+                  </div>
+                  <div className="text-2xl font-black text-white font-['Tajawal',sans-serif]">
+                    {OFFICIAL_SUBSCRIPTION_PRICES.yearly} <span className="text-xs font-bold text-slate-400">EGP</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Step 3: Activation Type (New vs Extension) */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">هل تريد تمديد اشتراك نشط؟</span>
+                <span className="text-[11px] text-slate-500">عند التمديد، يتم إضافة الفترة الجديدة فوق تاريخ الانتهاء الحالي مباشرة</span>
+              </div>
+
+              <input
+                type="checkbox"
+                checked={isExtension}
+                onChange={(e) => setIsExtension(e.target.checked)}
+                className="w-5 h-5 text-sky-600 rounded-md focus:ring-sky-500"
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">ملاحظات العملية (اختياري):</label>
+              <input
+                type="text"
+                value={subNotes}
+                onChange={(e) => setSubNotes(e.target.value)}
+                placeholder="مثال: تم الاستلام كاش / تحويل فودافون كاش..."
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900"
+              />
+            </div>
+
+            {/* Error Banner if any */}
+            {subErrorMsg && (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{subErrorMsg}</span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={isSubmittingSub || !selectedDoctorForSub || selectedDoctorForSub.isActive === false}
+                className="flex-1 py-3.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-black text-xs sm:text-sm rounded-2xl transition shadow-md flex items-center justify-center gap-2"
+              >
+                <Zap className="w-4 h-4 text-amber-400" />
+                <span>{isExtension ? 'تأكيد تمديد الاشتراك' : 'تأكيد تفعيل الاشتراك الآن'}</span>
+              </button>
+
+              {selectedDoctorForSub && selectedDoctorForSub.subscriptionStatus === 'active' && (
+                <button
+                  type="button"
+                  onClick={() => handleCancelSubscription(selectedDoctorForSub.uid, selectedDoctorForSub.name)}
+                  className="px-4 py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-2xl transition border border-rose-200"
+                >
+                  إلغاء الاشتراك
+                </button>
+              )}
+            </div>
+
+          </form>
+        </div>
+      )}
+
+      {/* TAB 3: SUBSCRIPTION LOGS HISTORY */}
+      {activeTab === 'logs' && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-slate-900 text-base font-['Tajawal',sans-serif]">
+                سجل عمليات التفعيل والتمديد في Firestore
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                سجل موثق لجميع تفعيلات الاشتراك المسجلة برقم المرجع والباقة والمبلغ والتاريخ
+              </p>
+            </div>
+          </div>
+
+          {subscriptionLogs.length === 0 ? (
+            <div className="p-12 text-center">
+              <History className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs font-bold text-slate-500">لا يوجد عمليات تفعيل مسجلة في السجل حتى الآن</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11px] font-extrabold uppercase">
+                    <th className="py-3 px-4">تاريخ العملية</th>
+                    <th className="py-3 px-4">العيادة والطبيب</th>
+                    <th className="py-3 px-4">الكود المرجعي</th>
+                    <th className="py-3 px-4">الباقة والمبلغ</th>
+                    <th className="py-3 px-4">تاريخ الانتهاء</th>
+                    <th className="py-3 px-4">الإجراء</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {subscriptionLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50/80 transition">
+                      
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        {new Date(log.activatedAt).toLocaleString('ar-EG')}
+                      </td>
+
+                      <td className="py-3 px-4 font-bold text-slate-900">
+                        <span className="block">{log.clinicName}</span>
+                        <span className="text-[11px] text-slate-500 font-normal">{log.doctorName}</span>
+                      </td>
+
+                      <td className="py-3 px-4 font-mono font-bold text-amber-700">
+                        {log.referenceCode}
+                      </td>
+
+                      <td className="py-3 px-4 font-bold text-slate-800">
+                        {log.plan === 'yearly' ? 'سنوية (Yearly)' : 'شهرية (Monthly)'} - <span className="text-emerald-700 font-black">{log.amount} EGP</span>
+                      </td>
+
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        {new Date(log.expiresAt).toLocaleDateString('ar-EG')}
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                          log.action === 'extend' ? 'bg-sky-100 text-sky-800' :
+                          log.action === 'cancel' ? 'bg-rose-100 text-rose-800' :
+                          'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {log.action === 'extend' ? 'تمديد' : log.action === 'cancel' ? 'إلغاء' : 'تفعيل جديد'}
+                        </span>
                       </td>
 
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

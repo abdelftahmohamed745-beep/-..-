@@ -14,7 +14,31 @@ import {
   limit
 } from "firebase/firestore";
 import { db } from "../firebase/config";
-import { DoctorProfile, PatientRecord, PatientStatus, SubscriptionStatus, NotificationTimingPreference, DoctorRating, FollowUpAppointment, FollowUpAppointmentStatus, FollowUpReminderSettings } from "../types";
+import {
+  DoctorProfile,
+  PatientRecord,
+  PatientStatus,
+  SubscriptionStatus,
+  SubscriptionPlan,
+  SubscriptionLog,
+  NotificationTimingPreference,
+  DoctorRating,
+  FollowUpAppointment,
+  FollowUpAppointmentStatus,
+  FollowUpReminderSettings,
+  ClinicMember,
+  ClinicRole,
+  ClinicPermission,
+  ClinicInvitation,
+  ClinicAuditLog,
+  ClinicService,
+  ClinicTransaction,
+  ClinicExpense,
+  PaymentStatus,
+  PaymentMethod,
+  ExpenseCategory
+} from "../types";
+import { hasPermission } from "../utils/permissions";
 import {
   sanitizeInput,
   isValidPhoneNumber,
@@ -24,6 +48,19 @@ import {
 } from "./securityService";
 
 export const DEMO_DOCTOR_ID = "demo-doctor-123";
+
+// Official Subscription Prices (Server-Side Enforced)
+export const OFFICIAL_SUBSCRIPTION_PRICES = {
+  monthly: 200, // 200 EGP per month
+  yearly: 1500  // 1500 EGP per year
+} as const;
+
+export function generateReferenceCode(uid: string): string {
+  if (!uid) return 'REF-000000';
+  const clean = uid.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const code = clean.length >= 6 ? clean.slice(-6) : clean.padEnd(6, '0');
+  return `REF-${code}`;
+}
 
 export function getTodayDateString(): string {
   const today = new Date();
@@ -35,6 +72,10 @@ export function getTodayDateString(): string {
 
 // Check doctor subscription state dynamically
 export function evaluateSubscriptionStatus(docData: DoctorProfile): SubscriptionStatus {
+  if (docData.subscriptionStatus === 'cancelled') {
+    return 'cancelled';
+  }
+
   if (docData.subscriptionStatus === 'active') {
     if (docData.subscriptionEndDate) {
       const end = new Date(docData.subscriptionEndDate);
@@ -69,6 +110,7 @@ export async function getAllDoctors(): Promise<DoctorProfile[]> {
     querySnap.forEach((docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as DoctorProfile;
+        data.referenceCode = data.referenceCode || generateReferenceCode(data.uid);
         data.subscriptionStatus = evaluateSubscriptionStatus(data);
         // Only include active clinics for public directory
         if (data.isActive !== false) {
@@ -91,6 +133,7 @@ export async function getAllDoctorsAdmin(): Promise<DoctorProfile[]> {
     querySnap.forEach((docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as DoctorProfile;
+        data.referenceCode = data.referenceCode || generateReferenceCode(data.uid);
         data.subscriptionStatus = evaluateSubscriptionStatus(data);
         doctors.push(data);
       }
@@ -102,13 +145,158 @@ export async function getAllDoctorsAdmin(): Promise<DoctorProfile[]> {
   }
 }
 
-// Admin action: Toggle Doctor account active/deactivated status (Requirement 13 & 14)
+// Admin action: Toggle Doctor account active/deactivated status
 export async function toggleDoctorStatus(doctorId: string, isActive: boolean): Promise<void> {
   const docRef = doc(db, "doctors", doctorId);
   await updateDoc(docRef, { isActive });
 }
 
-// Admin action: Modify doctor subscription
+// Admin action: Activate or Extend Subscription (Server-side validation & audit log)
+export async function activateSubscriptionByAdmin(params: {
+  clinicId: string;
+  plan: SubscriptionPlan;
+  adminId: string;
+  isExtension?: boolean;
+  notes?: string;
+}): Promise<{ success: boolean; expiresAt: string; referenceCode: string }> {
+  const { clinicId, plan, adminId, isExtension, notes } = params;
+
+  // 1. Fetch Doctor Profile
+  const docRef = doc(db, "doctors", clinicId);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
+    throw new Error("عذراً، العيادة غير موجودة في النظام");
+  }
+
+  const doctor = snap.data() as DoctorProfile;
+
+  // 2. Validate Clinic Active Status
+  if (doctor.isActive === false) {
+    throw new Error("لا يمكن تفعيل أو تمديد اشتراك لعيادة غير نشطة أو معطلة من قبل مدير المنصة");
+  }
+
+  // 3. Server-side enforce official price & reference code
+  const amount = plan === 'yearly' ? OFFICIAL_SUBSCRIPTION_PRICES.yearly : OFFICIAL_SUBSCRIPTION_PRICES.monthly;
+  const refCode = doctor.referenceCode || generateReferenceCode(doctor.uid);
+
+  // 4. Calculate Expiration Date
+  const now = new Date();
+  let baseDate = now;
+
+  // If extending an active subscription, add onto current expiration
+  if (isExtension && doctor.subscriptionEndDate && evaluateSubscriptionStatus(doctor) === 'active') {
+    const currentEnd = new Date(doctor.subscriptionEndDate);
+    if (currentEnd > now) {
+      baseDate = currentEnd;
+    }
+  }
+
+  const newEnd = new Date(baseDate.getTime());
+  if (plan === 'yearly') {
+    newEnd.setFullYear(newEnd.getFullYear() + 1);
+  } else {
+    newEnd.setMonth(newEnd.getMonth() + 1);
+  }
+
+  const expiresAtIso = newEnd.toISOString();
+  const activatedAtIso = now.toISOString();
+
+  // 5. Update Doctor Doc in Firestore
+  await updateDoc(docRef, {
+    subscriptionStatus: 'active',
+    subscriptionEndDate: expiresAtIso,
+    referenceCode: refCode
+  });
+
+  // 6. Record Subscription Log in Firestore
+  const logData: Omit<SubscriptionLog, 'id'> = {
+    clinicId: doctor.uid,
+    clinicName: doctor.clinicName,
+    doctorName: doctor.name,
+    referenceCode: refCode,
+    plan,
+    amount,
+    activatedAt: activatedAtIso,
+    expiresAt: expiresAtIso,
+    adminId: adminId || 'admin-session',
+    action: isExtension ? 'extend' : 'activate',
+    notes: notes || ''
+  };
+
+  await addDoc(collection(db, "subscription_logs"), logData);
+
+  writeAuditLog("ACTIVATE_SUBSCRIPTION", adminId || "ADMIN", doctor.uid, {
+    plan,
+    amount,
+    expiresAt: expiresAtIso,
+    isExtension: !!isExtension
+  });
+
+  return { success: true, expiresAt: expiresAtIso, referenceCode: refCode };
+}
+
+// Admin action: Cancel Subscription
+export async function cancelSubscriptionByAdmin(params: {
+  clinicId: string;
+  adminId: string;
+  notes?: string;
+}): Promise<void> {
+  const { clinicId, adminId, notes } = params;
+  const docRef = doc(db, "doctors", clinicId);
+  const snap = await getDoc(docRef);
+
+  if (!snap.exists()) {
+    throw new Error("العيادة غير موجودة في النظام");
+  }
+
+  const doctor = snap.data() as DoctorProfile;
+  const refCode = doctor.referenceCode || generateReferenceCode(doctor.uid);
+  const nowIso = new Date().toISOString();
+
+  await updateDoc(docRef, {
+    subscriptionStatus: 'cancelled'
+  });
+
+  const logData: Omit<SubscriptionLog, 'id'> = {
+    clinicId: doctor.uid,
+    clinicName: doctor.clinicName,
+    doctorName: doctor.name,
+    referenceCode: refCode,
+    plan: 'monthly',
+    amount: 0,
+    activatedAt: nowIso,
+    expiresAt: nowIso,
+    adminId: adminId || 'admin-session',
+    action: 'cancel',
+    notes: notes || 'تم إلغاء الاشتراك من لوحة الإدارة'
+  };
+
+  await addDoc(collection(db, "subscription_logs"), logData);
+
+  writeAuditLog("CANCEL_SUBSCRIPTION", adminId || "ADMIN", doctor.uid, { notes });
+}
+
+// Fetch all subscription logs for Admin view
+export async function getAllSubscriptionLogs(): Promise<SubscriptionLog[]> {
+  try {
+    const q = query(
+      collection(db, "subscription_logs"),
+      orderBy("activatedAt", "desc"),
+      limit(100)
+    );
+    const snap = await getDocs(q);
+    const logs: SubscriptionLog[] = [];
+    snap.forEach((d) => {
+      logs.push({ id: d.id, ...d.data() } as SubscriptionLog);
+    });
+    return logs;
+  } catch (err) {
+    console.error("Error fetching subscription logs:", err);
+    return [];
+  }
+}
+
+// Admin action: Modify doctor subscription (Legacy wrapper)
 export async function updateDoctorSubscriptionByAdmin(
   doctorId: string,
   status: SubscriptionStatus,
@@ -130,6 +318,83 @@ export async function deleteDoctorAccount(doctorId: string): Promise<void> {
   await deleteDoc(docRef);
 }
 
+// Verify Admin Status against Firebase Auth & Firestore
+export async function verifyAdminStatus(user: any): Promise<{ isAdmin: boolean; doctor?: DoctorProfile; error?: string }> {
+  if (!user || !user.uid) return { isAdmin: false, error: "غير مسجل الدخول" };
+
+  try {
+    // 1. Check Auth Token Custom Claims
+    try {
+      if (typeof user.getIdTokenResult === 'function') {
+        const idTokenResult = await user.getIdTokenResult();
+        if (idTokenResult && idTokenResult.claims && idTokenResult.claims.admin === true) {
+          const docProfile = await getDoctorProfile(user.uid);
+          return { isAdmin: true, doctor: docProfile || undefined };
+        }
+      }
+    } catch (e) {
+      console.warn("Token claim check warning:", e);
+    }
+
+    // 2. Check Firestore doctor document for isAdmin flag
+    try {
+      const docRef = doc(db, "doctors", user.uid);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data() as DoctorProfile;
+        if (data.isAdmin === true) {
+          return { isAdmin: true, doctor: data };
+        }
+      }
+    } catch (e) {
+      console.warn("Doctor admin check warning:", e);
+    }
+
+    // 3. Check Firestore admins document
+    try {
+      const adminRef = doc(db, "admins", user.uid);
+      const adminSnap = await getDoc(adminRef);
+      if (adminSnap.exists()) {
+        const adminData = adminSnap.data();
+        if (adminData?.isAdmin !== false) {
+          return { isAdmin: true };
+        }
+      }
+    } catch (e) {
+      console.warn("Admins collection check warning:", e);
+    }
+
+    // 4. Default Admin Email check (e.g. admin@dawry.app)
+    if (user.email && user.email.toLowerCase().trim() === 'admin@dawry.app') {
+      try {
+        await setDoc(doc(db, "admins", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          isAdmin: true,
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+
+        const docRef = doc(db, "doctors", user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          await setDoc(docRef, { isAdmin: true }, { merge: true });
+        }
+      } catch (e) {
+        console.warn("Could not write admin bootstrap doc:", e);
+      }
+      return { isAdmin: true };
+    }
+
+    return {
+      isAdmin: false,
+      error: "الحساب الحالي غير مصرح له بالوصول للوحة تحكم إدارة المنصة"
+    };
+  } catch (err: any) {
+    console.error("Error verifying admin status:", err);
+    return { isAdmin: false, error: "فشل التحقق من صلاحيات الحساب" };
+  }
+}
+
 // Fetch Doctor Profile
 export async function getDoctorProfile(doctorId: string): Promise<DoctorProfile | null> {
   try {
@@ -137,6 +402,7 @@ export async function getDoctorProfile(doctorId: string): Promise<DoctorProfile 
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data() as DoctorProfile;
+      data.referenceCode = data.referenceCode || generateReferenceCode(data.uid);
       const computedStatus = evaluateSubscriptionStatus(data);
       if (computedStatus !== data.subscriptionStatus) {
         data.subscriptionStatus = computedStatus;
@@ -157,6 +423,7 @@ export async function createDoctorProfile(doctorId: string, name: string, specia
 
   const newProfile: DoctorProfile = {
     uid: doctorId,
+    referenceCode: generateReferenceCode(doctorId),
     name,
     specialty,
     clinicName: clinicName || `عيادة ${name}`,
@@ -952,6 +1219,1202 @@ export async function requestRescheduleFollowUp(
     requestedNewDate: newDate,
     requestedNewTime: newTime,
     updatedAt: new Date().toISOString()
+  });
+}
+
+// =========================================================
+// CLINIC ORGANIZATION, MEMBERSHIP & PERMISSIONS API
+// =========================================================
+
+// Get active clinic member record for current authenticated user
+export async function getUserClinicMember(user: any): Promise<{ member: ClinicMember | null; isPrimaryOwner: boolean }> {
+  if (!user || !user.uid) return { member: null, isPrimaryOwner: false };
+
+  try {
+    // 1. Direct check by UID
+    const memberDocRef = doc(db, "clinic_members", user.uid);
+    const memberSnap = await getDoc(memberDocRef);
+
+    if (memberSnap.exists()) {
+      const data = memberSnap.data() as ClinicMember;
+      if (data.status === 'invited') {
+        return { member: null, isPrimaryOwner: false };
+      }
+      return { member: data, isPrimaryOwner: data.role === 'OWNER' };
+    }
+
+    // 2. Fallback check: Is user an existing Doctor profile owner?
+    const docRef = doc(db, "doctors", user.uid);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      const docData = docSnap.data();
+      const ownerMember: ClinicMember = {
+        id: user.uid,
+        uid: user.uid,
+        organizationId: user.uid,
+        role: 'OWNER',
+        displayName: docData.name || user.displayName || user.email || "مالك العيادة",
+        email: user.email ? user.email.toLowerCase().trim() : "",
+        status: 'active',
+        createdAt: docData.createdAt || new Date().toISOString()
+      };
+
+      // Bootstrap clinic member document for smooth sync
+      try {
+        await setDoc(doc(db, "clinic_members", user.uid), ownerMember, { merge: true });
+        await setDoc(doc(db, `organizations/${user.uid}/members`, user.uid), ownerMember, { merge: true });
+        await setDoc(doc(db, "organizations", user.uid), {
+          organizationId: user.uid,
+          clinicName: docData.clinicName || "العيادة",
+          ownerUid: user.uid,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {
+        console.warn("Auto-bootstrap member doc error:", e);
+      }
+
+      return { member: ownerMember, isPrimaryOwner: true };
+    }
+
+    return { member: null, isPrimaryOwner: false };
+  } catch (err) {
+    console.error("Error fetching user clinic member info:", err);
+    return { member: null, isPrimaryOwner: false };
+  }
+}
+
+// Real-time subscription to clinic members list
+export function subscribeToClinicMembers(
+  organizationId: string,
+  callback: (members: ClinicMember[]) => void
+): () => void {
+  if (!organizationId) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, "clinic_members"),
+    where("organizationId", "==", organizationId)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const members: ClinicMember[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as ClinicMember;
+        // Do not include unaccepted invitations in members list
+        if (data.status === 'invited') return;
+        members.push({ id: docSnap.id, ...data });
+      });
+
+      // Sort: OWNER first, then DOCTOR, SECRETARY, STAFF
+      const roleOrder: Record<string, number> = { OWNER: 1, DOCTOR: 2, SECRETARY: 3, STAFF: 4 };
+      members.sort((a, b) => (roleOrder[a.role] || 5) - (roleOrder[b.role] || 5));
+
+      callback(members);
+    },
+    (err) => {
+      console.error("Error subscribing to clinic members:", err);
+      callback([]);
+    }
+  );
+}
+
+// Create secure clinic invitation
+export async function createClinicInvitation(
+  actorMember: ClinicMember,
+  clinicName: string,
+  data: {
+    displayName: string;
+    email: string;
+    role: ClinicRole;
+    customPermissions?: ClinicPermission[];
+  }
+): Promise<ClinicInvitation> {
+  const cleanEmail = data.email.toLowerCase().trim();
+  const orgId = actorMember.organizationId;
+
+  if (!cleanEmail) throw new Error("يرجى إدخال البريد الإلكتروني للموظف");
+  if (!data.displayName.trim()) throw new Error("يرجى إدخال اسم الموظف");
+  if (data.role === 'OWNER') throw new Error("لا يمكن إرسال دعوة بدور المالك");
+
+  // SERVER-SIDE DUPLICATE CHECKS (BUG #3)
+  
+  // 1. Check existing members in clinic_members for same org + email
+  const membersQuery = query(
+    collection(db, "clinic_members"),
+    where("organizationId", "==", orgId)
+  );
+  const membersSnap = await getDocs(membersQuery);
+  const existingMember = membersSnap.docs
+    .map(d => d.data() as ClinicMember)
+    .find(m => m.email && m.email.toLowerCase().trim() === cleanEmail && m.status !== 'invited');
+
+  if (existingMember) {
+    if (existingMember.status === 'active') {
+      throw new Error(`البريد الإلكتروني (${cleanEmail}) ينتمي لعضو نشط بالفعل في العيادة.`);
+    }
+    if (existingMember.status === 'disabled') {
+      throw new Error(`البريد الإلكتروني (${cleanEmail}) ينتمي لعضو معطل في العيادة. يمكنك إعادة تفعيل حسابه من قائمة الأعضاء بدلاً من إرسال دعوة جديدة.`);
+    }
+  }
+
+  // 2. Check existing pending invitations in clinic_invitations for same org + email
+  const invQuery = query(
+    collection(db, "clinic_invitations"),
+    where("organizationId", "==", orgId)
+  );
+  const invSnap = await getDocs(invQuery);
+  const now = new Date();
+  
+  const existingPendingInv = invSnap.docs
+    .map(d => ({ id: d.id, ...d.data() } as ClinicInvitation))
+    .find(inv => {
+      const invEmail = inv.invitedEmail ? inv.invitedEmail.toLowerCase().trim() : '';
+      if (invEmail !== cleanEmail) return false;
+      if (inv.status === 'pending') {
+        const isExpired = inv.expiresAt && new Date(inv.expiresAt) < now;
+        return !isExpired;
+      }
+      return false;
+    });
+
+  if (existingPendingInv) {
+    throw new Error(`توجد دعوة معلقة بالفعل لهذا البريد الإلكتروني (${cleanEmail}). يمكنك نسخ رابط الدعوة الحالية أو إلغاؤها قبل إرسال دعوة جديدة.`);
+  }
+
+  const existingAcceptedInv = invSnap.docs
+    .map(d => ({ id: d.id, ...d.data() } as ClinicInvitation))
+    .find(inv => {
+      const invEmail = inv.invitedEmail ? inv.invitedEmail.toLowerCase().trim() : '';
+      return invEmail === cleanEmail && inv.status === 'accepted';
+    });
+
+  if (existingAcceptedInv && existingMember) {
+    throw new Error(`هذا البريد الإلكتروني ينتمي لعضو في العيادة بالفعل.`);
+  }
+
+  // Generate invitation token
+  const token = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const invitation: ClinicInvitation = {
+    id: token,
+    organizationId: orgId,
+    clinicName: clinicName || "العيادة",
+    invitedEmail: cleanEmail,
+    invitedName: data.displayName.trim(),
+    role: data.role,
+    customPermissions: data.customPermissions || [],
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    expiresAt,
+    invitedBy: actorMember.uid,
+    invitedByName: actorMember.displayName
+  };
+
+  // Store ONLY in clinic_invitations! (Do NOT create unaccepted clinic_members doc)
+  await setDoc(doc(db, "clinic_invitations", token), invitation);
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid: actorMember.uid,
+    actorName: actorMember.displayName,
+    action: 'member_invited',
+    targetUid: token,
+    targetEmail: cleanEmail,
+    targetName: data.displayName.trim(),
+    details: `تم إنشاء دعوة انضمام بدور ${data.role}`
+  });
+
+  return invitation;
+}
+
+// Get Clinic Invitation by token/ID
+export async function getClinicInvitation(invitationId: string): Promise<ClinicInvitation | null> {
+  if (!invitationId) return null;
+  try {
+    const snap = await getDoc(doc(db, "clinic_invitations", invitationId));
+    if (!snap.exists()) return null;
+    const inv = snap.data() as ClinicInvitation;
+
+    // Check if expired dynamically
+    if (inv.status === 'pending' && inv.expiresAt && new Date(inv.expiresAt) < new Date()) {
+      return { ...inv, status: 'expired' };
+    }
+
+    return inv;
+  } catch (err) {
+    console.error("Error fetching invitation:", err);
+    return null;
+  }
+}
+
+// Accept Clinic Invitation
+export async function acceptClinicInvitation(
+  invitationId: string,
+  currentUser: { uid: string; email: string; displayName?: string }
+): Promise<ClinicMember> {
+  if (!invitationId) throw new Error("معرّف الدعوة غير صالح");
+  if (!currentUser || !currentUser.uid || !currentUser.email) {
+    throw new Error("يرجى تسجيل الدخول أولاً لقبول الدعوة");
+  }
+
+  const invitationRef = doc(db, "clinic_invitations", invitationId);
+  const snap = await getDoc(invitationRef);
+  if (!snap.exists()) throw new Error("الدعوة غير موجودة أو تم حذفها");
+
+  const invitation = snap.data() as ClinicInvitation;
+
+  if (invitation.status === 'accepted') {
+    throw new Error("تم قبول هذه الدعوة سابقاً");
+  }
+  if (invitation.status === 'revoked') {
+    throw new Error("تم إلغاء هذه الدعوة من قبل إدارة العيادة");
+  }
+  if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+    throw new Error("عفواً، انتهت صلاحية هذه الدعوة");
+  }
+
+  const cleanUserEmail = currentUser.email.toLowerCase().trim();
+  const cleanInvitedEmail = invitation.invitedEmail.toLowerCase().trim();
+
+  if (cleanUserEmail !== cleanInvitedEmail) {
+    throw new Error(`حسابك الحالي (${cleanUserEmail}) لا يطابق البريد الإلكتروني المدعو (${cleanInvitedEmail}). يرجى تسجيل الدخول بالبريد الإلكتروني الصحيح.`);
+  }
+
+  if (invitation.role === 'OWNER') {
+    throw new Error("غير مسموح بإنشاء حساب مالك عبر الدعوات العادية");
+  }
+
+  const newMember: ClinicMember = {
+    id: currentUser.uid,
+    uid: currentUser.uid,
+    organizationId: invitation.organizationId,
+    role: invitation.role,
+    displayName: currentUser.displayName || invitation.invitedName || currentUser.email,
+    email: cleanUserEmail,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    invitedBy: invitation.invitedBy,
+    customPermissions: invitation.customPermissions || []
+  };
+
+  // 1. Create active member documents securely
+  await setDoc(doc(db, "clinic_members", currentUser.uid), newMember);
+  await setDoc(doc(db, `organizations/${invitation.organizationId}/members`, currentUser.uid), newMember);
+
+  // 2. Mark invitation document as accepted
+  await updateDoc(invitationRef, {
+    status: 'accepted',
+    acceptedByUid: currentUser.uid,
+    acceptedAt: new Date().toISOString()
+  });
+
+  // 3. Clean up temp doc ID if present
+  const tempDocId = `${invitation.organizationId}_${cleanUserEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  try {
+    await deleteDoc(doc(db, "clinic_members", tempDocId));
+    await deleteDoc(doc(db, `organizations/${invitation.organizationId}/members`, tempDocId));
+  } catch (e) { /* ignore */ }
+
+  // 4. Audit Log
+  await logClinicAction({
+    organizationId: invitation.organizationId,
+    actorUid: currentUser.uid,
+    actorName: newMember.displayName,
+    action: 'invitation_accepted',
+    targetUid: currentUser.uid,
+    targetEmail: cleanUserEmail,
+    targetName: newMember.displayName,
+    details: `تم قبول الدعوة والانضمام للعيادة بدور ${invitation.role}`
+  });
+
+  return newMember;
+}
+
+// Revoke a pending invitation
+export async function revokeClinicInvitation(
+  actorMember: ClinicMember,
+  invitationId: string
+): Promise<void> {
+  const orgId = actorMember.organizationId;
+  const invitationRef = doc(db, "clinic_invitations", invitationId);
+  const snap = await getDoc(invitationRef);
+  if (!snap.exists()) throw new Error("الدعوة غير موجودة");
+
+  const inv = snap.data() as ClinicInvitation;
+
+  await updateDoc(invitationRef, {
+    status: 'revoked',
+    updatedAt: new Date().toISOString()
+  });
+
+  const tempDocId = `${orgId}_${inv.invitedEmail.toLowerCase().trim().replace(/[^a-zA-Z0-9]/g, '_')}`;
+  try {
+    await deleteDoc(doc(db, "clinic_members", tempDocId));
+    await deleteDoc(doc(db, `organizations/${orgId}/members`, tempDocId));
+  } catch (e) { /* ignore */ }
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid: actorMember.uid,
+    actorName: actorMember.displayName,
+    action: 'invitation_revoked',
+    targetUid: invitationId,
+    targetEmail: inv.invitedEmail,
+    targetName: inv.invitedName,
+    details: `تم إلغاء دعوة الانضمام`
+  });
+}
+
+// Real-time subscription to pending clinic invitations
+export function subscribeToPendingInvitations(
+  organizationId: string,
+  callback: (invitations: ClinicInvitation[]) => void
+): () => void {
+  if (!organizationId) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, "clinic_invitations"),
+    where("organizationId", "==", organizationId)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const invitations: ClinicInvitation[] = [];
+      const now = new Date();
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as ClinicInvitation;
+        let status = data.status;
+        if (status === 'pending' && data.expiresAt && new Date(data.expiresAt) < now) {
+          status = 'expired';
+        }
+        invitations.push({ ...data, id: docSnap.id, status });
+      });
+
+      invitations.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(invitations);
+    },
+    (err) => {
+      console.error("Error subscribing to invitations:", err);
+      callback([]);
+    }
+  );
+}
+
+// Add/Invite a new clinic member
+export async function inviteClinicMember(
+  actorMember: ClinicMember,
+  data: {
+    displayName: string;
+    email: string;
+    role: ClinicRole;
+    customPermissions?: ClinicPermission[];
+  },
+  clinicName?: string
+): Promise<ClinicInvitation> {
+  return createClinicInvitation(actorMember, clinicName || "العيادة", data);
+}
+
+// Update member role
+export async function updateClinicMemberRole(
+  actorMember: ClinicMember,
+  targetMemberId: string,
+  newRole: ClinicRole
+): Promise<void> {
+  const orgId = actorMember.organizationId;
+
+  const targetDocRef = doc(db, "clinic_members", targetMemberId);
+  const targetSnap = await getDoc(targetDocRef);
+  if (!targetSnap.exists()) throw new Error("العضو غير موجود");
+
+  const targetData = targetSnap.data() as ClinicMember;
+
+  if (targetData.role === 'OWNER' && newRole !== 'OWNER' && targetMemberId === actorMember.uid) {
+    throw new Error("لا يمكنك إلغاء صلاحية المالك عن نفسك بنفسك");
+  }
+
+  const updates = {
+    role: newRole,
+    updatedAt: new Date().toISOString()
+  };
+
+  await updateDoc(targetDocRef, updates);
+  try {
+    await updateDoc(doc(db, `organizations/${orgId}/members`, targetMemberId), updates);
+  } catch (e) { /* ignore */ }
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid: actorMember.uid,
+    actorName: actorMember.displayName,
+    action: 'role_changed',
+    targetUid: targetMemberId,
+    targetEmail: targetData.email,
+    targetName: targetData.displayName,
+    details: `تغيير الدور من ${targetData.role} إلى ${newRole}`
+  });
+}
+
+// Update member custom permissions
+export async function updateClinicMemberPermissions(
+  actorMember: ClinicMember,
+  targetMemberId: string,
+  customPermissions: ClinicPermission[]
+): Promise<void> {
+  const orgId = actorMember.organizationId;
+
+  const targetDocRef = doc(db, "clinic_members", targetMemberId);
+  const targetSnap = await getDoc(targetDocRef);
+  if (!targetSnap.exists()) throw new Error("العضو غير موجود");
+
+  const targetData = targetSnap.data() as ClinicMember;
+
+  if (targetMemberId === actorMember.uid && targetData.role === 'OWNER') {
+    throw new Error("مالك العيادة يملك جميع الصلاحيات دائماً بشكل تلقائي");
+  }
+
+  const updates = {
+    customPermissions,
+    updatedAt: new Date().toISOString()
+  };
+
+  await updateDoc(targetDocRef, updates);
+  try {
+    await updateDoc(doc(db, `organizations/${orgId}/members`, targetMemberId), updates);
+  } catch (e) { /* ignore */ }
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid: actorMember.uid,
+    actorName: actorMember.displayName,
+    action: 'permission_updated',
+    targetUid: targetMemberId,
+    targetEmail: targetData.email,
+    targetName: targetData.displayName,
+    details: `تم تحديث الصلاحيات المخصصة للعضو (${customPermissions.length} صلاحيات مفعلة)`
+  });
+}
+
+
+// Enable / Disable a member
+export async function setClinicMemberStatus(
+  actorMember: ClinicMember,
+  targetMemberId: string,
+  newStatus: 'active' | 'disabled'
+): Promise<void> {
+  const orgId = actorMember.organizationId;
+
+  if (targetMemberId === actorMember.uid && newStatus === 'disabled') {
+    throw new Error("لا يمكنك تعطيل حسابك الشخصي");
+  }
+
+  const targetDocRef = doc(db, "clinic_members", targetMemberId);
+  const targetSnap = await getDoc(targetDocRef);
+  if (!targetSnap.exists()) throw new Error("العضو غير موجود");
+
+  const targetData = targetSnap.data() as ClinicMember;
+
+  // Prevent activating unaccepted pending invitations
+  if (targetData.status === 'invited') {
+    throw new Error("لا يمكن تفعيل عضو لم يقم بقبول الدعوة بعد. يجب على الموظف قبول الدعوة أولاً.");
+  }
+
+  const updates = {
+    status: newStatus,
+    updatedAt: new Date().toISOString()
+  };
+
+  await updateDoc(targetDocRef, updates);
+  try {
+    await updateDoc(doc(db, `organizations/${orgId}/members`, targetMemberId), updates);
+  } catch (e) { /* ignore */ }
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid: actorMember.uid,
+    actorName: actorMember.displayName,
+    action: newStatus === 'disabled' ? 'member_disabled' : 'member_enabled',
+    targetUid: targetMemberId,
+    targetEmail: targetData.email,
+    targetName: targetData.displayName,
+    details: newStatus === 'disabled' ? 'تم تعطيل صلاحيات وصول العضو' : 'تم إعادة تفعيل العضو'
+  });
+}
+
+// Remove member completely
+export async function removeClinicMember(
+  actorMember: ClinicMember,
+  targetMemberId: string
+): Promise<void> {
+  const orgId = actorMember.organizationId;
+
+  if (targetMemberId === actorMember.uid) {
+    throw new Error("لا يمكنك حذف حسابك الخاص بصفتك مالك العيادة");
+  }
+
+  const targetDocRef = doc(db, "clinic_members", targetMemberId);
+  const targetSnap = await getDoc(targetDocRef);
+  const targetData = targetSnap.exists() ? (targetSnap.data() as ClinicMember) : null;
+
+  // 1. Delete main member document
+  await deleteDoc(targetDocRef);
+  try {
+    await deleteDoc(doc(db, `organizations/${orgId}/members`, targetMemberId));
+  } catch (e) { /* ignore */ }
+
+  // 2. Clean up any invitations or temp records for this email in this organization
+  if (targetData?.email) {
+    const cleanEmail = targetData.email.toLowerCase().trim();
+
+    try {
+      const invQ = query(
+        collection(db, "clinic_invitations"),
+        where("organizationId", "==", orgId)
+      );
+      const invSnap = await getDocs(invQ);
+      for (const invDoc of invSnap.docs) {
+        const inv = invDoc.data() as ClinicInvitation;
+        if (inv.invitedEmail && inv.invitedEmail.toLowerCase().trim() === cleanEmail) {
+          await deleteDoc(doc(db, "clinic_invitations", invDoc.id));
+        }
+      }
+    } catch (e) {
+      console.warn("Error cleaning up invitations on member removal:", e);
+    }
+
+    const tempDocId = `${orgId}_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    try {
+      await deleteDoc(doc(db, "clinic_members", tempDocId));
+      await deleteDoc(doc(db, `organizations/${orgId}/members`, tempDocId));
+    } catch (e) { /* ignore */ }
+  }
+
+  // 3. Write audit log
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid: actorMember.uid,
+    actorName: actorMember.displayName,
+    action: 'member_removed',
+    targetUid: targetMemberId,
+    targetEmail: targetData?.email,
+    targetName: targetData?.displayName,
+    details: 'تم حذف العضو وسحب كافة صلاحيات وصول العيادة'
+  });
+}
+
+// Internal Audit Logger
+export async function logClinicAction(params: {
+  organizationId: string;
+  actorUid: string;
+  actorName?: string;
+  action: ClinicAuditLog['action'];
+  targetUid: string;
+  targetEmail?: string;
+  targetName?: string;
+  details?: string;
+}): Promise<void> {
+  try {
+    const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const logData: ClinicAuditLog = {
+      id: logId,
+      organizationId: params.organizationId,
+      actorUid: params.actorUid,
+      actorName: params.actorName || "",
+      action: params.action,
+      targetUid: params.targetUid,
+      targetEmail: params.targetEmail || "",
+      targetName: params.targetName || "",
+      details: params.details || "",
+      timestamp: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, `organizations/${params.organizationId}/audit_logs`, logId), logData);
+  } catch (err) {
+    console.warn("Failed to write clinic audit log:", err);
+  }
+}
+
+// Fetch Audit Logs for Clinic Organization
+export async function getClinicAuditLogs(organizationId: string): Promise<ClinicAuditLog[]> {
+  if (!organizationId) return [];
+
+  try {
+    const q = query(
+      collection(db, `organizations/${organizationId}/audit_logs`),
+      orderBy("timestamp", "desc"),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    const logs: ClinicAuditLog[] = [];
+    snap.forEach((docSnap) => {
+      logs.push({ id: docSnap.id, ...docSnap.data() } as ClinicAuditLog);
+    });
+    return logs;
+  } catch (err) {
+    console.error("Error fetching audit logs:", err);
+    return [];
+  }
+}
+
+// ==========================================
+// CLINIC FINANCE SYSTEM SERVICES
+// ==========================================
+
+// --- Services & Pricing ---
+
+export function subscribeToClinicServices(
+  organizationId: string,
+  callback: (services: ClinicService[]) => void
+): () => void {
+  if (!organizationId) {
+    callback([]);
+    return () => {};
+  }
+
+  const servicesRef = collection(db, `organizations/${organizationId}/services`);
+  return onSnapshot(
+    servicesRef,
+    (snapshot) => {
+      const list: ClinicService[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as ClinicService);
+      });
+      // Sort active first then by name
+      list.sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return a.name.localeCompare(b.name, "ar");
+      });
+      callback(list);
+    },
+    (error) => {
+      console.error("Error subscribing to services:", error);
+      callback([]);
+    }
+  );
+}
+
+export async function createClinicService(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  data: {
+    organizationId: string;
+    name: string;
+    description?: string;
+    price: number;
+  }
+): Promise<ClinicService> {
+  const orgId = data.organizationId;
+  if (!hasPermission(actorMember, 'EDIT_PRICES', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية إضافة أو تعديل أسعار الخدمات.");
+  }
+
+  if (!data.name.trim()) throw new Error("يرجى إدخال اسم الخدمة.");
+  if (data.price < 0 || isNaN(data.price)) throw new Error("يرجى إدخال سعر صحيح للخدمة.");
+
+  const serviceId = `srv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const actorUid = actorMember ? actorMember.uid : orgId;
+
+  const newService: ClinicService = {
+    id: serviceId,
+    organizationId: orgId,
+    name: data.name.trim(),
+    description: data.description?.trim() || "",
+    price: Number(data.price),
+    active: true,
+    createdAt: new Date().toISOString(),
+    createdBy: actorUid
+  };
+
+  await setDoc(doc(db, `organizations/${orgId}/services`, serviceId), newService);
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid,
+    actorName: actorMember?.displayName || "مالك العيادة",
+    action: 'service_created',
+    targetUid: serviceId,
+    targetName: data.name,
+    details: `تم إضافة خدمة جديدة (${data.name}) بسعر ${data.price} ج`
+  });
+
+  return newService;
+}
+
+export async function updateClinicService(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  serviceId: string,
+  organizationId: string,
+  updates: Partial<{
+    name: string;
+    description: string;
+    price: number;
+    active: boolean;
+  }>
+): Promise<void> {
+  if (!hasPermission(actorMember, 'EDIT_PRICES', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية تعديل أسعار الخدمات.");
+  }
+
+  const srvRef = doc(db, `organizations/${organizationId}/services`, serviceId);
+  const srvSnap = await getDoc(srvRef);
+  if (!srvSnap.exists()) throw new Error("الخدمة غير موجودة.");
+
+  const oldData = srvSnap.data() as ClinicService;
+  const isPriceChanged = updates.price !== undefined && updates.price !== oldData.price;
+
+  const payload: Partial<ClinicService> = {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
+
+  await updateDoc(srvRef, payload);
+
+  const actorUid = actorMember ? actorMember.uid : organizationId;
+  await logClinicAction({
+    organizationId,
+    actorUid,
+    actorName: actorMember?.displayName || "مالك العيادة",
+    action: isPriceChanged ? 'service_price_changed' : 'service_updated',
+    targetUid: serviceId,
+    targetName: updates.name || oldData.name,
+    details: isPriceChanged
+      ? `تغيير سعر الخدمة (${oldData.name}) من ${oldData.price} ج إلى ${updates.price} ج`
+      : `تحديث بيانات الخدمة (${oldData.name})`
+  });
+}
+
+export async function seedDefaultServicesIfEmpty(
+  organizationId: string,
+  currentDoctor?: DoctorProfile
+): Promise<void> {
+  if (!organizationId) return;
+
+  try {
+    const servicesRef = collection(db, `organizations/${organizationId}/services`);
+    const snap = await getDocs(servicesRef);
+    if (!snap.empty) return; // Services already initialized
+
+    // Seed defaults or profile services
+    const defaultList: { name: string; price: number }[] = [];
+
+    if (currentDoctor?.servicesAndPrices && currentDoctor.servicesAndPrices.length > 0) {
+      currentDoctor.servicesAndPrices.forEach((sp) => {
+        const numPrice = parseFloat(sp.price.replace(/[^0-9.]/g, "")) || 200;
+        defaultList.push({ name: sp.serviceName, price: numPrice });
+      });
+    } else {
+      defaultList.push(
+        { name: "كشف أطفال", price: 300 },
+        { name: "كشف باطنة", price: 350 },
+        { name: "متابعة", price: 200 },
+        { name: "استشارة", price: 150 }
+      );
+    }
+
+    for (const item of defaultList) {
+      const srvId = `srv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newSrv: ClinicService = {
+        id: srvId,
+        organizationId,
+        name: item.name,
+        description: "خدمة طبية في العيادة",
+        price: item.price,
+        active: true,
+        createdAt: new Date().toISOString(),
+        createdBy: organizationId
+      };
+      await setDoc(doc(db, `organizations/${organizationId}/services`, srvId), newSrv);
+    }
+  } catch (err) {
+    console.warn("Error seeding default services:", err);
+  }
+}
+
+// --- Transactions & Payments ---
+
+export function subscribeToClinicTransactions(
+  organizationId: string,
+  callback: (transactions: ClinicTransaction[]) => void
+): () => void {
+  if (!organizationId) {
+    callback([]);
+    return () => {};
+  }
+
+  const txRef = collection(db, `organizations/${organizationId}/transactions`);
+  const q = query(txRef, orderBy("createdAt", "desc"), limit(200));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: ClinicTransaction[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as ClinicTransaction);
+      });
+      callback(list);
+    },
+    (error) => {
+      console.error("Error subscribing to transactions:", error);
+      callback([]);
+    }
+  );
+}
+
+export async function createClinicTransaction(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  data: {
+    organizationId: string;
+    patientId?: string;
+    patientName: string;
+    patientPhone?: string;
+    appointmentId?: string;
+    serviceId?: string;
+    serviceName: string;
+    totalAmount: number;
+    paidAmount: number;
+    paymentMethod: PaymentMethod;
+    notes?: string;
+  }
+): Promise<ClinicTransaction> {
+  const orgId = data.organizationId;
+  if (!hasPermission(actorMember, 'MANAGE_FINANCE', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية تسجيل أو إدارة المدفوعات.");
+  }
+
+  if (!data.patientName.trim()) throw new Error("يرجى إدخال اسم المريض.");
+  if (!data.serviceName.trim()) throw new Error("يرجى اختيار أو كتابة الخدمة المقدمة.");
+  if (data.totalAmount < 0 || isNaN(data.totalAmount)) throw new Error("يرجى إدخال إجمالي مبلغ الخدمة بشكل صحيح.");
+  if (data.paidAmount < 0 || isNaN(data.paidAmount)) throw new Error("يرجى إدخال المبلغ المدفوع بشكل صحيح.");
+  
+  if (data.paidAmount > data.totalAmount) {
+    throw new Error("المبلغ المدفوع أكبر من قيمة الخدمة الإجمالية.");
+  }
+
+  const totalAmount = Number(data.totalAmount);
+  const paidAmount = Number(data.paidAmount);
+  const remainingAmount = Math.max(0, totalAmount - paidAmount);
+
+  let paymentStatus: PaymentStatus = 'UNPAID';
+  if (paidAmount >= totalAmount && totalAmount > 0) {
+    paymentStatus = 'PAID';
+  } else if (paidAmount > 0) {
+    paymentStatus = 'PARTIAL';
+  }
+
+  const txId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const actorUid = actorMember ? actorMember.uid : orgId;
+  const actorName = actorMember ? actorMember.displayName : "مالك العيادة";
+
+  const newTx: ClinicTransaction = {
+    id: txId,
+    organizationId: orgId,
+    patientId: data.patientId || "",
+    patientName: data.patientName.trim(),
+    patientPhone: data.patientPhone?.trim() || "",
+    appointmentId: data.appointmentId || "",
+    serviceId: data.serviceId || "",
+    serviceName: data.serviceName.trim(),
+    totalAmount,
+    paidAmount,
+    remainingAmount,
+    paymentStatus,
+    paymentMethod: data.paymentMethod,
+    notes: data.notes?.trim() || "",
+    createdBy: actorUid,
+    createdByName: actorName,
+    createdAt: new Date().toISOString()
+  };
+
+  await setDoc(doc(db, `organizations/${orgId}/transactions`, txId), newTx);
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid,
+    actorName,
+    action: 'payment_created',
+    targetUid: txId,
+    targetName: data.patientName,
+    details: `تسجيل معاملة دَفْع جديدة للمريض (${data.patientName}) بقيمة مدفوعة ${paidAmount} ج من إجمالي ${totalAmount} ج (${paymentStatus})`
+  });
+
+  return newTx;
+}
+
+export async function recordAdditionalPayment(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  organizationId: string,
+  transactionId: string,
+  additionalAmount: number,
+  paymentMethod: PaymentMethod,
+  notes?: string
+): Promise<void> {
+  if (!hasPermission(actorMember, 'MANAGE_FINANCE', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية تسديد المبالغ المستحقة.");
+  }
+
+  const txRef = doc(db, `organizations/${organizationId}/transactions`, transactionId);
+  const txSnap = await getDoc(txRef);
+  if (!txSnap.exists()) throw new Error("المعاملة غير موجودة.");
+
+  const txData = txSnap.data() as ClinicTransaction;
+
+  if (txData.paymentStatus === 'REFUNDED') {
+    throw new Error("لا يمكن إضافة دفعات لمعاملة تم استرداد أموالها.");
+  }
+
+  if (additionalAmount <= 0 || isNaN(additionalAmount)) {
+    throw new Error("يرجى إدخال مبلغ دفع صحيح.");
+  }
+
+  if (additionalAmount > txData.remainingAmount) {
+    throw new Error(`المبلغ المدفوع (${additionalAmount} ج) أكبر من المتبقي المستحق (${txData.remainingAmount} ج).`);
+  }
+
+  const newPaidAmount = txData.paidAmount + additionalAmount;
+  const newRemainingAmount = Math.max(0, txData.totalAmount - newPaidAmount);
+  const newStatus: PaymentStatus = newRemainingAmount === 0 ? 'PAID' : 'PARTIAL';
+
+  const actorUid = actorMember ? actorMember.uid : organizationId;
+  const actorName = actorMember ? actorMember.displayName : "مالك العيادة";
+
+  const updates = {
+    paidAmount: newPaidAmount,
+    remainingAmount: newRemainingAmount,
+    paymentStatus: newStatus,
+    paymentMethod,
+    notes: notes ? `${txData.notes || ''}\n[سداد جديد ${new Date().toLocaleDateString('ar-EG')}]: ${notes}`.trim() : txData.notes,
+    updatedAt: new Date().toISOString()
+  };
+
+  await updateDoc(txRef, updates);
+
+  await logClinicAction({
+    organizationId,
+    actorUid,
+    actorName,
+    action: 'payment_updated',
+    targetUid: transactionId,
+    targetName: txData.patientName,
+    details: `سداد مبلغ مستحق إضافي (${additionalAmount} ج) للمريض (${txData.patientName}). المتبقي الحالي: ${newRemainingAmount} ج`
+  });
+}
+
+export async function refundClinicTransaction(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  organizationId: string,
+  transactionId: string,
+  refundAmount: number,
+  reason: string
+): Promise<void> {
+  if (!hasPermission(actorMember, 'REFUND_PAYMENT', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية إجراء استرداد أموال الكشف.");
+  }
+
+  if (!reason.trim()) throw new Error("يرجى ذكر سبب استرداد المبلغ.");
+
+  const txRef = doc(db, `organizations/${organizationId}/transactions`, transactionId);
+  const txSnap = await getDoc(txRef);
+  if (!txSnap.exists()) throw new Error("المعاملة غير موجودة.");
+
+  const txData = txSnap.data() as ClinicTransaction;
+
+  if (refundAmount <= 0 || isNaN(refundAmount)) {
+    throw new Error("يرجى إدخال مبلغ استرداد صحيح.");
+  }
+
+  if (refundAmount > txData.paidAmount) {
+    throw new Error(`مبلغ الاسترداد (${refundAmount} ج) أكبر من المبلغ المدفوع الفعلي (${txData.paidAmount} ج).`);
+  }
+
+  const actorUid = actorMember ? actorMember.uid : organizationId;
+  const actorName = actorMember ? actorMember.displayName : "مالك العيادة";
+
+  const updates = {
+    paymentStatus: 'REFUNDED' as PaymentStatus,
+    paidAmount: Math.max(0, txData.paidAmount - refundAmount),
+    remainingAmount: txData.totalAmount - Math.max(0, txData.paidAmount - refundAmount),
+    refundDetails: {
+      refundAmount: Number(refundAmount),
+      reason: reason.trim(),
+      refundedBy: actorUid,
+      refundedByName: actorName,
+      refundedAt: new Date().toISOString()
+    },
+    updatedAt: new Date().toISOString()
+  };
+
+  await updateDoc(txRef, updates);
+
+  await logClinicAction({
+    organizationId,
+    actorUid,
+    actorName,
+    action: 'refund_created',
+    targetUid: transactionId,
+    targetName: txData.patientName,
+    details: `إجراء استرداد مبلغ (${refundAmount} ج) للمريض (${txData.patientName}). السبب: ${reason}`
+  });
+}
+
+// --- Expense Management ---
+
+export function subscribeToClinicExpenses(
+  organizationId: string,
+  callback: (expenses: ClinicExpense[]) => void
+): () => void {
+  if (!organizationId) {
+    callback([]);
+    return () => {};
+  }
+
+  const expRef = collection(db, `organizations/${organizationId}/expenses`);
+  const q = query(expRef, orderBy("createdAt", "desc"), limit(200));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: ClinicExpense[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as ClinicExpense);
+      });
+      callback(list);
+    },
+    (error) => {
+      console.error("Error subscribing to expenses:", error);
+      callback([]);
+    }
+  );
+}
+
+export async function createClinicExpense(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  data: {
+    organizationId: string;
+    title: string;
+    category: ExpenseCategory;
+    amount: number;
+    note?: string;
+  }
+): Promise<ClinicExpense> {
+  const orgId = data.organizationId;
+  if (!hasPermission(actorMember, 'MANAGE_FINANCE', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية إضافة أو إدارة المصروفات.");
+  }
+
+  if (!data.title.trim()) throw new Error("يرجى إدخال عنوان أو بيان المصروف.");
+  if (data.amount <= 0 || isNaN(data.amount)) throw new Error("يرجى إدخال قيمة مصروف صحيحة.");
+
+  const expenseId = `exp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const actorUid = actorMember ? actorMember.uid : orgId;
+  const actorName = actorMember ? actorMember.displayName : "مالك العيادة";
+
+  const newExp: ClinicExpense = {
+    id: expenseId,
+    organizationId: orgId,
+    title: data.title.trim(),
+    category: data.category,
+    amount: Number(data.amount),
+    note: data.note?.trim() || "",
+    createdBy: actorUid,
+    createdByName: actorName,
+    createdAt: new Date().toISOString()
+  };
+
+  await setDoc(doc(db, `organizations/${orgId}/expenses`, expenseId), newExp);
+
+  await logClinicAction({
+    organizationId: orgId,
+    actorUid,
+    actorName,
+    action: 'expense_created',
+    targetUid: expenseId,
+    targetName: data.title,
+    details: `تسجيل مصروف جديد (${data.title}) بقيمة ${data.amount} ج`
+  });
+
+  return newExp;
+}
+
+export async function updateClinicExpense(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  organizationId: string,
+  expenseId: string,
+  updates: Partial<{
+    title: string;
+    category: ExpenseCategory;
+    amount: number;
+    note: string;
+  }>
+): Promise<void> {
+  if (!hasPermission(actorMember, 'MANAGE_FINANCE', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية تعديل المصروفات.");
+  }
+
+  const expRef = doc(db, `organizations/${organizationId}/expenses`, expenseId);
+  const expSnap = await getDoc(expRef);
+  if (!expSnap.exists()) throw new Error("المصروف غير موجود.");
+
+  const oldData = expSnap.data() as ClinicExpense;
+
+  const payload: Partial<ClinicExpense> = {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
+
+  await updateDoc(expRef, payload);
+
+  const actorUid = actorMember ? actorMember.uid : organizationId;
+  await logClinicAction({
+    organizationId,
+    actorUid,
+    actorName: actorMember?.displayName || "مالك العيادة",
+    action: 'expense_updated',
+    targetUid: expenseId,
+    targetName: updates.title || oldData.title,
+    details: `تحديث بيانات المصروف (${oldData.title})`
+  });
+}
+
+export async function deleteClinicExpense(
+  actorMember: ClinicMember | null,
+  isOwnerFallback: boolean,
+  organizationId: string,
+  expenseId: string
+): Promise<void> {
+  if (!hasPermission(actorMember, 'MANAGE_FINANCE', isOwnerFallback)) {
+    throw new Error("لا تملك صلاحية حذف المصروفات.");
+  }
+
+  const expRef = doc(db, `organizations/${organizationId}/expenses`, expenseId);
+  const expSnap = await getDoc(expRef);
+  const oldData = expSnap.exists() ? (expSnap.data() as ClinicExpense) : null;
+
+  await deleteDoc(expRef);
+
+  const actorUid = actorMember ? actorMember.uid : organizationId;
+  await logClinicAction({
+    organizationId,
+    actorUid,
+    actorName: actorMember?.displayName || "مالك العيادة",
+    action: 'expense_deleted',
+    targetUid: expenseId,
+    targetName: oldData?.title || expenseId,
+    details: `حذف المصروف (${oldData?.title || expenseId}) بقيمة ${oldData?.amount || 0} ج`
   });
 }
 

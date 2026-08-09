@@ -11,13 +11,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // ADMIN CHECK: Custom claims, Admins collection doc, Doctor doc, or Admin email
+    // ADMIN CHECK: Custom claims, Admins collection doc, or explicitly authorized Admin email
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.admin == true ||
         (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true) ||
-        (exists(/databases/$(database)/documents/doctors/$(request.auth.uid)) && get(/databases/$(database)/documents/doctors/$(request.auth.uid)).data.isAdmin == true) ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'admin@dawry.app')
+        (request.auth.token.email != null && (request.auth.token.email.lower() == 'abdelftahmohamed745@gmail.com' || request.auth.token.email.lower() == 'admin@dawry.app'))
       );
     }
 
@@ -126,6 +125,13 @@ service cloud.firestore {
 
       // Delete: Clinic doctor owner/member or admin
       allow delete: if isOrgMember(doctorId) || isAdmin();
+    }
+
+    // Daily sequence counter for atomic queue numbers
+    match /queues/{doctorId}/dailyCounters/{dateId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.lastSequenceNumber is number 
+        && request.resource.data.lastSequenceNumber > 0;
     }
 
     // Clinic Members collection
@@ -263,7 +269,7 @@ service cloud.firestore {
     // Admins collection
     match /admins/{adminId} {
       allow read: if isOwner(adminId) || isAdmin();
-      allow create, update: if isOwner(adminId) || isAdmin();
+      allow create, update: if (isOwner(adminId) && request.auth.token.email != null && (request.auth.token.email.lower() == 'abdelftahmohamed745@gmail.com' || request.auth.token.email.lower() == 'admin@dawry.app')) || isAdmin();
       allow delete: if isAdmin();
     }
 

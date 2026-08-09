@@ -11,7 +11,8 @@ import {
   getDocs,
   onSnapshot,
   orderBy,
-  limit
+  limit,
+  runTransaction
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import {
@@ -44,6 +45,7 @@ import {
   isValidPhoneNumber,
   isValidUrl,
   checkBookingRateLimit,
+  recordBookingSuccess,
   writeAuditLog
 } from "./securityService";
 
@@ -328,29 +330,14 @@ export async function verifyAdminStatus(user: any): Promise<{ isAdmin: boolean; 
       if (typeof user.getIdTokenResult === 'function') {
         const idTokenResult = await user.getIdTokenResult();
         if (idTokenResult && idTokenResult.claims && idTokenResult.claims.admin === true) {
-          const docProfile = await getDoctorProfile(user.uid);
-          return { isAdmin: true, doctor: docProfile || undefined };
+          return { isAdmin: true };
         }
       }
     } catch (e) {
       console.warn("Token claim check warning:", e);
     }
 
-    // 2. Check Firestore doctor document for isAdmin flag
-    try {
-      const docRef = doc(db, "doctors", user.uid);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data() as DoctorProfile;
-        if (data.isAdmin === true) {
-          return { isAdmin: true, doctor: data };
-        }
-      }
-    } catch (e) {
-      console.warn("Doctor admin check warning:", e);
-    }
-
-    // 3. Check Firestore admins document
+    // 2. Check Firestore /admins/{uid} document (Secure Admin Identity Record)
     try {
       const adminRef = doc(db, "admins", user.uid);
       const adminSnap = await getDoc(adminRef);
@@ -364,21 +351,21 @@ export async function verifyAdminStatus(user: any): Promise<{ isAdmin: boolean; 
       console.warn("Admins collection check warning:", e);
     }
 
-    // 4. Default Admin Email check (e.g. admin@dawry.app)
-    if (user.email && user.email.toLowerCase().trim() === 'admin@dawry.app') {
+    // 3. Authorized Bootstrap Admin Emails check (abdelftahmohamed745@gmail.com)
+    const normalizedEmail = user.email ? user.email.toLowerCase().trim() : '';
+    const AUTHORIZED_ADMIN_EMAILS = [
+      'abdelftahmohamed745@gmail.com',
+      'admin@dawry.app'
+    ];
+
+    if (normalizedEmail && AUTHORIZED_ADMIN_EMAILS.includes(normalizedEmail)) {
       try {
         await setDoc(doc(db, "admins", user.uid), {
           uid: user.uid,
           email: user.email,
           isAdmin: true,
-          createdAt: new Date().toISOString()
+          updatedAt: new Date().toISOString()
         }, { merge: true });
-
-        const docRef = doc(db, "doctors", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          await setDoc(docRef, { isAdmin: true }, { merge: true });
-        }
       } catch (e) {
         console.warn("Could not write admin bootstrap doc:", e);
       }
@@ -484,7 +471,7 @@ export async function updateDoctorSettings(doctorId: string, updates: Partial<Do
 
 // Check for active duplicate booking for phone number today
 export async function checkActiveBooking(doctorId: string, phone: string): Promise<PatientRecord | null> {
-  const cleanPhone = phone.trim();
+  const cleanPhone = phone.replace(/[^\d+]/g, '').trim();
   const today = getTodayDateString();
   const q = query(
     collection(db, "queues", doctorId, "patients"),
@@ -500,7 +487,7 @@ export async function checkActiveBooking(doctorId: string, phone: string): Promi
   return activeDoc || null;
 }
 
-// Add Patient to Queue with rate limiting & subscription checks
+// Add Patient to Queue with rate limiting, subscription checks, and atomic sequence numbers
 export async function bookPatient(
   doctorId: string,
   name: string,
@@ -510,7 +497,7 @@ export async function bookPatient(
 ): Promise<{ patientId: string; sequenceNumber: number; isExisting?: boolean }> {
   // 1. Sanitize & Validate Inputs
   const cleanName = sanitizeInput(name);
-  const cleanPhone = phone.trim();
+  const cleanPhone = phone.replace(/[^\d+]/g, '').trim();
 
   if (!cleanName || cleanName.length < 2) {
     throw new Error("يرجى إدخال اسم صحيح لا يقل عن حرفين");
@@ -524,7 +511,7 @@ export async function bookPatient(
     throw new Error("رقم الهاتف غير صحيح. يرجى كتابة رقم هاتف صالح");
   }
 
-  // 2. Anti-Spam Rate Limiting Check
+  // 2. Anti-Spam Rate Limiting Check (Check ONLY, do not mutate timestamp yet)
   const rateCheck = checkBookingRateLimit(cleanPhone);
   if (!rateCheck.allowed) {
     throw new Error(`يرجى الانتظار ${rateCheck.remainingSeconds} ثانية قبل محاولة الحجز مرة أخرى`);
@@ -545,7 +532,7 @@ export async function bookPatient(
     throw new Error("عذراً، نظام الحجز غير متاح حالياً لدى هذه العيادة لانتهاء فترة الاشتراك. يرجى مراجعة موظف الاستقبال.");
   }
 
-  // 4. Check rate limit (same phone cannot book twice on same day if active)
+  // 4. Check for active duplicate booking today
   const existingBooking = await checkActiveBooking(doctorId, cleanPhone);
   if (existingBooking) {
     return {
@@ -555,57 +542,83 @@ export async function bookPatient(
     };
   }
 
-  // 5. Calculate sequence number
+  // 5. Atomic Queue Sequence Number Generation via Transaction
   const today = getTodayDateString();
-  const q = query(collection(db, "queues", doctorId, "patients"), where("date", "==", today));
-  const snap = await getDocs(q);
-  
-  let maxSeq = 0;
-  snap.docs.forEach(d => {
+  const counterRef = doc(db, "queues", doctorId, "dailyCounters", today);
+  const newPatientRef = doc(collection(db, "queues", doctorId, "patients"));
+  const now = new Date().toISOString();
+
+  // Baseline fetch in case counter document hasn't been created yet today
+  const qBaseline = query(collection(db, "queues", doctorId, "patients"), where("date", "==", today));
+  const snapBaseline = await getDocs(qBaseline);
+  let baselineMaxSeq = 0;
+  snapBaseline.docs.forEach((d) => {
     const p = d.data() as PatientRecord;
-    if (p.sequenceNumber > maxSeq) {
-      maxSeq = p.sequenceNumber;
+    if (p.sequenceNumber > baselineMaxSeq) {
+      baselineMaxSeq = p.sequenceNumber;
     }
   });
 
-  const nextSeq = maxSeq + 1;
+  const transactionResult = await runTransaction(db, async (transaction) => {
+    const counterSnap = await transaction.get(counterRef);
+    let currentMaxSeq = baselineMaxSeq;
 
-  if (doctor.workHours.maxPatientsPerDay && nextSeq > doctor.workHours.maxPatientsPerDay) {
-    throw new Error(`عذراً، اكتمل الحد الأقصى لحجوزات اليوم (${doctor.workHours.maxPatientsPerDay} مريض).`);
-  }
+    if (counterSnap.exists()) {
+      const recordedSeq = counterSnap.data().lastSequenceNumber;
+      if (typeof recordedSeq === 'number' && recordedSeq > currentMaxSeq) {
+        currentMaxSeq = recordedSeq;
+      }
+    }
 
-  const now = new Date().toISOString();
-  const estMins = Math.max(0, (nextSeq - 1) * (doctor.avgConsultTime || 12));
+    const nextSeq = currentMaxSeq + 1;
 
-  const patientData: Omit<PatientRecord, 'id'> = {
-    doctorId,
-    clinicId: doctorId,
-    userId: userId || '',
-    sequenceNumber: nextSeq,
-    queueNumber: nextSeq,
-    name: cleanName,
-    phone: cleanPhone,
-    status: 'waiting',
-    date: today,
-    createdAt: now,
-    updatedAt: now,
-    estimatedMinutes: estMins,
-    notificationSent: false,
-    notifiedForTwoTurns: false,
-    notifiedForOneTurn: false,
-    notifiedForTenMinutes: false,
-    notificationPreference
-  };
+    if (doctor.workHours.maxPatientsPerDay && nextSeq > doctor.workHours.maxPatientsPerDay) {
+      throw new Error(`عذراً، اكتمل الحد الأقصى لحجوزات اليوم (${doctor.workHours.maxPatientsPerDay} مريض).`);
+    }
 
-  const docRef = await addDoc(collection(db, "queues", doctorId, "patients"), patientData);
+    const estMins = Math.max(0, (nextSeq - 1) * (doctor.avgConsultTime || 12));
+
+    const patientData: Omit<PatientRecord, 'id'> = {
+      doctorId,
+      clinicId: doctorId,
+      userId: userId || '',
+      sequenceNumber: nextSeq,
+      queueNumber: nextSeq,
+      name: cleanName,
+      phone: cleanPhone,
+      status: 'waiting',
+      date: today,
+      createdAt: now,
+      updatedAt: now,
+      estimatedMinutes: estMins,
+      notificationSent: false,
+      notifiedForTwoTurns: false,
+      notifiedForOneTurn: false,
+      notifiedForTenMinutes: false,
+      notificationPreference
+    };
+
+    transaction.set(counterRef, {
+      lastSequenceNumber: nextSeq,
+      date: today,
+      updatedAt: now
+    }, { merge: true });
+
+    transaction.set(newPatientRef, patientData);
+
+    return { patientId: newPatientRef.id, sequenceNumber: nextSeq };
+  });
+
+  // Record rate limiting timestamp on successful completion
+  recordBookingSuccess(cleanPhone);
 
   // Write Audit Log
   writeAuditLog("BOOK_PATIENT_TICKET", userId || "PATIENT_PUBLIC", doctorId, {
-    sequenceNumber: nextSeq,
-    ticketId: docRef.id
+    sequenceNumber: transactionResult.sequenceNumber,
+    ticketId: transactionResult.patientId
   });
 
-  return { patientId: docRef.id, sequenceNumber: nextSeq, isExisting: false };
+  return { patientId: transactionResult.patientId, sequenceNumber: transactionResult.sequenceNumber, isExisting: false };
 }
 
 // Live Queue Listener for Doctor Dashboard
@@ -632,7 +645,7 @@ export function subscribeToDoctorQueue(
   });
 }
 
-// Live Single Patient Ticket Listener
+// Live Single Patient Ticket Listener with Dual Snapshot Sync Guard
 export function subscribeToPatientTicket(
   doctorId: string,
   patientId: string,
@@ -644,12 +657,19 @@ export function subscribeToPatientTicket(
 
   let currentDoctor: DoctorProfile | null = null;
   let allPatients: PatientRecord[] = [];
+  let doctorLoaded = false;
+  let queueLoaded = false;
 
   const unsubDoctor = onSnapshot(doctorRef, (docSnap) => {
     if (docSnap.exists()) {
       currentDoctor = docSnap.data() as DoctorProfile;
       currentDoctor.subscriptionStatus = evaluateSubscriptionStatus(currentDoctor);
     }
+    doctorLoaded = true;
+    emit();
+  }, (err) => {
+    console.error("Doctor ticket snapshot error:", err);
+    doctorLoaded = true;
     emit();
   });
 
@@ -661,10 +681,17 @@ export function subscribeToPatientTicket(
     });
     list.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
     allPatients = list;
+    queueLoaded = true;
+    emit();
+  }, (err) => {
+    console.error("Queue ticket snapshot error:", err);
+    queueLoaded = true;
     emit();
   });
 
   function emit() {
+    // Prevent premature state emit until BOTH doctor and queue snapshots have loaded
+    if (!doctorLoaded || !queueLoaded) return;
     const myPatient = allPatients.find(p => p.id === patientId) || null;
     callback({
       patient: myPatient,

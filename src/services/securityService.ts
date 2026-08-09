@@ -54,9 +54,12 @@ export function checkBookingRateLimit(phoneKey: string): { allowed: boolean; rem
     return { allowed: false, remainingSeconds };
   }
 
-  // Update timestamp
-  bookingTimestamps[cleanKey] = now;
   return { allowed: true };
+}
+
+export function recordBookingSuccess(phoneKey: string): void {
+  const cleanKey = phoneKey.replace(/[+\s\-()]/g, '');
+  bookingTimestamps[cleanKey] = Date.now();
 }
 
 // 6. Security Audit Log Service

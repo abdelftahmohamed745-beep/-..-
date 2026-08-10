@@ -60,6 +60,7 @@ export default function App() {
       patientId?: string | null;
     }
   ) => {
+    console.log('[DIAGNOSTIC] navigateTo invoked:', { newTab, options, currentTab: activeTab, currentDocId: selectedDoctorId });
     const currentState: NavState = {
       tab: activeTab,
       selectedDoctorId,
@@ -179,6 +180,11 @@ export default function App() {
 
     const pathname = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
+    console.log('[DIAGNOSTIC] ROUTE_EVALUATION:', {
+      CURRENT_ROUTE: pathname,
+      BOOK_PARAMETER: params.get('book'),
+      TICKET_PARAMETER: params.get('ticket')
+    });
 
     // Check invitation token query param: ?invite=<token>
     const inviteParam = params.get('invite');

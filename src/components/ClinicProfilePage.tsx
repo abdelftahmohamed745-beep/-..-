@@ -40,6 +40,19 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[DIAGNOSTIC] CLINIC_PROFILE_RENDER', {
+      url: typeof window !== 'undefined' ? window.location.href : '',
+      path: typeof window !== 'undefined' ? window.location.pathname : '',
+      search: typeof window !== 'undefined' ? window.location.search : '',
+    });
+
+    const handleBeforeUnload = () => {
+      console.log('[DIAGNOSTIC] PAGE_RELOAD');
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+    }
+
     let isMounted = true;
     async function load() {
       setLoading(true);
@@ -68,6 +81,9 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
     return () => {
       isMounted = false;
       setPageSeo(DEFAULT_HOMEPAGE_SEO);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
     };
   }, [doctorId]);
 
@@ -236,18 +252,21 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
               ) : null}
 
               {/* Book Turn Button */}
-              <a
-                href={`/clinic/${encodeURIComponent(doctor.uid)}?book=true`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  console.log('[DIAGNOSTIC] BOOKING_BUTTON_CLICKED in ClinicProfilePage for doctor:', doctor.uid);
+              <button
+                type="button"
+                onClick={() => {
+                  console.log('[DIAGNOSTIC] BOOKING_CLICK');
+                  console.log('[DIAGNOSTIC] BEFORE_URL', typeof window !== 'undefined' ? window.location.href : '');
                   onBookTurn(doctor.uid);
+                  setTimeout(() => {
+                    console.log('[DIAGNOSTIC] AFTER_URL', typeof window !== 'undefined' ? window.location.href : '');
+                  }, 300);
                 }}
                 className="inline-flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs sm:text-sm font-black shadow-lg shadow-sky-600/20 transition active:scale-95 cursor-pointer relative z-10"
               >
                 <Sparkles className="w-4 h-4" />
                 <span>احجز دورك الآن أونلاين</span>
-              </a>
+              </button>
 
             </div>
 

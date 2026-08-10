@@ -28,6 +28,17 @@
       },
       "required": ["uid", "name", "specialty"]
     },
+    "dailyCounters": {
+      "title": "dailyCounters",
+      "description": "Daily ticket counter for queue number generation",
+      "type": "object",
+      "properties": {
+        "lastSequenceNumber": { "type": "number" },
+        "date": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["lastSequenceNumber", "date"]
+    },
     "clinicMembers": {
       "title": "clinicMembers",
       "description": "Clinic members and team roles",
@@ -115,6 +126,10 @@
     "doctors/{doctorId}": {
       "schema": "doctors",
       "description": "Doctors collection"
+    },
+    "queues/{doctorId}/dailyCounters/{dateId}": {
+      "schema": "dailyCounters",
+      "description": "Daily queue sequence counter for atomic booking"
     },
     "queues/{doctorId}/patients/{patientId}": {
       "schema": "patients",

@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Printer, Download, Copy, Check, QrCode } from 'lucide-react';
+import { X, Printer, Download, Copy, Check, QrCode, Smartphone } from 'lucide-react';
 import { DoctorProfile } from '../types';
 
 interface QRModalProps {
@@ -112,8 +112,9 @@ export const QRModal: React.FC<QRModalProps> = ({
             />
           </div>
 
-          <div className="mt-4 text-xs font-bold text-slate-800 bg-white px-4 py-1.5 rounded-full border border-slate-200 shadow-2xs">
-            📱 امسح الرمز بموبايلك لحجز دورك مباشرة
+          <div className="mt-4 text-xs font-bold text-slate-800 bg-white px-4 py-1.5 rounded-full border border-slate-200 shadow-2xs flex items-center gap-1.5 justify-center">
+            <Smartphone className="w-4 h-4 text-sky-600" />
+            <span>امسح الرمز بموبايلك لحجز دورك مباشرة</span>
           </div>
         </div>
 

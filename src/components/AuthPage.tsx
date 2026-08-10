@@ -48,7 +48,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           clinicName.trim() || "العيادة الطبية"
         );
         setLoading(false);
-        onShowToast("تم إنشاء حساب العيادة بنجاح! 🚀", "تم تفعيل الفترة التجريبية المجانية (7 أيام)", "success");
+        onShowToast("تم إنشاء حساب العيادة بنجاح", "تم تفعيل الفترة التجريبية المجانية (7 أيام)", "success");
         onDoctorLoggedIn(newDoctor);
       } else {
         // Sign In

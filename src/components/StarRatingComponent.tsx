@@ -101,7 +101,7 @@ export const StarRatingComponent: React.FC<StarRatingComponentProps> = ({
         </div>
         
         <h4 className="text-base font-bold text-slate-900 font-['Tajawal',sans-serif]">
-          تم إرسال تقييمك، شكرًا لك! ❤️
+          تم إرسال تقييمك، شكرًا لك!
         </h4>
         
         <p className="text-xs text-slate-600 font-medium max-w-sm mx-auto">
@@ -179,11 +179,11 @@ export const StarRatingComponent: React.FC<StarRatingComponentProps> = ({
         </div>
 
         <div className="text-xs font-bold text-amber-700">
-          {stars === 5 && "ممتاز جداً 🌟"}
-          {stars === 4 && "جيد جداً 👍"}
-          {stars === 3 && "جيد ⚖️"}
-          {stars === 2 && "مقبول 😐"}
-          {stars === 1 && "يحتاج تحسين 🙁"}
+          {stars === 5 && "ممتاز جداً"}
+          {stars === 4 && "جيد جداً"}
+          {stars === 3 && "جيد"}
+          {stars === 2 && "مقبول"}
+          {stars === 1 && "يحتاج تحسين"}
         </div>
 
         {/* Optional Review Comment Field */}

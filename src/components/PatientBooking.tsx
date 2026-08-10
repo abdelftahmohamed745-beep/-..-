@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Stethoscope, Building, Phone, Clock, Users, ArrowRight, Sparkles, AlertCircle, Ticket, CheckCircle2, Bell } from 'lucide-react';
+import { Stethoscope, Building, Phone, Clock, Users, ArrowRight, Sparkles, AlertCircle, Ticket, CheckCircle2, Bell, Lock } from 'lucide-react';
 import { DoctorProfile, PatientRecord, NotificationTimingPreference } from '../types';
 import { bookPatient, getDoctorProfile, checkActiveBooking, getTodayDateString } from '../services/firebaseService';
 
@@ -70,7 +70,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
       if (res.isExisting) {
         onShowToast("لديك حجز نشط بالفعل!", `تم توجيهك لتذكرتك رقم #${res.sequenceNumber}`, "info");
       } else {
-        onShowToast("تم الحجز بنجاح! 🎉", `دورك في الطابور هو الرقم #${res.sequenceNumber}`, "success");
+        onShowToast("تم الحجز بنجاح", `دورك في الطابور هو الرقم #${res.sequenceNumber}`, "success");
       }
 
       // Save to local storage for quick reload
@@ -265,8 +265,9 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
             </div>
           </form>
 
-          <div className="mt-6 text-center text-[11px] text-slate-400">
-            🔒 بياناتك مشفرة ومحفوظة آمنة لربطها برقم دورك في العيادة فقط.
+          <div className="mt-6 text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+            <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>بياناتك مشفرة ومحفوظة آمنة لربطها برقم دورك في العيادة فقط.</span>
           </div>
         </motion.div>
       )}

@@ -115,6 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={onOpenNotificationModal}
                 className="p-2 text-slate-600 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition relative"
                 title="إعدادات ورسائل إشعارات قرب الدور"
+                aria-label="إعدادات رسائل وتنبيهات الإشعارات"
               >
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-sky-500 rounded-full animate-ping" />
@@ -174,6 +175,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={onOpenSettingsModal}
                   className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"
                   title="إعدادات العيادة وتعديل الملف"
+                  aria-label="إعدادات العيادة"
                 >
                   <Settings className="w-4 h-4" />
                 </button>
@@ -183,8 +185,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={onSignOut}
                   className="p-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition"
                   title="تسجيل الخروج"
+                  aria-label="تسجيل الخروج"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-4 h-4 rtl:rotate-180" />
                 </button>
               </>
             ) : (

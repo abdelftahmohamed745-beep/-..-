@@ -85,7 +85,7 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
       });
 
       if (onShowToast) {
-        onShowToast("تم قبول الموعد الجديد للتحويل بنجاح 👍", `الموعد الجديد: ${app.requestedNewDate} الساعة ${app.requestedNewTime}`, "success");
+        onShowToast("تم قبول الموعد الجديد للتحويل بنجاح", `الموعد الجديد: ${app.requestedNewDate} الساعة ${app.requestedNewTime}`, "success");
       }
     } catch (err: any) {
       if (onShowToast) onShowToast("فشل تحديث الموعد", err?.message, "error");
@@ -213,11 +213,11 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
                     onChange={(e) => handleStatusChange(app.id, e.target.value as FollowUpAppointmentStatus)}
                     className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 shadow-2xs focus:ring-2 focus:ring-sky-500"
                   >
-                    <option value="upcoming">⏳ قادم</option>
-                    <option value="confirmed">✅ تم التأكيد</option>
-                    <option value="attended">🩺 تم الحضور</option>
-                    <option value="no_show">😐 لم يحضر</option>
-                    <option value="cancelled">❌ تم الإلغاء</option>
+                    <option value="upcoming">قادم (Upcoming)</option>
+                    <option value="confirmed">تم التأكيد (Confirmed)</option>
+                    <option value="attended">تم الحضور (Attended)</option>
+                    <option value="no_show">لم يحضر (No Show)</option>
+                    <option value="cancelled">تم الإلغاء (Cancelled)</option>
                   </select>
 
                   {/* Edit button */}
@@ -247,7 +247,7 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
                     onClick={() => handleAcceptReschedule(app)}
                     className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition shrink-0 cursor-pointer"
                   >
-                    قبول التعديل 👍
+                    قبول التعديل
                   </button>
                 </div>
               )}

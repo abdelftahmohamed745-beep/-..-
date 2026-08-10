@@ -85,7 +85,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       });
 
       setIsSaving(false);
-      onShowToast("تم حفظ بيانات وإعدادات العيادة بنجاح! 🎉", "تم تحديث الملف الشخصي وصفحة العيادة الدليل", "success");
+      onShowToast("تم حفظ بيانات وإعدادات العيادة بنجاح", "تم تحديث الملف الشخصي وصفحة العيادة الدليل", "success");
       onClose();
     } catch (err) {
       console.error("Settings save error:", err);

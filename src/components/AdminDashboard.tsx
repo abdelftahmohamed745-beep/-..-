@@ -459,8 +459,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
                               <span className="text-amber-700 font-black">{refCode}</span>
                               <button
                                 onClick={() => handleCopyCode(refCode)}
-                                className="text-slate-400 hover:text-slate-800 transition"
+                                className="text-slate-400 hover:text-slate-800 transition cursor-pointer"
                                 title="نسخ الكود المرجعي"
+                                aria-label="نسخ الكود المرجعي"
                               >
                                 {copiedCodeId === refCode ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                               </button>
@@ -591,8 +592,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
                               <button
                                 onClick={() => handleDeleteDoctor(doc.uid, doc.name)}
                                 disabled={processingId === doc.uid}
-                                className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition"
+                                className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition cursor-pointer"
                                 title="حذف حساب الطبيب من النظام"
+                                aria-label="حذف حساب الطبيب"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>

@@ -100,7 +100,7 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
       if (result.isAdmin) {
         setCurrentUser(targetUser);
         setIsAdmin(true);
-        onShowToast("تم تسجيل الدخول بنجاح 🛡️", "أهلاً بك في لوحة تحكم إدارة منصة دوري", "success");
+        onShowToast("تم تسجيل الدخول بنجاح", "أهلاً بك في لوحة تحكم إدارة منصة دوري", "success");
       } else {
         setIsAdmin(false);
         setLoginError("حسابك لا يمتلك صلاحيات مدير المنصة المركزية");
@@ -156,7 +156,7 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
       }
       setResetPasswordSent(true);
       onShowToast(
-        "تم إرسال رابط إعادة التعيين ✉️",
+        "تم إرسال رابط إعادة التعيين",
         "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني. يرجى مراجعة صندوق الوارد ومجلد البريد العشوائي (Spam).",
         "success"
       );
@@ -298,7 +298,7 @@ export const AdminGuard: React.FC<AdminGuardProps> = ({ onShowToast, onNavigateH
               <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-start gap-2.5 shadow-xs">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold">تم إرسال رابط إعادة تعيين كلمة المرور بنجاح ✉️</p>
+                  <p className="font-bold">تم إرسال رابط إعادة تعيين كلمة المرور بنجاح</p>
                   <p className="text-[11px] text-emerald-800 leading-relaxed">
                     يرجى مراجعة صندوق الوارد في بريدك الإلكتروني. إذا لم تجد الرسالة خلال دقيقة، يرجى مراجعة مجلد <strong>البريد العشوائي (Spam / Junk)</strong> أو طبّق البحث عن كلمة "Firebase" أو "Dawry".
                   </p>

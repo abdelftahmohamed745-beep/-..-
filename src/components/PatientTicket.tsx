@@ -67,7 +67,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
       if (patient.status === 'called') {
         playTurnNotificationSound('turn');
         speakText(`دورك الآن يا ${patient.name}، تفضل بالدخول للطبيب`);
-        onShowToast("دورك الآن! 🔔", "تفضل بالدخول لغرفة الطبيب فوراً", "success");
+        onShowToast("دورك الآن!", "تفضل بالدخول لغرفة الطبيب فوراً", "success");
       } else if (patient.status === 'done') {
         playTurnNotificationSound('success');
         onShowToast("شفاك الله وعافاك", "تم إنهاء الكشف بنجاح", "info");
@@ -83,7 +83,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
     if (patient.status === 'waiting' && waitingAheadCount <= 2 && !playedUpcomingSoundRef.current) {
       playTurnNotificationSound('upcoming');
       playedUpcomingSoundRef.current = true;
-      onShowToast("اقترب دورك! ⏳", "يرجى التواجد بالقرب من صالة الانتظار", "warning");
+      onShowToast("اقترب دورك!", "يرجى التواجد بالقرب من صالة الانتظار", "warning");
     }
   }, [patient, allPatients]);
 
@@ -181,7 +181,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
         >
           <Volume2 className="w-6 h-6 shrink-0" />
           <span className="text-base font-['Tajawal',sans-serif]">
-            دورك الآن! تفضل بالدخول لغرفة الطبيب فوراً 🚪
+            دورك الآن! تفضل بالدخول لغرفة الطبيب فوراً
           </span>
         </motion.div>
       )}
@@ -200,7 +200,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
       {isDone && (
         <div className="bg-emerald-50 text-emerald-900 border border-emerald-300 p-4 rounded-3xl mb-4 text-xs font-bold text-center flex items-center justify-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-          <span>تم إنهاء كشفك بنجاح. نتمنى لك دوام الصحة والعافية! ❤️</span>
+          <span>تم إنهاء كشفك بنجاح. نتمنى لك دوام الصحة والعافية!</span>
         </div>
       )}
 

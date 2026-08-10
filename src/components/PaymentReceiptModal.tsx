@@ -1,6 +1,6 @@
 import React from 'react';
 import { ClinicTransaction, DoctorProfile } from '../types';
-import { X, Printer, CheckCircle2, AlertCircle, Clock, RotateCcw } from 'lucide-react';
+import { X, Printer, CheckCircle2, AlertCircle, Clock, RotateCcw, Receipt } from 'lucide-react';
 
 interface PaymentReceiptModalProps {
   transaction: ClinicTransaction | null;
@@ -72,7 +72,7 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6 print:hidden">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
-              🧾
+              <Receipt className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-base">إيصال سداد رسوم كشف</h3>

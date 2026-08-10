@@ -203,7 +203,7 @@ export const ClinicTeamManager: React.FC<ClinicTeamManagerProps> = ({
 
       const generatedUrl = `${window.location.origin}${window.location.pathname}?invite=${inv.id}`;
       setCreatedInviteLink(generatedUrl);
-      onShowToast("تم إنشاء رابط الدعوة بنجاح 🎉", `جاهز للمشاركة مع ${inviteName}`, "success");
+      onShowToast("تم إنشاء رابط الدعوة بنجاح", `جاهز للمشاركة مع ${inviteName}`, "success");
     } catch (err: any) {
       console.error("Invite error:", err);
       onShowToast("خطأ في إنشاء الدعوة", err.message || "تعذر إكمال العملية", "error");
@@ -215,7 +215,7 @@ export const ClinicTeamManager: React.FC<ClinicTeamManagerProps> = ({
   const handleCopyLink = (url: string, id: string) => {
     navigator.clipboard.writeText(url);
     setCopiedToken(id);
-    onShowToast("تم نسخ رابط الدعوة 📋", "يمكنك إرساله للموظف عبر الواتساب أو البريد", "info");
+    onShowToast("تم نسخ رابط الدعوة", "يمكنك إرساله للموظف عبر الواتساب أو البريد", "info");
     setTimeout(() => setCopiedToken(null), 2500);
   };
 
@@ -800,7 +800,7 @@ export const ClinicTeamManager: React.FC<ClinicTeamManagerProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-black text-slate-900 font-['Tajawal',sans-serif]">
-                  {createdInviteLink ? 'تم إنشاء رابط الدعوة بنجاح 🎉' : 'دعوة عضو جديد للعيادة'}
+                  {createdInviteLink ? 'تم إنشاء رابط الدعوة بنجاح' : 'دعوة عضو جديد للعيادة'}
                 </h3>
                 <p className="text-xs text-slate-500">
                   {createdInviteLink ? 'قم بنسخ الرابط وإرساله للموظف للانضمام' : 'ربط موظف أو طبيب بنفس العيادة السحابية'}
@@ -955,8 +955,9 @@ export const ClinicTeamManager: React.FC<ClinicTeamManagerProps> = ({
                   <ChevronDown className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-20" />
                 </div>
 
-                <p className="text-[11px] text-slate-500 mt-2 leading-relaxed bg-sky-50/80 p-2.5 rounded-xl border border-sky-100">
-                  💡 {ROLE_DESCRIPTIONS_AR[inviteRole]}
+                <p className="text-[11px] text-slate-500 mt-2 leading-relaxed bg-sky-50/80 p-2.5 rounded-xl border border-sky-100 flex items-start gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-sky-600 shrink-0 mt-0.5" />
+                  <span>{ROLE_DESCRIPTIONS_AR[inviteRole]}</span>
                 </p>
               </div>
 

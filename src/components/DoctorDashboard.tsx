@@ -292,7 +292,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               }`}
             >
               <Zap className="w-5 h-5 fill-current" />
-              <span>{isCallingNext ? 'جاري الاستدعاء...' : 'استدعاء التالي 📢'}</span>
+              <span>{isCallingNext ? 'جاري الاستدعاء...' : 'استدعاء التالي'}</span>
             </button>
           </div>
 
@@ -408,7 +408,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           }`}
         >
           <Calendar className="w-4 h-4 text-sky-600" />
-          <span>إعادة الكشف 📅</span>
+          <span>إعادة الكشف</span>
         </button>
 
         <button
@@ -420,7 +420,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           }`}
         >
           <Users className="w-4 h-4 text-purple-600" />
-          <span>فريق العمل 👥</span>
+          <span>فريق العمل</span>
         </button>
 
         {hasPermission(currentMember, 'VIEW_FINANCE', isDoctorOwnerFallback) && (
@@ -433,7 +433,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             }`}
           >
             <DollarSign className="w-4 h-4 text-emerald-600" />
-            <span>المالية 💵</span>
+            <span>المالية</span>
           </button>
         )}
       </div>
@@ -632,7 +632,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                               isWaiting ? 'bg-sky-100 text-sky-800' :
                               isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                             }`}>
-                              {isCalled ? '🔔 داخل الكشف الآن' :
+                              {isCalled ? 'داخل الكشف الآن' :
                                isWaiting ? 'في الانتظار' :
                                isDone ? 'تم الكشف' : 'ملغي'}
                             </span>
@@ -714,7 +714,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                             title="تسجيل دفع رسوم الكشف"
                           >
                             <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>الدفع 💵</span>
+                            <span>الدفع</span>
                           </button>
                         )}
                       </div>

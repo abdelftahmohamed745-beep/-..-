@@ -125,7 +125,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
         });
 
         if (onShowToast) {
-          onShowToast("تم تحديث موعد إعادة الكشف بنجاح 📅", "", "success");
+          onShowToast("تم تحديث موعد إعادة الكشف بنجاح", "", "success");
         }
         if (onSuccess) {
           onSuccess({
@@ -157,7 +157,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
         });
 
         if (onShowToast) {
-          onShowToast("تم تسجيل موعد إعادة الكشف بنجاح 🎉", `الموعد بتاريخ ${appointmentDate} الساعة ${appointmentTime}`, "success");
+          onShowToast("تم تسجيل موعد إعادة الكشف بنجاح", `الموعد بتاريخ ${appointmentDate} الساعة ${appointmentTime}`, "success");
         }
 
         if (onSuccess) {

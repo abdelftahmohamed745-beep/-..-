@@ -100,7 +100,7 @@ export const ClinicInvitationAcceptModal: React.FC<ClinicInvitationAcceptModalPr
         email: userToUse.email,
         displayName: userToUse.displayName || displayName || invitation?.invitedName
       });
-      onShowToast('تم الانضمام بنجاح! 🎉', `مرحباً بك في ${invitation?.clinicName}`, 'success');
+      onShowToast('تم الانضمام بنجاح', `مرحباً بك في ${invitation?.clinicName}`, 'success');
       onAccepted(newMember);
     } catch (err: any) {
       console.error("Accept invitation error:", err);

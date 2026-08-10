@@ -13,7 +13,8 @@ import {
   Sparkles,
   ChevronLeft,
   Info,
-  Smartphone
+  Smartphone,
+  X
 } from 'lucide-react';
 import { FollowUpAppointment, FollowUpAppointmentStatus } from '../types';
 import {
@@ -71,7 +72,7 @@ export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
       const perm = await Notification.requestPermission();
       setPushPermission(perm);
       if (perm === 'granted') {
-        if (onShowToast) onShowToast("تم تفعيل إشعارات الجهاز بنجاح! 🔔", "ستتلقى تذكيرات بمواعيد إعادة الكشف على جهازك", "success");
+        if (onShowToast) onShowToast("تم تفعيل إشعارات الجهاز بنجاح", "ستتلقى تذكيرات بمواعيد إعادة الكشف على جهازك", "success");
       } else if (perm === 'denied') {
         if (onShowToast) onShowToast("تم رفض إذن الإشعارات", "ستظهر التنبيهات دائماً داخل الموقع عند زيارته", "warning");
       }
@@ -85,7 +86,7 @@ export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
     try {
       await updateFollowUpAppointmentStatus(appointmentId, 'confirmed');
       if (onShowToast) {
-        onShowToast("تم تأكيد حضورك للموعد بنجاح 👍", "نتطلع لاستقبالك في العيادة بالمعد المحدد", "success");
+        onShowToast("تم تأكيد حضورك للموعد بنجاح", "نتطلع لاستقبالك في العيادة بالمعد المحدد", "success");
       }
     } catch (err: any) {
       if (onShowToast) onShowToast("فشل تأكيد الحضور", err?.message || "تعذر الاتصال", "error");
@@ -117,7 +118,7 @@ export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
     try {
       await requestRescheduleFollowUp(rescheduleItem.id, newDate, newTime);
       if (onShowToast) {
-        onShowToast("تم إرسال طلب تغيير الموعد بنجاح 🔄", `التاريخ المقترح: ${newDate} - الساعة: ${newTime}`, "success");
+        onShowToast("تم إرسال طلب تغيير الموعد بنجاح", `التاريخ المقترح: ${newDate} - الساعة: ${newTime}`, "success");
       }
       setRescheduleItem(null);
     } catch (err: any) {
@@ -207,7 +208,7 @@ export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
             title="تفعيل الإشعارات للتنبيه المباشر"
           >
             <Smartphone className="w-4 h-4 text-amber-600" />
-            <span>تفعيل تنبيهات الهاتف والموقع 🔔</span>
+            <span>تفعيل تنبيهات الهاتف والموقع</span>
           </button>
         )}
       </div>
@@ -363,9 +364,10 @@ export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
               </h4>
               <button
                 onClick={() => setRescheduleItem(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+                aria-label="إغلاق"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 

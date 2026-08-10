@@ -44,7 +44,8 @@ import {
   Wallet,
   Receipt,
   Users,
-  CreditCard
+  CreditCard,
+  X
 } from 'lucide-react';
 
 interface ClinicFinanceManagerProps {
@@ -659,7 +660,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           }`}
         >
           <Receipt className="w-4 h-4 text-emerald-400" />
-          <span>تسجيل دفعة 💵</span>
+          <span>تسجيل دفعة</span>
         </button>
 
         <button
@@ -671,7 +672,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           }`}
         >
           <Clock className="w-4 h-4 text-amber-400" />
-          <span>المستحقات ⏳</span>
+          <span>المستحقات</span>
           {outstandingTransactions.length > 0 && (
             <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full">
               {outstandingTransactions.length}
@@ -688,7 +689,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           }`}
         >
           <FileText className="w-4 h-4 text-sky-400" />
-          <span>سجل المعاملات 📋</span>
+          <span>سجل المعاملات</span>
         </button>
 
         <button
@@ -700,7 +701,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           }`}
         >
           <TrendingDown className="w-4 h-4 text-rose-400" />
-          <span>المصروفات 📉</span>
+          <span>المصروفات</span>
         </button>
 
         <button
@@ -712,7 +713,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           }`}
         >
           <Tag className="w-4 h-4 text-purple-400" />
-          <span>الخدمات والأسعار 🏷️</span>
+          <span>الخدمات والأسعار</span>
         </button>
 
       </div>
@@ -869,9 +870,9 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                   onChange={e => setPaymentMethodInput(e.target.value as PaymentMethod)}
                   className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-sky-500 transition"
                 >
-                  <option value="CASH">نقداً (كاش) 💵</option>
-                  <option value="CARD">بطاقة ائتمان / فيزا 💳</option>
-                  <option value="BANK_TRANSFER">تحويل بنكي / فودافون كاش 📱</option>
+                  <option value="CASH">نقداً (كاش)</option>
+                  <option value="CARD">بطاقة ائتمان / فيزا</option>
+                  <option value="BANK_TRANSFER">تحويل بنكي / فودافون كاش</option>
                   <option value="OTHER">طريقة أخرى</option>
                 </select>
               </div>
@@ -923,7 +924,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                 }`}
               >
                 <Receipt className="w-5 h-5 fill-current" />
-                <span>{isSubmittingTx ? 'جاري التحصيل وإنشاء الإيصال...' : 'تأكيد الدفع وطباعة الإيصال 🧾'}</span>
+                <span>{isSubmittingTx ? 'جاري التحصيل وإنشاء الإيصال...' : 'تأكيد الدفع وطباعة الإيصال'}</span>
               </button>
             </div>
 
@@ -1398,9 +1399,10 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               <h3 className="font-black text-slate-900 text-base">سداد المبلغ المتبقي المستحق</h3>
               <button
                 onClick={() => setPayBalanceModalTx(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+                aria-label="إغلاق"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1460,7 +1462,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                   disabled={isSubmittingBalance}
                   className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl cursor-pointer"
                 >
-                  {isSubmittingBalance ? 'جاري السداد...' : 'تأكيد السداد 💵'}
+                  {isSubmittingBalance ? 'جاري السداد...' : 'تأكيد السداد'}
                 </button>
               </div>
             </form>
@@ -1476,9 +1478,10 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               <h3 className="font-black text-slate-900 text-base text-rose-600">إجراء استرداد أموال (Refund)</h3>
               <button
                 onClick={() => setRefundModalTx(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+                aria-label="إغلاق"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1526,7 +1529,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                   disabled={isSubmittingRefund}
                   className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl cursor-pointer"
                 >
-                  {isSubmittingRefund ? 'جاري الاسترداد...' : 'تأكيد الاسترداد ↩️'}
+                  {isSubmittingRefund ? 'جاري الاسترداد...' : 'تأكيد الاسترداد'}
                 </button>
               </div>
             </form>
@@ -1544,9 +1547,10 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               </h3>
               <button
                 onClick={() => setIsExpenseModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+                aria-label="إغلاق"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1616,7 +1620,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                   disabled={isSubmittingExpense}
                   className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl cursor-pointer"
                 >
-                  {isSubmittingExpense ? 'جاري الحفظ...' : 'حفظ المصروف 💾'}
+                  {isSubmittingExpense ? 'جاري الحفظ...' : 'حفظ المصروف'}
                 </button>
               </div>
             </form>
@@ -1634,9 +1638,10 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               </h3>
               <button
                 onClick={() => setIsServiceModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+                aria-label="إغلاق"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1690,7 +1695,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                   disabled={isSubmittingService}
                   className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-xl cursor-pointer"
                 >
-                  {isSubmittingService ? 'جاري الحفظ...' : 'حفظ الخدمة 🏷️'}
+                  {isSubmittingService ? 'جاري الحفظ...' : 'حفظ الخدمة'}
                 </button>
               </div>
             </form>

@@ -64,12 +64,46 @@ export function generateReferenceCode(uid: string): string {
   return `REF-${code}`;
 }
 
+export function normalizePhoneNumber(phone: string): string {
+  if (!phone) return "";
+  
+  // 1. Convert Eastern Arabic / Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩ and ۰۱۲۳۴۵۶۷۸۹) to standard ASCII (0123456789)
+  let str = phone.replace(/[٠-٩]/g, (d) => (d.charCodeAt(0) - 1632).toString());
+  str = str.replace(/[۰-۹]/g, (d) => (d.charCodeAt(0) - 1776).toString());
+
+  // 2. Remove all non-digit characters
+  const digits = str.replace(/\D/g, '');
+
+  // 3. Normalize Egyptian mobile phone numbers
+  if (digits.length === 12 && digits.startsWith('201')) {
+    return '0' + digits.slice(2);
+  }
+  if (digits.length === 14 && digits.startsWith('00201')) {
+    return '0' + digits.slice(4);
+  }
+  if (digits.length === 11 && digits.startsWith('01')) {
+    return digits;
+  }
+
+  return digits || phone.trim();
+}
+
 export function getTodayDateString(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Cairo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(new Date());
+  } catch {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 }
 
 // Check doctor subscription state dynamically
@@ -471,12 +505,13 @@ export async function updateDoctorSettings(doctorId: string, updates: Partial<Do
 
 // Check for active duplicate booking for phone number today
 export async function checkActiveBooking(doctorId: string, phone: string): Promise<PatientRecord | null> {
-  const cleanPhone = phone.replace(/[^\d+]/g, '').trim();
+  const normalizedPhone = normalizePhoneNumber(phone);
+  if (!normalizedPhone) return null;
   const today = getTodayDateString();
   const q = query(
     collection(db, "queues", doctorId, "patients"),
     where("date", "==", today),
-    where("phone", "==", cleanPhone)
+    where("phone", "==", normalizedPhone)
   );
 
   const snapshot = await getDocs(q);
@@ -497,7 +532,7 @@ export async function bookPatient(
 ): Promise<{ patientId: string; sequenceNumber: number; isExisting?: boolean }> {
   // 1. Sanitize & Validate Inputs
   const cleanName = sanitizeInput(name);
-  const cleanPhone = phone.replace(/[^\d+]/g, '').trim();
+  const normalizedPhone = normalizePhoneNumber(phone);
 
   if (!cleanName || cleanName.length < 2) {
     throw new Error("يرجى إدخال اسم صحيح لا يقل عن حرفين");
@@ -507,12 +542,22 @@ export async function bookPatient(
     throw new Error("الاسم أطول من الحد المسموح به (100 حرف)");
   }
 
-  if (!isValidPhoneNumber(cleanPhone)) {
+  if (!isValidPhoneNumber(normalizedPhone)) {
     throw new Error("رقم الهاتف غير صحيح. يرجى كتابة رقم هاتف صالح");
   }
 
-  // 2. Anti-Spam Rate Limiting Check (Check ONLY, do not mutate timestamp yet)
-  const rateCheck = checkBookingRateLimit(cleanPhone);
+  // 2. Check for active duplicate booking today first (idempotent ticket recovery)
+  const existingBooking = await checkActiveBooking(doctorId, normalizedPhone);
+  if (existingBooking) {
+    return {
+      patientId: existingBooking.id,
+      sequenceNumber: existingBooking.sequenceNumber,
+      isExisting: true
+    };
+  }
+
+  // 3. Anti-Spam Rate Limiting Check for NEW bookings
+  const rateCheck = checkBookingRateLimit(normalizedPhone);
   if (!rateCheck.allowed) {
     throw new Error(`يرجى الانتظار ${rateCheck.remainingSeconds} ثانية قبل محاولة الحجز مرة أخرى`);
   }
@@ -532,21 +577,14 @@ export async function bookPatient(
     throw new Error("عذراً، نظام الحجز غير متاح حالياً لدى هذه العيادة لانتهاء فترة الاشتراك. يرجى مراجعة موظف الاستقبال.");
   }
 
-  // 4. Check for active duplicate booking today
-  const existingBooking = await checkActiveBooking(doctorId, cleanPhone);
-  if (existingBooking) {
-    return {
-      patientId: existingBooking.id,
-      sequenceNumber: existingBooking.sequenceNumber,
-      isExisting: true
-    };
-  }
-
   // 5. Atomic Queue Sequence Number Generation via Transaction
   const today = getTodayDateString();
   const counterRef = doc(db, "queues", doctorId, "dailyCounters", today);
-  const newPatientRef = doc(collection(db, "queues", doctorId, "patients"));
   const now = new Date().toISOString();
+
+  // Deterministic booking document reference based on date + normalized phone
+  const bookingDocId = `${today}_${normalizedPhone}`;
+  const deterministicPatientRef = doc(db, "queues", doctorId, "patients", bookingDocId);
 
   // Baseline fetch in case counter document hasn't been created yet today
   const qBaseline = query(collection(db, "queues", doctorId, "patients"), where("date", "==", today));
@@ -554,12 +592,30 @@ export async function bookPatient(
   let baselineMaxSeq = 0;
   snapBaseline.docs.forEach((d) => {
     const p = d.data() as PatientRecord;
-    if (p.sequenceNumber > baselineMaxSeq) {
+    if (typeof p.sequenceNumber === 'number' && p.sequenceNumber > baselineMaxSeq) {
       baselineMaxSeq = p.sequenceNumber;
     }
   });
 
   const transactionResult = await runTransaction(db, async (transaction) => {
+    // A. Read deterministic patient doc inside transaction to prevent parallel race condition duplicates
+    const patientSnap = await transaction.get(deterministicPatientRef);
+    let targetPatientRef = deterministicPatientRef;
+
+    if (patientSnap.exists()) {
+      const existingData = patientSnap.data() as PatientRecord;
+      if (existingData.status === 'waiting' || existingData.status === 'called') {
+        return {
+          patientId: patientSnap.id,
+          sequenceNumber: existingData.sequenceNumber,
+          isExisting: true
+        };
+      }
+      // If previous ticket today was completed/cancelled, allocate new auto-ID doc
+      targetPatientRef = doc(collection(db, "queues", doctorId, "patients"));
+    }
+
+    // B. Read daily counter inside transaction
     const counterSnap = await transaction.get(counterRef);
     let currentMaxSeq = baselineMaxSeq;
 
@@ -572,7 +628,7 @@ export async function bookPatient(
 
     const nextSeq = currentMaxSeq + 1;
 
-    if (doctor.workHours.maxPatientsPerDay && nextSeq > doctor.workHours.maxPatientsPerDay) {
+    if (doctor.workHours?.maxPatientsPerDay && nextSeq > doctor.workHours.maxPatientsPerDay) {
       throw new Error(`عذراً، اكتمل الحد الأقصى لحجوزات اليوم (${doctor.workHours.maxPatientsPerDay} مريض).`);
     }
 
@@ -585,7 +641,7 @@ export async function bookPatient(
       sequenceNumber: nextSeq,
       queueNumber: nextSeq,
       name: cleanName,
-      phone: cleanPhone,
+      phone: normalizedPhone,
       status: 'waiting',
       date: today,
       createdAt: now,
@@ -604,21 +660,28 @@ export async function bookPatient(
       updatedAt: now
     }, { merge: true });
 
-    transaction.set(newPatientRef, patientData);
+    transaction.set(targetPatientRef, patientData);
 
-    return { patientId: newPatientRef.id, sequenceNumber: nextSeq };
+    return { patientId: targetPatientRef.id, sequenceNumber: nextSeq, isExisting: false };
   });
 
-  // Record rate limiting timestamp on successful completion
-  recordBookingSuccess(cleanPhone);
+  // Record rate limiting timestamp ONLY on successful transaction completion
+  if (!transactionResult.isExisting) {
+    recordBookingSuccess(normalizedPhone);
+  }
 
   // Write Audit Log
   writeAuditLog("BOOK_PATIENT_TICKET", userId || "PATIENT_PUBLIC", doctorId, {
     sequenceNumber: transactionResult.sequenceNumber,
-    ticketId: transactionResult.patientId
+    ticketId: transactionResult.patientId,
+    isExisting: transactionResult.isExisting || false
   });
 
-  return { patientId: transactionResult.patientId, sequenceNumber: transactionResult.sequenceNumber, isExisting: false };
+  return {
+    patientId: transactionResult.patientId,
+    sequenceNumber: transactionResult.sequenceNumber,
+    isExisting: transactionResult.isExisting
+  };
 }
 
 // Live Queue Listener for Doctor Dashboard
@@ -692,7 +755,11 @@ export function subscribeToPatientTicket(
   function emit() {
     // Prevent premature state emit until BOTH doctor and queue snapshots have loaded
     if (!doctorLoaded || !queueLoaded) return;
-    const myPatient = allPatients.find(p => p.id === patientId) || null;
+    const normalizedTarget = normalizePhoneNumber(patientId);
+    let myPatient = allPatients.find(p => p.id === patientId) || null;
+    if (!myPatient && normalizedTarget) {
+      myPatient = allPatients.find(p => p.phone === normalizedTarget) || null;
+    }
     callback({
       patient: myPatient,
       doctor: currentDoctor,
@@ -706,39 +773,48 @@ export function subscribeToPatientTicket(
   };
 }
 
-// Call Next Patient Action
+// Call Next Patient Action with Atomic Transaction
 export async function callNextPatient(doctorId: string): Promise<{ calledPatient: PatientRecord | null }> {
   const today = getTodayDateString();
-  const q = query(collection(db, "queues", doctorId, "patients"), where("date", "==", today));
-  const snap = await getDocs(q);
-
-  const patients: PatientRecord[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as PatientRecord));
-  patients.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
-
   const nowIso = new Date().toISOString();
+  let nextCalledPatient: PatientRecord | null = null;
 
-  // 1. If there's an existing 'called' patient, mark them 'done'
-  const currentCalled = patients.find(p => p.status === 'called');
-  if (currentCalled) {
-    await updateDoc(doc(db, "queues", doctorId, "patients", currentCalled.id), {
-      status: 'done',
-      doneAt: nowIso
-    });
-  }
+  await runTransaction(db, async (transaction) => {
+    const queueColRef = collection(db, "queues", doctorId, "patients");
+    const q = query(queueColRef, where("date", "==", today));
+    const snap = await getDocs(q);
 
-  // 2. Find next 'waiting' patient
-  const nextWaiting = patients.find(p => p.status === 'waiting');
-  if (nextWaiting) {
-    await updateDoc(doc(db, "queues", doctorId, "patients", nextWaiting.id), {
-      status: 'called',
-      calledAt: nowIso
-    });
-  }
+    const patients: PatientRecord[] = snap.docs.map(d => ({ id: d.id, ...d.data() } as PatientRecord));
+    patients.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+
+    // 1. If there's an existing 'called' patient, mark them 'done'
+    const currentCalled = patients.find(p => p.status === 'called');
+    if (currentCalled) {
+      const currentRef = doc(db, "queues", doctorId, "patients", currentCalled.id);
+      transaction.update(currentRef, {
+        status: 'done',
+        doneAt: nowIso,
+        updatedAt: nowIso
+      });
+    }
+
+    // 2. Find next 'waiting' patient
+    const nextWaiting = patients.find(p => p.status === 'waiting');
+    if (nextWaiting) {
+      const nextRef = doc(db, "queues", doctorId, "patients", nextWaiting.id);
+      transaction.update(nextRef, {
+        status: 'called',
+        calledAt: nowIso,
+        updatedAt: nowIso
+      });
+      nextCalledPatient = { ...nextWaiting, status: 'called', calledAt: nowIso };
+    }
+  });
 
   // 3. Recalculate average consultation time in background
   recalculateDoctorAvgConsultTime(doctorId).catch(console.error);
 
-  return { calledPatient: nextWaiting || null };
+  return { calledPatient: nextCalledPatient };
 }
 
 // Update single patient status

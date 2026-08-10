@@ -91,8 +91,18 @@ export default function App() {
     if (typeof window !== 'undefined') {
       if (newTab === 'clinic' && targetClinicDoctorId) {
         const cleanPath = `/clinic/${encodeURIComponent(targetClinicDoctorId)}`;
-        if (window.location.pathname !== cleanPath) {
+        if (window.location.pathname + window.location.search !== cleanPath) {
           window.history.pushState({ tab: 'clinic', doctorId: targetClinicDoctorId }, '', cleanPath);
+        }
+      } else if (newTab === 'booking' && targetDoctorId) {
+        const cleanPath = `/clinic/${encodeURIComponent(targetDoctorId)}?book=true`;
+        if (window.location.pathname + window.location.search !== cleanPath) {
+          window.history.pushState({ tab: 'booking', doctorId: targetDoctorId }, '', cleanPath);
+        }
+      } else if (newTab === 'ticket' && targetDoctorId && targetPatientId) {
+        const cleanPath = `/clinic/${encodeURIComponent(targetDoctorId)}?ticket=${encodeURIComponent(targetPatientId)}`;
+        if (window.location.pathname + window.location.search !== cleanPath) {
+          window.history.pushState({ tab: 'ticket', doctorId: targetDoctorId, patientId: targetPatientId }, '', cleanPath);
         }
       } else if (newTab === 'admin') {
         if (window.location.pathname !== '/admin') {
@@ -125,6 +135,10 @@ export default function App() {
     if (typeof window !== 'undefined') {
       if (previousState.tab === 'clinic' && previousState.viewClinicDoctorId) {
         window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.viewClinicDoctorId)}`);
+      } else if (previousState.tab === 'booking' && previousState.selectedDoctorId) {
+        window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.selectedDoctorId)}?book=true`);
+      } else if (previousState.tab === 'ticket' && previousState.selectedDoctorId && previousState.selectedPatientId) {
+        window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.selectedDoctorId)}?ticket=${encodeURIComponent(previousState.selectedPatientId)}`);
       } else if (previousState.tab === 'admin') {
         window.history.replaceState(null, '', '/admin');
       } else if (previousState.tab === 'directory') {
@@ -184,7 +198,18 @@ export default function App() {
       const docId = decodeURIComponent(clinicMatch[1]);
       setSelectedDoctorId(docId);
       setViewClinicDoctorId(docId);
-      setActiveTab('clinic');
+
+      const isBook = params.get('book') === 'true' || params.get('book') === '1';
+      const ticketParam = params.get('ticket');
+
+      if (ticketParam) {
+        setSelectedPatientId(ticketParam);
+        setActiveTab('ticket');
+      } else if (isBook) {
+        setActiveTab('booking');
+      } else {
+        setActiveTab('clinic');
+      }
       return;
     }
 

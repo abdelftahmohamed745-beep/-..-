@@ -339,7 +339,11 @@ export const LabDashboard: React.FC<LabDashboardProps> = ({
           </button>
           
           <button
-            onClick={onSignOut}
+            onClick={() => {
+              if (window.confirm("هل أنت متأكد أنك تريد الخروج؟")) {
+                onSignOut();
+              }
+            }}
             className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-2xl transition"
           >
             تسجيل الخروج

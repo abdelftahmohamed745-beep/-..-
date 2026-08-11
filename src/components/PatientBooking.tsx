@@ -37,15 +37,20 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
     loadDoctorData();
   }, [doctorId]);
 
-  // Check if phone matches active ticket when typing
+  // Check if phone matches active ticket when typing (debounced to avoid network requests per keystroke)
   useEffect(() => {
-    if (phone.length >= 10 && doctor) {
+    if (phone.length < 10 || !doctor) {
+      setExistingTicket(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
       checkActiveBooking(doctor.uid, phone.trim()).then((ticket) => {
         setExistingTicket(ticket);
       }).catch(console.error);
-    } else {
-      setExistingTicket(null);
-    }
+    }, 400);
+
+    return () => clearTimeout(timer);
   }, [phone, doctor]);
 
   const handleSubmit = async (e: React.FormEvent) => {

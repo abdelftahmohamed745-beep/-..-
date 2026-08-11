@@ -185,7 +185,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 {/* Sign Out */}
                 <button
-                  onClick={onSignOut}
+                  onClick={() => {
+                    if (window.confirm("هل أنت متأكد أنك تريد الخروج؟")) {
+                      onSignOut();
+                    }
+                  }}
                   className="p-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition"
                   title="تسجيل الخروج"
                   aria-label="تسجيل الخروج"

@@ -484,21 +484,12 @@ export default function App() {
             {activeTab === 'dashboard' && (
               currentDoctor ? (
                 currentDoctor.accountType === 'laboratory' ? (
-                  <LabDashboard
-                    currentLab={{
-                      uid: currentDoctor.uid,
-                      name: currentDoctor.clinicName,
-                      responsibleName: currentDoctor.name,
-                      phone: currentDoctor.phone || '01000000000',
-                      address: currentDoctor.address || 'القاهرة، مصر',
-                      offersHomeCollection: true,
-                      homeCollectionFee: 100,
-                      workHours: { open: "08:00", close: "23:00" },
-                      createdAt: currentDoctor.createdAt
-                    }}
-                    onShowToast={addToast}
-                    onSignOut={handleSignOut}
-                  />
+                  // Redirect lab users to lab_dashboard
+                  <React.Fragment>
+                    {useEffect(() => {
+                      setActiveTab('lab_dashboard');
+                    }, [])}
+                  </React.Fragment>
                 ) : currentDoctor.isActive === false ? (
                   <div className="max-w-xl mx-auto px-4 py-16 text-center">
                     <div className="bg-amber-50 rounded-3xl p-8 border border-amber-200 shadow-xl">
@@ -550,21 +541,30 @@ export default function App() {
             {/* Laboratory SaaS Dashboard */}
             {activeTab === 'lab_dashboard' && (
               currentDoctor ? (
-                <LabDashboard
-                  currentLab={{
-                    uid: currentDoctor.uid,
-                    name: currentDoctor.clinicName,
-                    responsibleName: currentDoctor.name,
-                    phone: currentDoctor.phone || '01000000000',
-                    address: currentDoctor.address || 'القاهرة، مصر',
-                    offersHomeCollection: true,
-                    homeCollectionFee: 100,
-                    workHours: { open: "08:00", close: "23:00" },
-                    createdAt: currentDoctor.createdAt
-                  }}
-                  onShowToast={addToast}
-                  onSignOut={handleSignOut}
-                />
+                currentDoctor.accountType !== 'laboratory' ? (
+                  // Redirect doctor users to doctor dashboard
+                  <React.Fragment>
+                    {useEffect(() => {
+                      setActiveTab('dashboard');
+                    }, [])}
+                  </React.Fragment>
+                ) : (
+                  <LabDashboard
+                    currentLab={{
+                      uid: currentDoctor.uid,
+                      name: currentDoctor.clinicName,
+                      responsibleName: currentDoctor.name,
+                      phone: currentDoctor.phone || '01000000000',
+                      address: currentDoctor.address || 'القاهرة، مصر',
+                      offersHomeCollection: true,
+                      homeCollectionFee: 100,
+                      workHours: { open: "08:00", close: "23:00" },
+                      createdAt: currentDoctor.createdAt
+                    }}
+                    onShowToast={addToast}
+                    onSignOut={handleSignOut}
+                  />
+                )
               ) : (
                 <AuthPage
                   onDoctorLoggedIn={(doc) => {

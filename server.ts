@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
 import { renderClinicHtml } from "./src/server/prerenderClinic";
 import { generateSitemapXml } from "./src/server/generateSitemap";
@@ -25,6 +26,73 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       version: "Dawry-Security-Engine-v2.0"
     });
+  });
+
+  // OTP Email Sending Route via Nodemailer (Gmail SMTP)
+  app.post("/api/send-otp", async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      if (!email || !code) {
+        return res.status(400).json({ success: false, error: "Email and OTP code are required" });
+      }
+
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+
+      if (!gmailUser || !gmailAppPassword) {
+        console.error("[OTP Server Error] GMAIL_USER or GMAIL_APP_PASSWORD environment variable is missing.");
+        return res.status(500).json({
+          success: false,
+          error: "خادم البريد غير مهيأ (يرجى إعداد GMAIL_USER و GMAIL_APP_PASSWORD في متغيرات البيئة)."
+        });
+      }
+
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: gmailUser,
+          pass: gmailAppPassword,
+        },
+      });
+
+      const htmlContent = `
+        <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 20px; background-color: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="display: inline-block; background-color: #f0f9ff; padding: 12px 24px; border-radius: 16px; border: 1px solid #bae6fd;">
+              <h1 style="color: #0284c7; margin: 0; font-size: 22px; font-weight: 800;">Dory Medical System</h1>
+            </div>
+          </div>
+          <h2 style="color: #0f172a; text-align: center; font-size: 18px; margin-bottom: 12px;">كود التحقق من حسابك في Dory</h2>
+          <p style="color: #475569; font-size: 14px; line-height: 1.6; text-align: center; margin-bottom: 24px;">
+            مرحباً بك! رمز التحقق الخاص بك لتأكيد البريد الإلكتروني وتفعيل حسابك في منصة Dory هو:
+          </p>
+          <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-radius: 16px; margin: 16px 0; border: 1px border-dashed #cbd5e1;">
+            <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #0284c7; font-family: monospace; direction: ltr; display: inline-block;">${code}</span>
+          </div>
+          <p style="color: #64748b; font-size: 12px; text-align: center; margin-top: 20px; line-height: 1.5;">
+            ⏰ صلاحية هذا الكود هي 10 دقائق فقط.<br/>
+            إذا لم تطلب هذا الكود، يمكنك تجاهل هذه الرسالة بأمان.
+          </p>
+        </div>
+      `;
+
+      await transporter.sendMail({
+        from: `"Dory Medical System" <${gmailUser}>`,
+        to: email.trim(),
+        subject: "كود التحقق من حسابك في Dory",
+        html: htmlContent,
+      });
+
+      console.log(`[OTP Server Log] Gmail SMTP sent verification code successfully to target.`);
+
+      return res.json({ success: true, message: "تم إرسال كود التحقق بنجاح" });
+    } catch (error: any) {
+      console.error("[OTP Server Error] Failed to send email via Nodemailer Gmail SMTP:", error?.message || error);
+      return res.status(500).json({
+        success: false,
+        error: "فشل إرسال كود التحقق عبر Gmail. يرجى التأكد من البريد الإلكتروني والإعدادات."
+      });
+    }
   });
 
   // Admin Security Action: Toggle Doctor Account Status

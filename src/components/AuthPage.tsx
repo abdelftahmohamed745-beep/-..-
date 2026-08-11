@@ -2,17 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendEmailVerification
+  createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { auth } from '../firebase/config';
+import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
 import {
   createDoctorProfile,
   getDoctorProfile
 } from '../services/firebaseService';
 import { createLabProfile, getLabProfile } from '../services/labService';
 import { DoctorProfile, AccountType } from '../types';
-import { Stethoscope, Mail, Lock, User, Building, ArrowLeft, ShieldCheck, TestTube, RotateCcw, CheckCircle2, LogOut } from 'lucide-react';
+import { Stethoscope, Mail, Lock, User, Building, ArrowLeft, ShieldCheck, TestTube, RotateCcw, CheckCircle2, LogOut, KeyRound } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 
 interface AuthPageProps {
@@ -45,6 +45,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   // Email Verification State
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [resendTimer, setResendTimer] = useState(60);
   const [verifyingLoading, setVerifyingLoading] = useState(false);
 
@@ -55,13 +56,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       if (!user) return;
 
       try {
-        await user.reload();
-        if (!user.emailVerified) {
+        const vSnap = await getDoc(doc(db, "email_verifications", user.uid));
+        if (vSnap.exists() && vSnap.data()?.verified === true) {
+          setIsVerifyingEmail(false);
+        } else {
           setIsVerifyingEmail(true);
           setVerificationEmail(user.email || '');
         }
       } catch (e) {
-        console.warn("Error reloading current user on mount:", e);
+        console.warn("Error checking pending verification on mount:", e);
       }
     };
     checkPendingVerification();
@@ -80,72 +83,138 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     };
   }, [isVerifyingEmail, resendTimer]);
 
-  const handleCheckVerificationStatus = async () => {
+  const sendOtpEmail = async (uid: string, targetEmail: string) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await setDoc(doc(db, "email_verifications", uid), {
+      uid,
+      email: targetEmail.trim().toLowerCase(),
+      code,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes expiry
+      attempts: 0,
+      verified: false,
+      accountType,
+      pendingPayload: {
+        doctorName: doctorName.trim() || "دكتور جديد",
+        specialty: specialty.trim() || "طبيب عام",
+        clinicName: clinicName.trim() || "العيادة الطبية",
+        labName: labName.trim() || "معمل التحاليل الطبية",
+        responsibleName: responsibleName.trim() || "مدير المعمل",
+        phone: phone.trim() || "01000000000",
+        address: address.trim() || "القاهرة، مصر"
+      }
+    }, { merge: true });
+
+    const resp = await fetch('/api/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: targetEmail.trim(), code })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok || !data.success) {
+      throw new Error(data.error || "فشل إرسال كود التحقق عبر البريد الإلكتروني");
+    }
+
+    setResendTimer(60);
+    return code;
+  };
+
+  const handleVerifyOtpCode = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!otpCode.trim() || otpCode.trim().length !== 6) {
+      onShowToast("كود غير مكتمل", "يرجى إدخال كود التحقق المكون من 6 أرقام بالكامل", "warning");
+      return;
+    }
+
     setVerifyingLoading(true);
     try {
       const user = auth.currentUser;
       if (!user) {
-        setIsVerifyingEmail(false);
-        setVerifyingLoading(false);
-        return;
+        throw new Error("لم يتم العثور على الجلسة الحالية. يرجى تسجيل الدخول مجدداً.");
       }
 
-      await user.reload();
+      const vRef = doc(db, "email_verifications", user.uid);
+      const vSnap = await getDoc(vRef);
 
-      if (user.emailVerified) {
-        // Check if Lab profile exists
-        const labProf = await getLabProfile(user.uid);
-        if (labProf) {
-          setVerifyingLoading(false);
-          setIsVerifyingEmail(false);
-          onShowToast("تم تأكيد الحساب بنجاح", `مرحباً بك في لوحة تحكم ${labProf.name}`, "success");
-          onDoctorLoggedIn({
-            uid: user.uid,
-            accountType: 'laboratory',
-            name: labProf.responsibleName,
-            specialty: "معمل تحاليل",
-            clinicName: labProf.name,
-            qrCodeId: user.uid,
-            address: labProf.address,
-            phone: labProf.phone,
-            subscriptionStatus: 'active',
-            trialEndDate: new Date().toISOString(),
-            avgConsultTime: 15,
-            workHours: { open: "08:00", close: "23:00", maxPatientsPerDay: 100, daysOfWeek: [] },
-            createdAt: labProf.createdAt
-          });
-          return;
+      if (!vSnap.exists()) {
+        throw new Error("لم يتم العثور على رمز تحقق فعال. يرجى الضغط على إعادة إرسال الكود.");
+      }
+
+      const vData = vSnap.data();
+
+      // 1. Expiry check
+      if (new Date(vData.expiresAt).getTime() < Date.now()) {
+        throw new Error("انتهت صلاحية كود التحقق (10 دقائق). يرجى الضغط على زر إعادة إرسال الكود.");
+      }
+
+      // 2. Max attempts check
+      if (vData.attempts >= 5) {
+        throw new Error("تجاوزت الحد الأقصى للمحاولات الخاطئة (5 محاولات). يرجى الضغط على إعادة إرسال الكود للحصول على كود جديد.");
+      }
+
+      // 3. Code verification
+      if (vData.code !== otpCode.trim()) {
+        await updateDoc(vRef, { attempts: increment(1) });
+        const currentAttempts = (vData.attempts || 0) + 1;
+        throw new Error(`كود التحقق غير صحيح. (المحاولة ${currentAttempts} من 5).`);
+      }
+
+      // Success!
+      await updateDoc(vRef, { verified: true });
+
+      const targetType = vData.accountType || accountType;
+      const payload = vData.pendingPayload || {};
+
+      if (targetType === 'laboratory') {
+        let labProf = await getLabProfile(user.uid);
+        if (!labProf) {
+          labProf = await createLabProfile(
+            user.uid,
+            payload.labName || labName.trim() || "معمل التحاليل الطبية",
+            payload.responsibleName || responsibleName.trim() || "مدير المعمل",
+            payload.phone || phone.trim() || "01000000000",
+            payload.address || address.trim() || "القاهرة، مصر"
+          );
         }
-
-        // Check if Doctor profile exists
-        const docProfile = await getDoctorProfile(user.uid);
-        if (docProfile) {
-          setVerifyingLoading(false);
-          setIsVerifyingEmail(false);
-          onShowToast("تم تأكيد الحساب بنجاح", `مرحباً بك في لوحة تحكم ${docProfile.clinicName}`, "success");
-          onDoctorLoggedIn(docProfile);
-          return;
-        }
-
-        // Fallback profile creation if needed
-        const newDoctor = await createDoctorProfile(user.uid, "دكتور", "طبيب عام", "العيادة الطبية");
         setVerifyingLoading(false);
         setIsVerifyingEmail(false);
-        onShowToast("تم تأكيد الحساب بنجاح", "تم تفعيل حسابك بنجاح", "success");
-        onDoctorLoggedIn(newDoctor);
-
+        onShowToast("تم تأكيد الحساب بنجاح", `مرحباً بك في لوحة تحكم ${labProf.name}`, "success");
+        onDoctorLoggedIn({
+          uid: user.uid,
+          accountType: 'laboratory',
+          name: labProf.responsibleName,
+          specialty: "معمل تحاليل",
+          clinicName: labProf.name,
+          qrCodeId: user.uid,
+          address: labProf.address,
+          phone: labProf.phone,
+          subscriptionStatus: 'active',
+          trialEndDate: new Date().toISOString(),
+          avgConsultTime: 15,
+          workHours: { open: "08:00", close: "23:00", maxPatientsPerDay: 100, daysOfWeek: [] },
+          createdAt: labProf.createdAt
+        });
       } else {
+        let docProf = await getDoctorProfile(user.uid);
+        if (!docProf) {
+          docProf = await createDoctorProfile(
+            user.uid,
+            payload.doctorName || doctorName.trim() || "دكتور جديد",
+            payload.specialty || specialty.trim() || "طبيب عام",
+            payload.clinicName || clinicName.trim() || "العيادة الطبية"
+          );
+        }
         setVerifyingLoading(false);
-        onShowToast(
-          "لم يتم التحقق بعد",
-          "يرجى فتح بريدك الإلكتروني والضغط على رابط التفعيل المرسل لك، ثم الضغط على هذا الزر مجدداً.",
-          "warning"
-        );
+        setIsVerifyingEmail(false);
+        onShowToast("تم تأكيد الحساب بنجاح", `مرحباً بك في لوحة تحكم ${docProf.clinicName}`, "success");
+        onDoctorLoggedIn(docProf);
       }
     } catch (err: any) {
-      console.error("Check verification error:", err);
+      console.error("[OTP Verification Error]", err);
       setVerifyingLoading(false);
-      onShowToast("خطأ أثناء تحديث الحالة", err.message || "حدث خطأ غير متوقع", "error");
+      onShowToast("فشل التحقق", err.message || "رمز التحقق غير صحيح", "error");
     }
   };
 
@@ -154,24 +223,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setVerifyingLoading(true);
     try {
       const user = auth.currentUser;
-      if (user) {
-        auth.languageCode = 'ar';
-        await sendEmailVerification(user);
-        console.log("[Firebase Auth Log] handleResendEmailLink succeeded for:", user.email);
-        setResendTimer(60);
-        setVerifyingLoading(false);
-        onShowToast(
-          "تم إرسال رابط جديد",
-          `تم إرسال رابط تحقق جديد إلى بريدك الإلكتروني: ${user.email}`,
-          "success"
-        );
-      } else {
+      if (!user) {
         throw new Error("لم يتم العثور على الجلسة الحالية. يرجى تسجيل الدخول مجدداً.");
       }
-    } catch (err: any) {
-      console.error("[Firebase Auth Error] handleResendEmailLink failed:", err?.code, err?.message);
+
+      await sendOtpEmail(user.uid, user.email || verificationEmail);
       setVerifyingLoading(false);
-      onShowToast("فشل إعادة الإرسال", err.message || "تعذر إرسال رابط التحقق", "error");
+      onShowToast(
+        "تم إرسال كود جديد",
+        `تم إرسال كود تحقق جديد مكون من 6 أرقام إلى بريدك الإلكتروني: ${user.email || verificationEmail}`,
+        "success"
+      );
+    } catch (err: any) {
+      console.error("[OTP Resend Error]", err);
+      setVerifyingLoading(false);
+      onShowToast("فشل إعادة الإرسال", err.message || "تعذر إرسال كود التحقق", "error");
     }
   };
 
@@ -182,6 +248,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       console.warn("Sign out error:", e);
     }
     setIsVerifyingEmail(false);
+    setOtpCode('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -213,41 +280,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           }
         }
 
-        // 2. Create profile in Firestore
-        if (accountType === 'laboratory') {
-          await createLabProfile(
-            user.uid,
-            labName.trim() || "معمل التحاليل الطبية",
-            responsibleName.trim() || "مدير المعمل",
-            phone.trim() || "01000000000",
-            address.trim() || "القاهرة، مصر"
-          );
-        } else {
-          await createDoctorProfile(
-            user.uid,
-            doctorName.trim() || "دكتور جديد",
-            specialty.trim() || "طبيب عام",
-            clinicName.trim() || "العيادة الطبية"
-          );
-        }
-
-        // 3. Send official Firebase Email Verification
-        try {
-          auth.languageCode = 'ar';
-          await sendEmailVerification(user);
-          console.log("[Firebase Auth Log] sendEmailVerification succeeded for:", user.email);
-        } catch (sendErr: any) {
-          console.error("[Firebase Auth Error] sendEmailVerification failed:", sendErr?.code, sendErr?.message);
-        }
+        // Send OTP via Gmail SMTP
+        await sendOtpEmail(user.uid, user.email || email.trim());
 
         setLoading(false);
         setIsVerifyingEmail(true);
         setVerificationEmail(user.email || email.trim());
-        setResendTimer(60);
 
         onShowToast(
-          "تم إرسال رابط التحقق",
-          `تم إرسال رابط التفعيل إلى بريدك الإلكتروني: ${user.email}`,
+          "تم إرسال كود التحقق",
+          `تم إرسال كود تحقق مكون من 6 أرقام إلى بريدك الإلكتروني: ${user.email || email.trim()}`,
           "info"
         );
 
@@ -269,18 +311,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }
 
         const user = creds.user;
-        await user.reload();
 
-        // Check if email is verified
-        if (!user.emailVerified) {
+        // Check if verified in Firestore
+        const vSnap = await getDoc(doc(db, "email_verifications", user.uid));
+        if (!vSnap.exists() || vSnap.data()?.verified !== true) {
+          await sendOtpEmail(user.uid, user.email || email.trim());
           setLoading(false);
           setIsVerifyingEmail(true);
           setVerificationEmail(user.email || email.trim());
-          setResendTimer(60);
 
           onShowToast(
-            "حسابك غير مفعل بعد",
-            "يرجى فتح بريدك الإلكتروني والضغط على رابط التحقق لتفعيل الحساب.",
+            "حسابك يحتاج تفعيل",
+            "تم إرسال كود تحقق مكون من 6 أرقام إلى بريدك الإلكتروني لتأكيد الحساب.",
             "warning"
           );
           return;
@@ -318,7 +360,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
 
-        // 3. Fallback profile creation if neither profile exists
+        // 3. Fallback profile creation
         if (accountType === 'laboratory') {
           const newLab = await createLabProfile(
             user.uid,
@@ -362,40 +404,50 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       
-      {/* Firebase Email Verification Pending Screen */}
+      {/* Nodemailer Gmail OTP Verification Pending Screen */}
       {isVerifyingEmail ? (
         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-sky-100 mb-8">
           <div className="text-center mb-6">
             <div className="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-sky-100">
-              <Mail className="w-8 h-8 text-sky-600" />
+              <KeyRound className="w-8 h-8 text-sky-600" />
             </div>
             <h2 className="text-xl font-black text-slate-900 font-['Tajawal',sans-serif] mb-2">
-              تأكيد ملكية البريد الإلكتروني
+              تأكيد ملكية البريد الإلكتروني (رمز OTP)
             </h2>
             <p className="text-sm text-slate-600 font-medium max-w-md mx-auto leading-relaxed">
-              أرسلنا رابط التحقق والتفعيل إلى بريدك الإلكتروني:
+              أرسلنا كود تحقق مكوّن من 6 أرقام إلى بريدك الإلكتروني:
             </p>
             <span className="inline-block mt-2 font-bold text-sky-700 bg-sky-50 border border-sky-200 px-4 py-1.5 rounded-full text-xs dir-ltr">
               {verificationEmail}
             </span>
-            <p className="text-xs text-slate-500 mt-3 max-w-md mx-auto">
-              يرجى فتح صندوق الوارد (أو مجلد الرسائل غير المرغوب فيها Spam) والضغط على رابط التفعيل.
-            </p>
           </div>
 
-          <div className="space-y-3 max-w-md mx-auto">
+          <form onSubmit={handleVerifyOtpCode} className="space-y-4 max-w-md mx-auto">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-2 text-center">أدخل كود التحقق (6 أرقام):</label>
+              <input
+                type="text"
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••••"
+                required
+                className="w-full text-center text-2xl tracking-[12px] font-mono py-3 px-4 bg-slate-50 border border-slate-300 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-sky-500 dir-ltr font-black text-sky-900"
+              />
+              <p className="text-[11px] text-slate-400 text-center mt-1">الكود صالـح لمدة 10 دقائق (الحد الأقصى 5 محاولات)</p>
+            </div>
+
             <button
-              type="button"
-              onClick={handleCheckVerificationStatus}
-              disabled={verifyingLoading}
+              type="submit"
+              disabled={verifyingLoading || otpCode.length !== 6}
               className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-black text-sm rounded-2xl transition shadow-md cursor-pointer flex items-center justify-center gap-2"
             >
               {verifyingLoading ? (
-                <span>جاري التحقق من الحالة...</span>
+                <span>جاري التحقق من الرمز...</span>
               ) : (
                 <>
                   <CheckCircle2 className="w-5 h-5" />
-                  <span>تأكيد التفعيل والدخول للوحة التحكم</span>
+                  <span>تأكيد رمز التحقق والدخول للوحة التحكم</span>
                 </>
               )}
             </button>
@@ -409,11 +461,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <RotateCcw className="w-4 h-4 text-slate-600" />
               <span>
                 {resendTimer > 0
-                  ? `إعادة إرسال رابط التحقق خلال (${resendTimer} ثانية)`
-                  : 'إعادة إرسال رابط التحقق'}
+                  ? `إعادة إرسال كود التحقق خلال (${resendTimer} ثانية)`
+                  : 'إعادة إرسال كود التحقق'}
               </span>
             </button>
-          </div>
+          </form>
 
           <div className="mt-6 pt-6 border-t border-slate-100 text-center">
             <button

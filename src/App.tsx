@@ -6,7 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase/config';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase/config';
 import {
   getDoctorProfile,
   purgeTestAccounts
@@ -328,7 +329,19 @@ export default function App() {
           console.warn("Could not reload user state:", e);
         }
 
-        if (!user.emailVerified) {
+        let isVerified = user.emailVerified;
+        if (!isVerified) {
+          try {
+            const vSnap = await getDoc(doc(db, "email_verifications", user.uid));
+            if (vSnap.exists() && vSnap.data()?.verified === true) {
+              isVerified = true;
+            }
+          } catch (e) {
+            console.warn("Could not check email_verifications status:", e);
+          }
+        }
+
+        if (!isVerified) {
           setCurrentDoctor(null);
           return;
         }

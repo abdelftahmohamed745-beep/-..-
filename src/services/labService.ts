@@ -406,17 +406,25 @@ export async function getLabOrders(labId: string): Promise<LabOrder[]> {
   if (!labId) return [];
   try {
     const ordersRef = collection(db, "labs", labId, "orders");
-    const snap = await getDocs(ordersRef);
+    const q = query(ordersRef, orderBy("createdAt", "desc"), limit(100));
+    const snap = await getDocs(q);
     const list: LabOrder[] = [];
     snap.forEach((d) => {
       list.push(d.data() as LabOrder);
     });
-    // Sort latest first
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return list;
   } catch (err) {
-    console.error("Error fetching lab orders:", err);
-    return [];
+    // Fallback if orderBy without index
+    try {
+      const snap = await getDocs(query(collection(db, "labs", labId, "orders"), limit(100)));
+      const list: LabOrder[] = [];
+      snap.forEach((d) => list.push(d.data() as LabOrder));
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return list;
+    } catch (fallbackErr) {
+      console.error("Error fetching lab orders:", fallbackErr);
+      return [];
+    }
   }
 }
 
@@ -452,15 +460,25 @@ export function subscribeToLabOrders(
 ): () => void {
   if (!labId) return () => {};
   const ordersRef = collection(db, "labs", labId, "orders");
-  return onSnapshot(ordersRef, (snap) => {
+  const q = query(ordersRef, orderBy("createdAt", "desc"), limit(100));
+  
+  return onSnapshot(q, (snap) => {
     const list: LabOrder[] = [];
     snap.forEach((d) => {
       list.push(d.data() as LabOrder);
     });
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     callback(list);
   }, (err) => {
-    console.error("Lab orders listener error:", err);
+    // Fallback if index missing
+    const fallbackQ = query(ordersRef, limit(100));
+    return onSnapshot(fallbackQ, (snap) => {
+      const list: LabOrder[] = [];
+      snap.forEach((d) => {
+        list.push(d.data() as LabOrder);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    });
   });
 }
 
@@ -472,7 +490,8 @@ export async function getLabSamples(labId: string): Promise<LabSample[]> {
   if (!labId) return [];
   try {
     const samplesRef = collection(db, "labs", labId, "samples");
-    const snap = await getDocs(samplesRef);
+    const q = query(samplesRef, limit(100));
+    const snap = await getDocs(q);
     const list: LabSample[] = [];
     snap.forEach((d) => {
       list.push(d.data() as LabSample);
@@ -629,7 +648,8 @@ export async function addLabTransaction(
 export async function getLabTransactions(labId: string): Promise<LabTransaction[]> {
   if (!labId) return [];
   try {
-    const snap = await getDocs(collection(db, "labs", labId, "finances"));
+    const q = query(collection(db, "labs", labId, "finances"), limit(100));
+    const snap = await getDocs(q);
     const list: LabTransaction[] = [];
     snap.forEach((d) => {
       list.push(d.data() as LabTransaction);

@@ -390,7 +390,7 @@ export interface LabOrder {
   updatedAt?: string;
 }
 
-export type LabSampleStatus = 'pending' | 'received' | 'processing' | 'completed';
+export type LabSampleStatus = 'pending' | 'received' | 'processing' | 'completed' | 'rejected';
 
 export interface LabSample {
   id: string; // Document ID / Barcode e.g. LAB-2026-000124

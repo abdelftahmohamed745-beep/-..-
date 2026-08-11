@@ -47,6 +47,20 @@ interface NavState {
   viewLabOrderId?: string;
 }
 
+function LabDashboardRedirect({ onRedirect }: { onRedirect: () => void }) {
+  useEffect(() => {
+    onRedirect();
+  }, [onRedirect]);
+  return null;
+}
+
+function DoctorDashboardRedirect({ onRedirect }: { onRedirect: () => void }) {
+  useEffect(() => {
+    onRedirect();
+  }, [onRedirect]);
+  return null;
+}
+
 export default function App() {
   const [currentDoctor, setCurrentDoctor] = useState<DoctorProfile | null>(null);
   const [activeTab, setActiveTab] = useState<NavTabType>('directory');
@@ -484,12 +498,7 @@ export default function App() {
             {activeTab === 'dashboard' && (
               currentDoctor ? (
                 currentDoctor.accountType === 'laboratory' ? (
-                  // Redirect lab users to lab_dashboard
-                  <React.Fragment>
-                    {useEffect(() => {
-                      setActiveTab('lab_dashboard');
-                    }, [])}
-                  </React.Fragment>
+                  <LabDashboardRedirect onRedirect={() => setActiveTab('lab_dashboard')} />
                 ) : currentDoctor.isActive === false ? (
                   <div className="max-w-xl mx-auto px-4 py-16 text-center">
                     <div className="bg-amber-50 rounded-3xl p-8 border border-amber-200 shadow-xl">
@@ -543,11 +552,7 @@ export default function App() {
               currentDoctor ? (
                 currentDoctor.accountType !== 'laboratory' ? (
                   // Redirect doctor users to doctor dashboard
-                  <React.Fragment>
-                    {useEffect(() => {
-                      setActiveTab('dashboard');
-                    }, [])}
-                  </React.Fragment>
+                  <DoctorDashboardRedirect onRedirect={() => setActiveTab('dashboard')} />
                 ) : (
                   <LabDashboard
                     currentLab={{

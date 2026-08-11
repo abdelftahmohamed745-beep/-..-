@@ -9,8 +9,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Basic security middleware headers
+  // Basic security middleware headers & request logging
   app.use((req, res, next) => {
+    console.log(`[Server Request Log] Method: ${req.method}, Path: ${req.path}`);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-XSS-Protection", "1; mode=block");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");

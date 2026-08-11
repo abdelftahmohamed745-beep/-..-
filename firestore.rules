@@ -240,6 +240,11 @@ service cloud.firestore {
       allow delete: if isOwner(userId) || isAdmin();
     }
 
+    // Email Verifications collection
+    match /email_verifications/{docId} {
+      allow read, create, update: if isAuthenticated() && (request.auth.uid == resource.data.uid || request.auth.uid == request.resource.data.uid) || isAdmin();
+    }
+
     // Audit Logs collection
     match /auditLogs/{logId} {
       allow read: if isAdmin();
@@ -278,6 +283,55 @@ service cloud.firestore {
       allow read: if isAuthenticated() || isAdmin();
       allow create, update: if isAuthenticated() || isAdmin();
       allow delete: if isAdmin();
+    }
+
+    // Labs collection & subcollections
+    match /labs/{labId} {
+      allow read: if true; // Public read for public lab pages
+      allow create: if isOwner(labId) || isAdmin();
+      allow update: if isOwner(labId) || isAdmin() || (
+        isAuthenticated() && exists(/databases/$(database)/documents/labs/$(labId)/staff/$(request.auth.uid))
+      );
+      allow delete: if isAdmin();
+
+      match /catalog/{testId} {
+        allow read: if true; // Public catalog view
+        allow create, update, delete: if isOwner(labId) || isAdmin() || (
+          isAuthenticated() && exists(/databases/$(database)/documents/labs/$(labId)/staff/$(request.auth.uid))
+        );
+      }
+
+      match /orders/{orderId} {
+        allow read: if true; // Patients track order via orderId/number or lab staff view orders
+        allow create: if request.resource.data.patientName is string
+          && request.resource.data.patientPhone is string
+          && request.resource.data.totalPrice is number;
+        allow update, delete: if true; // Staff update order status or patient cancels
+      }
+
+      match /samples/{sampleId} {
+        allow read: if true; // Scan sample or staff view
+        allow create, update, delete: if true;
+      }
+
+      match /results/{resultId} {
+        allow read: if true; // Patient views published results or staff manages
+        allow create, update, delete: if true;
+      }
+
+      match /staff/{staffId} {
+        allow read, write: if isOwner(labId) || isAdmin() || (isAuthenticated() && request.auth.uid == staffId);
+      }
+
+      match /finances/{txId} {
+        allow read, write: if isOwner(labId) || isAdmin();
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if isOwner(labId) || isAdmin();
+        allow create: if true;
+        allow update, delete: if false;
+      }
     }
 
     // Default deny fallback

@@ -135,8 +135,8 @@ async function startServer() {
     }
   });
 
-  // Clinic SEO Prerender Route
-  app.get("/clinic/:docId", async (req, res) => {
+  // Clinic SEO Prerender Route (supports /clinic/:docId and /clinic/:docId/book)
+  app.get(["/clinic/:docId", "/clinic/:docId/book"], async (req, res) => {
     try {
       const docId = req.params.docId;
       const rootDir = process.cwd();

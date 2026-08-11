@@ -27,6 +27,7 @@ const firebaseConfig = {
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
+auth.languageCode = 'ar';
 
 // Initialize Firestore with custom database ID if present in configuration
 const databaseId = firebaseConfigData.firestoreDatabaseId || "(default)";

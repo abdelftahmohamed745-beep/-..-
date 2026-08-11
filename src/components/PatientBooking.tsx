@@ -27,6 +27,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
 
   // Fetch doctor details and check for existing local ticket
   useEffect(() => {
+    console.log('[QR] PATIENT_BOOKING_MOUNTED', { doctorId });
     async function loadDoctorData() {
       setLoading(true);
       const profile = await getDoctorProfile(doctorId);
@@ -57,6 +58,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
     }
 
     setIsSubmitting(true);
+    console.log('[QR] EXISTING_BOOKING_SYSTEM_CALLED', { doctorId: doctor.uid, name: name.trim(), phone: phone.trim() });
     try {
       const res = await bookPatient(
         doctor.uid,
@@ -66,6 +68,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
         notificationPreference
       );
       setIsSubmitting(false);
+      console.log('[QR] TICKET_CREATED', { patientId: res.patientId, sequenceNumber: res.sequenceNumber, isExisting: res.isExisting });
 
       if (res.isExisting) {
         onShowToast("لديك حجز نشط بالفعل!", `تم توجيهك لتذكرتك رقم #${res.sequenceNumber}`, "info");

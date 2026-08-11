@@ -1,6 +1,6 @@
 {
   "name": "دوري",
-  "description": "نظام حجز وتتبع أدوار ذكي للعيادات الطبية",
+  "description": "منظومة دوري الطبية - نظام حجز وتتبع العيادات وإدارة معامل التحاليل الطبية (Dory Labs)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

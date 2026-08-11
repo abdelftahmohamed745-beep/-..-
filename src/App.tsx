@@ -11,6 +11,7 @@ import {
   getDoctorProfile,
   purgeTestAccounts
 } from './services/firebaseService';
+import { getLabProfile } from './services/labService';
 import { DoctorProfile, ToastMessage } from './types';
 
 // Components
@@ -23,6 +24,9 @@ import { PatientTicket } from './components/PatientTicket';
 import { SubscriptionPage } from './components/SubscriptionPage';
 import { AuthPage } from './components/AuthPage';
 import { AdminGuard } from './components/AdminGuard';
+import { LabDashboard } from './components/lab/LabDashboard';
+import { PublicLabPage } from './components/lab/PublicLabPage';
+import { PatientLabResultView } from './components/lab/PatientLabResultView';
 import { QRModal } from './components/QRModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -38,6 +42,8 @@ interface NavState {
   selectedDoctorId: string;
   viewClinicDoctorId: string;
   selectedPatientId: string | null;
+  viewLabId?: string;
+  viewLabOrderId?: string;
 }
 
 export default function App() {
@@ -47,6 +53,10 @@ export default function App() {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [viewClinicDoctorId, setViewClinicDoctorId] = useState<string>('');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+
+  // Lab view state
+  const [viewLabId, setViewLabId] = useState<string>('');
+  const [viewLabOrderId, setViewLabOrderId] = useState<string>('');
 
   // Navigation History Stack
   const [navHistory, setNavHistory] = useState<NavState[]>([]);
@@ -58,6 +68,8 @@ export default function App() {
       doctorId?: string;
       clinicDoctorId?: string;
       patientId?: string | null;
+      labId?: string;
+      labOrderId?: string;
     }
   ) => {
     console.log('[DIAGNOSTIC] navigateTo invoked:', { newTab, options, currentTab: activeTab, currentDocId: selectedDoctorId });
@@ -66,6 +78,8 @@ export default function App() {
       selectedDoctorId,
       viewClinicDoctorId,
       selectedPatientId,
+      viewLabId,
+      viewLabOrderId
     };
 
     // Save current state to history stack if navigating to a different view or context
@@ -73,7 +87,9 @@ export default function App() {
       currentState.tab !== newTab ||
       (options?.doctorId !== undefined && options.doctorId !== selectedDoctorId) ||
       (options?.clinicDoctorId !== undefined && options.clinicDoctorId !== viewClinicDoctorId) ||
-      (options?.patientId !== undefined && options.patientId !== selectedPatientId)
+      (options?.patientId !== undefined && options.patientId !== selectedPatientId) ||
+      (options?.labId !== undefined && options.labId !== viewLabId) ||
+      (options?.labOrderId !== undefined && options.labOrderId !== viewLabOrderId)
     ) {
       setNavHistory((prev) => [...prev, currentState]);
     }
@@ -81,10 +97,14 @@ export default function App() {
     const targetDoctorId = options?.doctorId !== undefined ? options.doctorId : selectedDoctorId;
     const targetClinicDoctorId = options?.clinicDoctorId !== undefined ? options.clinicDoctorId : viewClinicDoctorId;
     const targetPatientId = options?.patientId !== undefined ? options.patientId : selectedPatientId;
+    const targetLabId = options?.labId !== undefined ? options.labId : viewLabId;
+    const targetLabOrderId = options?.labOrderId !== undefined ? options.labOrderId : viewLabOrderId;
 
     if (options?.doctorId !== undefined) setSelectedDoctorId(options.doctorId);
     if (options?.clinicDoctorId !== undefined) setViewClinicDoctorId(options.clinicDoctorId);
     if (options?.patientId !== undefined) setSelectedPatientId(options.patientId);
+    if (options?.labId !== undefined) setViewLabId(options.labId);
+    if (options?.labOrderId !== undefined) setViewLabOrderId(options.labOrderId);
 
     setActiveTab(newTab);
 
@@ -96,7 +116,7 @@ export default function App() {
           window.history.pushState({ tab: 'clinic', doctorId: targetClinicDoctorId }, '', cleanPath);
         }
       } else if (newTab === 'booking' && targetDoctorId) {
-        const cleanPath = `/clinic/${encodeURIComponent(targetDoctorId)}?book=true`;
+        const cleanPath = `/clinic/${encodeURIComponent(targetDoctorId)}/book`;
         if (window.location.pathname + window.location.search !== cleanPath) {
           window.history.pushState({ tab: 'booking', doctorId: targetDoctorId }, '', cleanPath);
         }
@@ -104,6 +124,16 @@ export default function App() {
         const cleanPath = `/clinic/${encodeURIComponent(targetDoctorId)}?ticket=${encodeURIComponent(targetPatientId)}`;
         if (window.location.pathname + window.location.search !== cleanPath) {
           window.history.pushState({ tab: 'ticket', doctorId: targetDoctorId, patientId: targetPatientId }, '', cleanPath);
+        }
+      } else if (newTab === 'lab_public' && targetLabId) {
+        const cleanPath = `/lab/${encodeURIComponent(targetLabId)}`;
+        if (window.location.pathname !== cleanPath) {
+          window.history.pushState({ tab: 'lab_public', labId: targetLabId }, '', cleanPath);
+        }
+      } else if (newTab === 'lab_result' && targetLabId && targetLabOrderId) {
+        const cleanPath = `/lab/${encodeURIComponent(targetLabId)}/result/${encodeURIComponent(targetLabOrderId)}`;
+        if (window.location.pathname !== cleanPath) {
+          window.history.pushState({ tab: 'lab_result', labId: targetLabId, labOrderId: targetLabOrderId }, '', cleanPath);
         }
       } else if (newTab === 'admin') {
         if (window.location.pathname !== '/admin') {
@@ -137,7 +167,7 @@ export default function App() {
       if (previousState.tab === 'clinic' && previousState.viewClinicDoctorId) {
         window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.viewClinicDoctorId)}`);
       } else if (previousState.tab === 'booking' && previousState.selectedDoctorId) {
-        window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.selectedDoctorId)}?book=true`);
+        window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.selectedDoctorId)}/book`);
       } else if (previousState.tab === 'ticket' && previousState.selectedDoctorId && previousState.selectedPatientId) {
         window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.selectedDoctorId)}?ticket=${encodeURIComponent(previousState.selectedPatientId)}`);
       } else if (previousState.tab === 'admin') {
@@ -198,15 +228,44 @@ export default function App() {
       return;
     }
 
-    // Check clean route: /clinic/:docId
-    const clinicMatch = pathname.match(/^\/clinic\/([^/?#]+)/);
+    // Check clean route: /lab/:labId/result/:orderId
+    const labResultMatch = pathname.match(/^\/lab\/([^/?#]+)\/result\/([^/?#]+)/);
+    if (labResultMatch && labResultMatch[1] && labResultMatch[2]) {
+      setViewLabId(decodeURIComponent(labResultMatch[1]));
+      setViewLabOrderId(decodeURIComponent(labResultMatch[2]));
+      setActiveTab('lab_result');
+      return;
+    }
+
+    // Check clean route: /lab/:labId or /lab/:labId/order
+    const labMatch = pathname.match(/^\/lab\/([^/?#]+)(\/order)?/);
+    if (labMatch && labMatch[1]) {
+      setViewLabId(decodeURIComponent(labMatch[1]));
+      setActiveTab('lab_public');
+      return;
+    }
+
+    if (pathname === '/lab-dashboard') {
+      setActiveTab('lab_dashboard');
+      return;
+    }
+
+    // Check clean route: /clinic/:docId or /clinic/:docId/book
+    const clinicMatch = pathname.match(/^\/clinic\/([^/?#]+)(\/book)?/);
     if (clinicMatch && clinicMatch[1]) {
       const docId = decodeURIComponent(clinicMatch[1]);
+      const isDirectBookRoute = Boolean(clinicMatch[2]) || pathname.endsWith('/book');
       setSelectedDoctorId(docId);
       setViewClinicDoctorId(docId);
 
-      const isBook = params.get('book') === 'true' || params.get('book') === '1';
+      const isBook = isDirectBookRoute || params.get('book') === 'true' || params.get('book') === '1';
       const ticketParam = params.get('ticket');
+
+      if (isBook) {
+        console.log('[QR] DIRECT_BOOKING_ROUTE', { path: pathname });
+        console.log('[QR] DOCTOR_ID', docId);
+        console.log('[QR] BOOKING_PAGE_LOADED');
+      }
 
       if (ticketParam) {
         setSelectedPatientId(ticketParam);
@@ -263,6 +322,45 @@ export default function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        try {
+          await user.reload();
+        } catch (e) {
+          console.warn("Could not reload user state:", e);
+        }
+
+        if (!user.emailVerified) {
+          setCurrentDoctor(null);
+          return;
+        }
+
+        // Check if Lab profile exists first
+        const labProf = await getLabProfile(user.uid);
+        if (labProf) {
+          setCurrentDoctor({
+            uid: user.uid,
+            accountType: 'laboratory',
+            name: labProf.responsibleName,
+            specialty: "معمل تحاليل",
+            clinicName: labProf.name,
+            qrCodeId: user.uid,
+            address: labProf.address,
+            phone: labProf.phone,
+            subscriptionStatus: 'active',
+            trialEndDate: new Date().toISOString(),
+            avgConsultTime: 15,
+            workHours: { open: "08:00", close: "23:00", maxPatientsPerDay: 100, daysOfWeek: [] },
+            createdAt: labProf.createdAt
+          });
+
+          const isLabRoute = window.location.pathname.startsWith('/lab/');
+          const isClinicRoute = window.location.pathname.startsWith('/clinic/');
+          const isAdminRoute = window.location.pathname.startsWith('/admin');
+          if (!isLabRoute && !isClinicRoute && !isAdminRoute) {
+            setActiveTab('lab_dashboard');
+          }
+          return;
+        }
+
         const docProfile = await getDoctorProfile(user.uid);
         if (docProfile) {
           setCurrentDoctor(docProfile);
@@ -372,7 +470,23 @@ export default function App() {
             {/* Doctor's Private Dashboard */}
             {activeTab === 'dashboard' && (
               currentDoctor ? (
-                currentDoctor.isActive === false ? (
+                currentDoctor.accountType === 'laboratory' ? (
+                  <LabDashboard
+                    currentLab={{
+                      uid: currentDoctor.uid,
+                      name: currentDoctor.clinicName,
+                      responsibleName: currentDoctor.name,
+                      phone: currentDoctor.phone || '01000000000',
+                      address: currentDoctor.address || 'القاهرة، مصر',
+                      offersHomeCollection: true,
+                      homeCollectionFee: 100,
+                      workHours: { open: "08:00", close: "23:00" },
+                      createdAt: currentDoctor.createdAt
+                    }}
+                    onShowToast={addToast}
+                    onSignOut={handleSignOut}
+                  />
+                ) : currentDoctor.isActive === false ? (
                   <div className="max-w-xl mx-auto px-4 py-16 text-center">
                     <div className="bg-amber-50 rounded-3xl p-8 border border-amber-200 shadow-xl">
                       <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
@@ -406,7 +520,11 @@ export default function App() {
                 <AuthPage
                   onDoctorLoggedIn={(doc) => {
                     setCurrentDoctor(doc);
-                    navigateTo('dashboard');
+                    if (doc.accountType === 'laboratory') {
+                      navigateTo('lab_dashboard');
+                    } else {
+                      navigateTo('dashboard');
+                    }
                   }}
                   onShowToast={addToast}
                   onSelectPatientBookingView={() => {
@@ -414,6 +532,63 @@ export default function App() {
                   }}
                 />
               )
+            )}
+
+            {/* Laboratory SaaS Dashboard */}
+            {activeTab === 'lab_dashboard' && (
+              currentDoctor ? (
+                <LabDashboard
+                  currentLab={{
+                    uid: currentDoctor.uid,
+                    name: currentDoctor.clinicName,
+                    responsibleName: currentDoctor.name,
+                    phone: currentDoctor.phone || '01000000000',
+                    address: currentDoctor.address || 'القاهرة، مصر',
+                    offersHomeCollection: true,
+                    homeCollectionFee: 100,
+                    workHours: { open: "08:00", close: "23:00" },
+                    createdAt: currentDoctor.createdAt
+                  }}
+                  onShowToast={addToast}
+                  onSignOut={handleSignOut}
+                />
+              ) : (
+                <AuthPage
+                  onDoctorLoggedIn={(doc) => {
+                    setCurrentDoctor(doc);
+                    if (doc.accountType === 'laboratory') {
+                      navigateTo('lab_dashboard');
+                    } else {
+                      navigateTo('dashboard');
+                    }
+                  }}
+                  onShowToast={addToast}
+                  onSelectPatientBookingView={() => {
+                    navigateTo('directory');
+                  }}
+                />
+              )
+            )}
+
+            {/* Public Lab Catalog Page */}
+            {activeTab === 'lab_public' && (
+              <PublicLabPage
+                labId={viewLabId}
+                onNavigateToResult={(orderId) => {
+                  navigateTo('lab_result', { labId: viewLabId, labOrderId: orderId });
+                }}
+                onShowToast={addToast}
+              />
+            )}
+
+            {/* Patient Lab Result & Progress Tracker */}
+            {activeTab === 'lab_result' && (
+              <PatientLabResultView
+                labId={viewLabId}
+                orderId={viewLabOrderId}
+                onBackToDirectory={() => handleGoBack()}
+                onShowToast={addToast}
+              />
             )}
 
             {/* Platform Protected Admin Guard & Dashboard */}

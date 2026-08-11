@@ -1,8 +1,8 @@
 import React from 'react';
-import { Stethoscope, QrCode, CreditCard, Settings, LogOut, UserCheck, Sparkles, ExternalLink, Building2, ShieldAlert, Bell } from 'lucide-react';
+import { Stethoscope, QrCode, CreditCard, Settings, LogOut, UserCheck, Sparkles, ExternalLink, Building2, ShieldAlert, Bell, TestTube } from 'lucide-react';
 import { DoctorProfile } from '../types';
 
-export type NavTabType = 'dashboard' | 'directory' | 'clinic' | 'booking' | 'ticket' | 'subscription' | 'auth' | 'admin';
+export type NavTabType = 'dashboard' | 'directory' | 'clinic' | 'booking' | 'ticket' | 'subscription' | 'auth' | 'admin' | 'lab_dashboard' | 'lab_public' | 'lab_result';
 
 interface NavbarProps {
   currentDoctor: DoctorProfile | null;
@@ -23,6 +23,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNotificationModal,
   onSignOut
 }) => {
+  const isLabAccount = currentDoctor?.accountType === 'laboratory';
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -34,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onNavigate('directory')}
               className="flex items-center gap-2.5 text-right group focus:outline-hidden"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-sky-500/20 group-hover:scale-105 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 via-teal-500 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-sky-500/20 group-hover:scale-105 transition-transform">
                 <Stethoscope className="w-5 h-5" />
               </div>
               <div>
@@ -48,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 </div>
                 <span className="text-[10px] text-slate-500 font-medium block -mt-1">
-                  نظام حجز وتتبع العيادات
+                  المنظومة الطبية الذكية للعيادات والمختبرات
                 </span>
               </div>
             </button>
@@ -69,14 +71,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {currentDoctor && (
                 <button
-                  onClick={() => onNavigate('dashboard')}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${
-                    activeTab === 'dashboard'
+                  onClick={() => onNavigate(isLabAccount ? 'lab_dashboard' : 'dashboard')}
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 ${
+                    activeTab === 'dashboard' || activeTab === 'lab_dashboard'
                       ? 'bg-slate-900 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  لوحة تحكم عيادتي
+                  {isLabAccount ? <TestTube className="w-4 h-4 text-teal-400" /> : null}
+                  <span>{isLabAccount ? 'لوحة تحكم معملي' : 'لوحة تحكم عيادتي'}</span>
                 </button>
               )}
 
@@ -203,7 +206,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   أطباء وعيادات
                 </button>
 
-                {/* Clear Doctor Login Button (Requirement 5) */}
+                {/* Doctor/Lab Login Button */}
                 <button
                   onClick={() => onNavigate('auth')}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition shadow-sm ${
@@ -213,7 +216,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                 >
                   <UserCheck className="w-4 h-4 text-sky-400" />
-                  <span>دخول الأطباء</span>
+                  <span>دخول العيادات والمختبرات</span>
                 </button>
               </div>
             )}

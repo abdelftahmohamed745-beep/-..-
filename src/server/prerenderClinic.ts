@@ -230,7 +230,7 @@ export function generateClinicPrerenderHtml(rootDir: string, doctor: DoctorProfi
           <div style="margin-top:24px;padding:20px;background-color:#f0f9ff;border-radius:12px;border:1px solid #bae6fd;text-align:center;">
             <h2 style="font-size:18px;color:#0369a1;font-weight:bold;margin-top:0;margin-bottom:8px;">حجز دور وتتبع المواعيد المباشرة</h2>
             <p style="font-size:14px;color:#0284c7;margin-bottom:16px;">احجز دورك الآن أونلاين وتتبع دورك في الانتظار لحظة بلحظة عبر منصة دوري.</p>
-            <a href="/clinic/${escapeHtml(doctor.uid)}?book=true" style="display:inline-block;background-color:#0284c7;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">احجز دورك الآن أونلاين</a>
+            <a href="/clinic/${escapeHtml(doctor.uid)}/book" style="display:inline-block;background-color:#0284c7;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">احجز دورك الآن أونلاين</a>
           </div>
         </main>
       </div>

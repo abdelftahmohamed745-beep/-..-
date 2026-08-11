@@ -120,6 +120,76 @@
         "createdAt": { "type": "string" }
       },
       "required": ["patientName", "patientPhone", "doctorId", "appointmentDate", "appointmentTime", "appointmentStatus"]
+    },
+    "labs": {
+      "title": "labs",
+      "description": "Medical laboratory profiles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "responsibleName": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "accountType": { "type": "string" },
+        "offersHomeCollection": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "name", "phone", "address"]
+    },
+    "labCatalog": {
+      "title": "labCatalog",
+      "description": "Laboratory test catalog items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "labId": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "sampleType": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["labId", "name", "price"]
+    },
+    "labOrders": {
+      "title": "labOrders",
+      "description": "Patient lab test orders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "labId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "status": { "type": "string" },
+        "totalPrice": { "type": "number" }
+      },
+      "required": ["labId", "orderNumber", "patientName", "patientPhone", "status"]
+    },
+    "labSamples": {
+      "title": "labSamples",
+      "description": "Laboratory sample barcodes and tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sampleId": { "type": "string" },
+        "labId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["labId", "orderId", "sampleId", "status"]
+    },
+    "labResults": {
+      "title": "labResults",
+      "description": "Test result parameters and approvals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "labId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["labId", "orderId", "status"]
     }
   },
   "firestore": {
@@ -150,6 +220,26 @@
     "organizations/{organizationId}/audit_logs/{logId}": {
       "schema": "auditLogs",
       "description": "Organization membership audit trail"
+    },
+    "labs/{labId}": {
+      "schema": "labs",
+      "description": "Medical laboratories collection"
+    },
+    "labs/{labId}/catalog/{testId}": {
+      "schema": "labCatalog",
+      "description": "Laboratory test catalog"
+    },
+    "labs/{labId}/orders/{orderId}": {
+      "schema": "labOrders",
+      "description": "Laboratory patient orders"
+    },
+    "labs/{labId}/samples/{sampleId}": {
+      "schema": "labSamples",
+      "description": "Laboratory test samples"
+    },
+    "labs/{labId}/results/{resultId}": {
+      "schema": "labResults",
+      "description": "Laboratory test results"
     }
   }
 }

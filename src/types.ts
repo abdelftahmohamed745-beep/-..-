@@ -157,8 +157,11 @@ export interface ClinicServiceItem {
   price: string;
 }
 
+export type AccountType = 'doctor' | 'laboratory';
+
 export interface DoctorProfile {
   uid: string;
+  accountType?: AccountType;
   referenceCode?: string; // Unique fixed clinic code e.g. REF-A1B2C3
   name: string;
   specialty: string;
@@ -300,3 +303,187 @@ export interface ToastMessage {
   title: string;
   message?: string;
 }
+
+// ============================================================================
+// DORY LABS TYPES
+// ============================================================================
+
+export interface LabWorkHours {
+  open: string; // e.g. "08:00"
+  close: string; // e.g. "22:00"
+  workingDays: string[]; // e.g. ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
+}
+
+export interface LabProfile {
+  uid: string; // Firebase Auth User ID / Lab ID
+  accountType: 'laboratory';
+  name: string; // اسم المعمل
+  responsibleName: string; // اسم المسؤول
+  phone: string;
+  whatsappNumber?: string;
+  address: string;
+  governorate?: string; // المحافظة
+  district?: string; // المنطقة
+  logoUrl?: string;
+  description?: string;
+  services?: string[]; // قائمة الخدمات المتاحة
+  workHours: LabWorkHours;
+  offersHomeCollection: boolean;
+  homeCollectionFee?: number;
+  homeCollectionNotes?: string;
+  createdAt: string;
+  isActive?: boolean;
+}
+
+export interface LabTestCatalogItem {
+  id: string;
+  labId: string;
+  name: string; // e.g. "صورة دم كاملة (CBC)"
+  category?: string; // e.g. "كيمياء الدم", "هرمونات", "مناعة", "أمراض الدم"
+  price: number; // EGP
+  estimatedTurnaroundHours: number; // e.g. 24
+  sampleType: string; // e.g. "دم وريدي", "بول", "براز", "مسحة"
+  requiresFasting: boolean;
+  fastingHours?: number; // e.g. 8 - 12
+  patientInstructions?: string; // e.g. "الصيام من 8-12 ساعة وشرب الماء فقط"
+  description?: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type LabOrderStatus =
+  | 'NEW'
+  | 'CONFIRMED'
+  | 'SAMPLE_PENDING'
+  | 'SAMPLE_RECEIVED'
+  | 'PROCESSING'
+  | 'UNDER_REVIEW'
+  | 'READY'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export type CollectionMethod = 'IN_LAB' | 'HOME_COLLECTION';
+
+export interface LabOrder {
+  id: string; // Document ID
+  labId: string;
+  labName: string;
+  orderNumber: string; // e.g. ORD-2026-000101
+  patientName: string;
+  patientPhone: string;
+  patientAge?: number;
+  patientGender?: 'male' | 'female';
+  patientNotes?: string;
+  collectionMethod: CollectionMethod;
+  homeAddress?: string;
+  homePreferredDate?: string;
+  homePreferredTime?: string;
+  testIds: string[];
+  testNames: string[];
+  totalPrice: number;
+  paidAmount: number;
+  status: LabOrderStatus;
+  assignedStaffUid?: string;
+  assignedStaffName?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type LabSampleStatus = 'pending' | 'received' | 'processing' | 'completed';
+
+export interface LabSample {
+  id: string; // Document ID / Barcode e.g. LAB-2026-000124
+  sampleId: string; // LAB-2026-000124
+  labId: string;
+  orderId: string;
+  orderNumber: string;
+  patientName: string;
+  patientPhone: string;
+  testNames: string[];
+  sampleType: string;
+  status: LabSampleStatus;
+  collectedAt?: string;
+  receivedAt?: string;
+  createdAt: string;
+}
+
+export type ResultFlag = 'normal' | 'high' | 'low' | 'critical';
+
+export interface LabTestResultItem {
+  parameterName: string; // e.g. "Hemoglobin (Hb)"
+  value: string; // e.g. "13.5"
+  unit: string; // e.g. "g/dL"
+  referenceRange: string; // e.g. "12.0 - 16.0"
+  flag: ResultFlag;
+  notes?: string;
+}
+
+export type ResultPublishStatus = 'draft' | 'under_review' | 'approved' | 'published';
+
+export interface LabTestResult {
+  id: string; // Document ID
+  labId: string;
+  orderId: string;
+  orderNumber: string;
+  sampleId: string;
+  patientName: string;
+  patientPhone: string;
+  testName: string;
+  testId?: string;
+  items: LabTestResultItem[];
+  status: ResultPublishStatus;
+  technicianUid?: string;
+  technicianName?: string;
+  reviewerUid?: string;
+  reviewerName?: string;
+  approvedAt?: string;
+  generalNotes?: string;
+  aiNotesSummary?: string; // AI generated simple explanation for patient
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type LabRole = 'OWNER' | 'MANAGER' | 'RECEPTION' | 'TECHNICIAN' | 'REVIEWER';
+
+export interface LabStaffMember {
+  id: string;
+  labId: string;
+  uid: string;
+  displayName: string;
+  email: string;
+  phone?: string;
+  role: LabRole;
+  status: 'active' | 'disabled';
+  createdAt: string;
+}
+
+export type LabFinanceType = 'REVENUE' | 'EXPENSE';
+
+export interface LabTransaction {
+  id: string;
+  labId: string;
+  type: LabFinanceType;
+  title: string;
+  amount: number;
+  category?: string;
+  orderId?: string;
+  paymentMethod?: 'CASH' | 'CARD' | 'TRANSFER';
+  notes?: string;
+  createdBy: string;
+  createdByName?: string;
+  date: string; // YYYY-MM-DD
+  createdAt: string;
+}
+
+export interface LabAuditLog {
+  id: string;
+  labId: string;
+  actorUid: string;
+  actorName?: string;
+  action: string;
+  targetId?: string;
+  details?: string;
+  timestamp: string;
+}
+

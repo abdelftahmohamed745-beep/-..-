@@ -124,9 +124,9 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
   const hasWhatsapp = Boolean(cleanWhatsapp && cleanWhatsapp.length > 5);
 
   const handleCopyClinicLink = () => {
-    const url = `${window.location.origin}/clinic/${doctor.uid}`;
+    const url = `${window.location.origin}/clinic/${doctor.uid}/book`;
     navigator.clipboard.writeText(url);
-    onShowToast("تم نسخ رابط صفحة العيادة بنجاح", "", "success");
+    onShowToast("تم نسخ رابط حجز العيادة المباشر بنجاح", "", "success");
   };
 
   return (

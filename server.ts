@@ -30,8 +30,10 @@ async function startServer() {
 
   // OTP Email Sending Route via Nodemailer (Gmail SMTP)
   app.post("/api/send-otp", async (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+
     try {
-      const { email, code } = req.body;
+      const { email, code } = req.body || {};
       if (!email || !code) {
         return res.status(400).json({ success: false, error: "Email and OTP code are required" });
       }
@@ -48,7 +50,9 @@ async function startServer() {
       }
 
       const transporter = nodemailer.createTransport({
-        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true, // TLS
         auth: {
           user: gmailUser,
           pass: gmailAppPassword,
@@ -76,21 +80,41 @@ async function startServer() {
         </div>
       `;
 
-      await transporter.sendMail({
+      console.log(`[OTP Server Log] Initiating Gmail SMTP sendMail to target email...`);
+
+      const info = await transporter.sendMail({
         from: `"Dory Medical System" <${gmailUser}>`,
         to: email.trim(),
         subject: "كود التحقق من حسابك في Dory",
         html: htmlContent,
       });
 
-      console.log(`[OTP Server Log] Gmail SMTP sent verification code successfully to target.`);
+      console.log(`[OTP Server Log] Gmail SMTP sendMail succeeded:`, {
+        messageId: info.messageId,
+        accepted: info.accepted,
+        rejected: info.rejected,
+        response: info.response,
+      });
 
-      return res.json({ success: true, message: "تم إرسال كود التحقق بنجاح" });
+      return res.status(200).json({
+        success: true,
+        message: "تم إرسال كود التحقق بنجاح",
+        messageId: info.messageId
+      });
     } catch (error: any) {
-      console.error("[OTP Server Error] Failed to send email via Nodemailer Gmail SMTP:", error?.message || error);
+      console.error("[OTP Server Error] Failed to send email via Nodemailer Gmail SMTP:", {
+        message: error?.message,
+        code: error?.code,
+        command: error?.command,
+        response: error?.response,
+        responseCode: error?.responseCode
+      });
+
       return res.status(500).json({
         success: false,
-        error: "فشل إرسال كود التحقق عبر Gmail. يرجى التأكد من البريد الإلكتروني والإعدادات."
+        error: error?.message 
+          ? `فشل إرسال البريد عبر Gmail SMTP: ${error.message}`
+          : "فشل إرسال كود التحقق عبر Gmail. يرجى التأكد من البريد الإلكتروني والإعدادات."
       });
     }
   });

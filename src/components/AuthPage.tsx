@@ -112,9 +112,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       body: JSON.stringify({ email: targetEmail.trim(), code })
     });
 
-    const data = await resp.json();
+    let data: any = {};
+    const responseText = await resp.text();
+    if (responseText) {
+      try {
+        data = JSON.parse(responseText);
+      } catch (err) {
+        console.error("[OTP Client Error] Failed to parse JSON response from /api/send-otp:", responseText);
+        throw new Error(`استجابة غير صالحة من خادم البريد (رمز الحالة ${resp.status})`);
+      }
+    } else {
+      throw new Error(`استجابة فارغة من خادم البريد (رمز الحالة ${resp.status})`);
+    }
+
     if (!resp.ok || !data.success) {
-      throw new Error(data.error || "فشل إرسال كود التحقق عبر البريد الإلكتروني");
+      throw new Error(data.error || `فشل إرسال كود التحقق عبر البريد الإلكتروني (رمز الحالة ${resp.status})`);
     }
 
     setResendTimer(60);

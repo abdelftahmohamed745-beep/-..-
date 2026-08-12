@@ -14,7 +14,7 @@ import {
   Info,
   DollarSign,
   Image as ImageIcon,
-  Sparkles,
+  Ticket,
   Star,
   MessageSquare
 } from 'lucide-react';
@@ -262,9 +262,9 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
                     console.log('[DIAGNOSTIC] AFTER_URL', typeof window !== 'undefined' ? window.location.href : '');
                   }, 300);
                 }}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs sm:text-sm font-black shadow-lg shadow-sky-600/20 transition active:scale-95 cursor-pointer relative z-10"
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs sm:text-sm font-bold shadow-2xs transition active:scale-95 cursor-pointer relative z-10"
               >
-                <Sparkles className="w-4 h-4" />
+                <Ticket className="w-4 h-4" />
                 <span>احجز دورك الآن أونلاين</span>
               </button>
 

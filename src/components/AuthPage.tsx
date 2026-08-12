@@ -16,18 +16,26 @@ import { Stethoscope, Mail, Lock, User, Building, ArrowLeft, ShieldCheck, TestTu
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 
 interface AuthPageProps {
+  initialAccountType?: AccountType;
   onDoctorLoggedIn: (doctor: DoctorProfile) => void;
   onShowToast: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
   onSelectPatientBookingView: () => void;
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({
+  initialAccountType = 'doctor',
   onDoctorLoggedIn,
   onShowToast,
   onSelectPatientBookingView
 }) => {
   const [isRegister, setIsRegister] = useState(false);
-  const [accountType, setAccountType] = useState<AccountType>('doctor');
+  const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
+
+  useEffect(() => {
+    if (initialAccountType) {
+      setAccountType(initialAccountType);
+    }
+  }, [initialAccountType]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [doctorName, setDoctorName] = useState('');

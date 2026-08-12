@@ -9,11 +9,12 @@ import {
   ListPlus,
   Settings,
   X,
-  Sparkles,
-  ChevronLeft
+  ChevronLeft,
+  Wallet,
+  UserCheck
 } from 'lucide-react';
 
-export type LabTabType = 'overview' | 'orders' | 'samples' | 'results' | 'patients' | 'reports' | 'catalog' | 'settings';
+export type LabTabType = 'overview' | 'orders' | 'samples' | 'results' | 'patients' | 'reports' | 'catalog' | 'staff' | 'finances' | 'settings';
 
 interface LabSidebarProps {
   activeTab: LabTabType;
@@ -75,6 +76,18 @@ export const LabSidebar: React.FC<LabSidebarProps> = ({
       id: 'catalog' as LabTabType,
       label: 'الفحوصات',
       icon: ListPlus,
+      badge: 0
+    },
+    {
+      id: 'staff' as LabTabType,
+      label: 'الموظفون',
+      icon: UserCheck,
+      badge: 0
+    },
+    {
+      id: 'finances' as LabTabType,
+      label: 'الحسابات',
+      icon: Wallet,
       badge: 0
     },
     {

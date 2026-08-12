@@ -6,7 +6,6 @@ import {
   Plus,
   Edit2,
   CheckCircle2,
-  Sparkles,
   Printer,
   X,
   Search,
@@ -293,7 +292,7 @@ export const LabResultsTab: React.FC<LabResultsTabProps> = ({
               <div className="p-3 bg-teal-50/60 border border-teal-200 rounded-lg space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-bold text-teal-900">
-                    <Sparkles className="w-4 h-4 text-teal-600" />
+                    <FileText className="w-4 h-4 text-teal-700" />
                     <span>التلخيص والتقرير المبسط للمريض</span>
                   </div>
                   <button

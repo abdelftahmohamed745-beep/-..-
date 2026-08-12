@@ -11,7 +11,6 @@ import {
   Plus,
   Search,
   Filter,
-  Sparkles,
   AlertTriangle,
   Phone,
   ArrowLeftRight,
@@ -22,9 +21,11 @@ import {
   Zap,
   Star,
   MessageSquare,
-  DollarSign
+  DollarSign,
+  Monitor
 } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
+import { TVQueueDisplay } from './TVQueueDisplay';
 import { DoctorProfile, PatientRecord, PatientStatus, DoctorRating, FollowUpAppointment, ClinicMember } from '../types';
 import {
   subscribeToDoctorQueue,
@@ -86,6 +87,9 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
     }
     loadMemberInfo();
   }, [doctor.uid]);
+
+  // TV Queue Fullscreen Display state
+  const [showTVQueue, setShowTVQueue] = useState(false);
 
   // Quick follow-up modal for queue patient
   const [quickFollowUpPatient, setQuickFollowUpPatient] = useState<{ name: string; phone: string } | null>(null);
@@ -538,6 +542,16 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               />
             </div>
 
+            {/* TV Queue Display */}
+            <button
+              onClick={() => setShowTVQueue(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
+              title="شاشة الانتظار للتلفزيون (TV Queue Display)"
+            >
+              <Monitor className="w-4 h-4 text-teal-400" />
+              <span className="hidden sm:inline">شاشة TV</span>
+            </button>
+
             {/* Quick Scanner */}
             <button
               onClick={onOpenScannerModal}
@@ -882,6 +896,17 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           initialPatientName={quickFollowUpPatient.name}
           initialPatientPhone={quickFollowUpPatient.phone}
           onShowToast={onShowToast}
+        />
+      )}
+
+      {/* Fullscreen TV Queue Display Overlay */}
+      {showTVQueue && (
+        <TVQueueDisplay
+          clinicName={doctor.clinicName}
+          doctorName={doctor.name}
+          specialty={doctor.specialty}
+          patients={patients}
+          onClose={() => setShowTVQueue(false)}
         />
       )}
 

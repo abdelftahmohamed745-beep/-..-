@@ -13,7 +13,6 @@ import {
   Search,
   Filter,
   FileText,
-  Sparkles,
   Check
 } from 'lucide-react';
 import { FollowUpAppointment, FollowUpAppointmentStatus } from '../types';

@@ -23,6 +23,10 @@ export const PatientLabResultView: React.FC<PatientLabResultViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [showPDFModal, setShowPDFModal] = useState(false);
 
+  const [phoneInput, setPhoneInput] = useState('');
+  const [isVerified, setIsVerified] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+
   useEffect(() => {
     async function loadOrderData() {
       setLoading(true);
@@ -45,6 +49,27 @@ export const PatientLabResultView: React.FC<PatientLabResultViewProps> = ({
     }
     loadOrderData();
   }, [labId, orderId]);
+
+  const handleVerifyPhone = (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifyError('');
+    if (!order) return;
+
+    const inputClean = phoneInput.replace(/\D/g, '');
+    const actualClean = (order.patientPhone || '').replace(/\D/g, '');
+
+    if (inputClean.length < 4) {
+      setVerifyError('يرجى إدخال رقم الهاتف المسجل بالطلب (4 أرقام على الأقل)');
+      return;
+    }
+
+    if (actualClean.endsWith(inputClean) || inputClean.endsWith(actualClean) || actualClean === inputClean) {
+      setIsVerified(true);
+      onShowToast('تم التحقق بنجاح', 'تم تأكيد الهوية وعرض النتائج الطبية', 'success');
+    } else {
+      setVerifyError('رقم الهاتف غير مطابق للرقم المسجل لهذا الطلب.');
+    }
+  };
 
   if (loading) {
     return (
@@ -73,7 +98,57 @@ export const PatientLabResultView: React.FC<PatientLabResultViewProps> = ({
     );
   }
 
-  const publishedResults = results.filter((r) => r.status === 'published' || r.status === 'approved');
+  if (!isVerified) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12">
+        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 text-center space-y-5">
+          <div className="w-14 h-14 bg-teal-50 border border-teal-100 rounded-2xl flex items-center justify-center mx-auto text-teal-600">
+            <Phone className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className="text-lg font-black text-slate-900">التحقق من هوية المريض</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              لحماية خصوصيتك ونتائجك الطبية، يرجى إدخال رقم الهاتف المسجل في طلب التحليل رقم <span className="font-mono font-bold text-teal-700">{order.orderNumber}</span>
+            </p>
+          </div>
+
+          <form onSubmit={handleVerifyPhone} className="space-y-4">
+            <div>
+              <input
+                type="tel"
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                placeholder="أدخل رقم الهاتف المسجل (مثال: 010xxxxxxxx)"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500"
+                dir="ltr"
+              />
+              {verifyError && (
+                <p className="text-xs text-rose-600 font-bold mt-2">{verifyError}</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl transition shadow-sm"
+            >
+              عرض التقرير الطبي
+            </button>
+          </form>
+
+          {onBackToDirectory && (
+            <button
+              onClick={onBackToDirectory}
+              className="text-xs text-slate-400 hover:text-slate-600 font-bold mt-2"
+            >
+              العودة للرئيسية
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const publishedResults = results.filter((r) => r.status === 'published');
 
   // Status Stepper Index
   const statusSteps = [

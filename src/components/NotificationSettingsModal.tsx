@@ -6,7 +6,6 @@ import {
   AlertCircle,
   X,
   Clock,
-  Sparkles,
   Smartphone,
   Inbox
 } from 'lucide-react';
@@ -172,9 +171,9 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                 <button
                   onClick={handleEnablePush}
                   disabled={loading}
-                  className="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
+                  className="w-full py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-2xs cursor-pointer"
                 >
-                  <Sparkles className="w-4 h-4" />
+                  <Bell className="w-4 h-4" />
                   <span>تفعيل إشعارات قرب الدور الآن</span>
                 </button>
               )}

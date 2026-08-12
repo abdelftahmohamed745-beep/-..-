@@ -64,6 +64,7 @@ function DoctorDashboardRedirect({ onRedirect }: { onRedirect: () => void }) {
 export default function App() {
   const [currentDoctor, setCurrentDoctor] = useState<DoctorProfile | null>(null);
   const [activeTab, setActiveTab] = useState<NavTabType>('directory');
+  const [authInitialAccountType, setAuthInitialAccountType] = useState<'doctor' | 'laboratory'>('doctor');
   
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [viewClinicDoctorId, setViewClinicDoctorId] = useState<string>('');
@@ -478,6 +479,10 @@ export default function App() {
                 onBookTurn={(docId) => {
                   navigateTo('booking', { doctorId: docId });
                 }}
+                onNavigateAuth={(type) => {
+                  if (type) setAuthInitialAccountType(type);
+                  navigateTo('auth');
+                }}
                 onShowToast={addToast}
               />
             )}
@@ -531,6 +536,7 @@ export default function App() {
                 )
               ) : (
                 <AuthPage
+                  initialAccountType={authInitialAccountType}
                   onDoctorLoggedIn={(doc) => {
                     setCurrentDoctor(doc);
                     if (doc.accountType === 'laboratory') {
@@ -572,6 +578,7 @@ export default function App() {
                 )
               ) : (
                 <AuthPage
+                  initialAccountType={authInitialAccountType}
                   onDoctorLoggedIn={(doc) => {
                     setCurrentDoctor(doc);
                     if (doc.accountType === 'laboratory') {
@@ -651,9 +658,14 @@ export default function App() {
             {/* Doctor Login & Signup Auth View */}
             {activeTab === 'auth' && (
               <AuthPage
+                initialAccountType={authInitialAccountType}
                 onDoctorLoggedIn={(doc) => {
                   setCurrentDoctor(doc);
-                  navigateTo('dashboard');
+                  if (doc.accountType === 'laboratory') {
+                    navigateTo('lab_dashboard');
+                  } else {
+                    navigateTo('dashboard');
+                  }
                 }}
                 onShowToast={addToast}
                 onSelectPatientBookingView={() => {

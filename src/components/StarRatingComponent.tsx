@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, CheckCircle, Send, MessageSquare, Sparkles } from 'lucide-react';
+import { Star, CheckCircle, Send, MessageSquare } from 'lucide-react';
 import { DoctorRating } from '../types';
 import { addDoctorRating, checkTicketRated } from '../services/firebaseService';
 
@@ -135,7 +135,7 @@ export const StarRatingComponent: React.FC<StarRatingComponentProps> = ({
   return (
     <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-lg text-center space-y-4 relative overflow-hidden">
       <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-full text-xs font-bold border border-amber-200">
-        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+        <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
         <span>تقييم تجربة الكشف الطبي</span>
       </div>
 

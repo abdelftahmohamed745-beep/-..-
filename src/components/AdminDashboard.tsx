@@ -19,7 +19,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Sparkles,
   Zap,
   Filter
 } from 'lucide-react';

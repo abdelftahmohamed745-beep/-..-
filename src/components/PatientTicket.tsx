@@ -10,7 +10,7 @@ import {
   Share2,
   X,
   Stethoscope,
-  Sparkles,
+  Bell,
   Phone,
   QrCode,
   AlertTriangle,
@@ -192,7 +192,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
           animate={{ y: 0, opacity: 1 }}
           className="bg-amber-50 text-amber-900 border border-amber-300 p-3.5 rounded-2xl mb-4 text-xs font-bold text-center flex items-center justify-center gap-2 shadow-xs"
         >
-          <Sparkles className="w-4 h-4 text-amber-600" />
+          <Bell className="w-4 h-4 text-amber-600 animate-bounce" />
           <span>اقترب دورك! يرجى التواجد في صالة الانتظار بالعيادة</span>
         </motion.div>
       )}

@@ -18,6 +18,8 @@ import { LabResultsTab } from './LabResultsTab';
 import { LabPatientsTab } from './LabPatientsTab';
 import { LabReportsTab } from './LabReportsTab';
 import { LabCatalogTab } from './LabCatalogTab';
+import { LabStaffTab } from './LabStaffTab';
+import { LabFinancesTab } from './LabFinancesTab';
 import { LabSettingsTab } from './LabSettingsTab';
 
 import { LabOrderModal } from './LabOrderModal';
@@ -215,6 +217,21 @@ export const LabDashboard: React.FC<LabDashboardProps> = ({
                     setTestsLoaded(false);
                     getLabTests(lab.uid).then((t) => { setTests(t); setTestsLoaded(true); });
                   }}
+                  onShowToast={onShowToast}
+                />
+              )}
+
+              {activeTab === 'staff' && (
+                <LabStaffTab
+                  labId={lab.uid}
+                  onShowToast={onShowToast}
+                />
+              )}
+
+              {activeTab === 'finances' && (
+                <LabFinancesTab
+                  labId={lab.uid}
+                  orders={orders}
                   onShowToast={onShowToast}
                 />
               )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, Phone, FileText, Bell, AlertCircle, X, Check, Sparkles } from 'lucide-react';
+import { Calendar, Clock, User, Phone, FileText, Bell, AlertCircle, X, Check } from 'lucide-react';
 import { FollowUpAppointment, FollowUpReminderSettings } from '../types';
 import { createFollowUpAppointment, updateFollowUpAppointment, isDateTimeInPast } from '../services/firebaseService';
 
@@ -278,7 +278,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           {/* Reason for Follow Up */}
           <div>
             <label className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+              <FileText className="w-3.5 h-3.5 text-teal-700" />
               <span>سبب إعادة الكشف (اختياري)</span>
             </label>
             <input

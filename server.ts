@@ -29,6 +29,28 @@ async function startServer() {
     });
   });
 
+  // In-Memory Rate Limiting for OTP Endpoint
+  interface OtpRateLimitEntry {
+    count: number;
+    resetAt: number;
+  }
+  const otpIpRateMap = new Map<string, OtpRateLimitEntry>();
+  const otpEmailRateMap = new Map<string, OtpRateLimitEntry>();
+
+  function isOtpRateLimited(map: Map<string, OtpRateLimitEntry>, key: string, maxRequests: number, windowMs: number): boolean {
+    const now = Date.now();
+    const entry = map.get(key);
+    if (!entry || now > entry.resetAt) {
+      map.set(key, { count: 1, resetAt: now + windowMs });
+      return false;
+    }
+    if (entry.count >= maxRequests) {
+      return true;
+    }
+    entry.count += 1;
+    return false;
+  }
+
   // OTP Email Sending Route via Nodemailer (Gmail SMTP)
   app.post("/api/send-otp", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
@@ -37,6 +59,25 @@ async function startServer() {
       const { email, code } = req.body || {};
       if (!email || !code) {
         return res.status(400).json({ success: false, error: "Email and OTP code are required" });
+      }
+
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown_ip";
+      const normalizedEmail = String(email).trim().toLowerCase();
+
+      // Per-IP Rate Limit: max 5 OTP requests per 5 minutes
+      if (isOtpRateLimited(otpIpRateMap, clientIp, 5, 5 * 60 * 1000)) {
+        return res.status(429).json({
+          success: false,
+          error: "تم تجاوز حد محاولات إرسال كود التحقق من هذا الجهاز. يرجى الانتظار 5 دقائق والمحاولة مجدداً."
+        });
+      }
+
+      // Per-Email Rate Limit: max 3 OTP requests per 5 minutes
+      if (isOtpRateLimited(otpEmailRateMap, normalizedEmail, 3, 5 * 60 * 1000)) {
+        return res.status(429).json({
+          success: false,
+          error: "تم تجاوز حد الطلبات المسموح بها لهذا البريد الإلكتروني. يرجى الانتظار 5 دقائق والمحاولة مجدداً."
+        });
       }
 
       const gmailUser = process.env.GMAIL_USER;

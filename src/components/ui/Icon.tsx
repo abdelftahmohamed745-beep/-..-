@@ -202,9 +202,9 @@ export const DoryAIIcon: React.FC<{ size?: IconSize; className?: string }> = ({
   className = '',
 }) => {
   return (
-    <span className={`inline-flex items-center justify-center rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-700 border border-sky-200/70 shadow-2xs ${className}`}>
-      <LucideIcons.Sparkles className="w-3 h-3 ml-1 text-sky-600 shrink-0" strokeWidth={1.75} />
-      <span>AI</span>
+    <span className={`inline-flex items-center justify-center rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-bold text-teal-800 border border-teal-200/70 ${className}`}>
+      <LucideIcons.Activity className="w-3 h-3 ml-1 text-teal-700 shrink-0" strokeWidth={1.75} />
+      <span>ذكاء طبي</span>
     </span>
   );
 };

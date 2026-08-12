@@ -10,7 +10,6 @@ import {
   Bell,
   RefreshCw,
   FileText,
-  Sparkles,
   ChevronLeft,
   Info,
   Smartphone,
@@ -277,7 +276,7 @@ export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
 
                   {app.reason && (
                     <div className="sm:col-span-2 text-slate-700 font-medium pt-1 border-t border-slate-100 flex items-start gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      <FileText className="w-3.5 h-3.5 text-teal-700 shrink-0 mt-0.5" />
                       <span><strong>سبب إعادة الكشف:</strong> {app.reason}</span>
                     </div>
                   )}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, ShieldCheck, Sparkles, Clock, AlertTriangle, MessageSquare, ArrowRight, Info, Copy, CheckCircle2 } from 'lucide-react';
+import { Check, ShieldCheck, Clock, AlertTriangle, MessageSquare, ArrowRight, Info, Copy, CheckCircle2 } from 'lucide-react';
 import { DoctorProfile } from '../types';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 import { generateReferenceCode, OFFICIAL_SUBSCRIPTION_PRICES } from '../services/firebaseService';
@@ -50,8 +50,8 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
 
       {/* Header Banner */}
       <div className="text-center max-w-2xl mx-auto mb-10">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 text-sky-700 font-bold text-xs mb-3 border border-sky-200/60">
-          <Sparkles className="w-4 h-4 text-sky-600" />
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 font-bold text-xs mb-3 border border-teal-200">
+          <ShieldCheck className="w-4 h-4 text-teal-700" />
           <span>اشتراكات عيادات دوري الرسمية</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-['Tajawal',sans-serif]">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Stethoscope, Building, Phone, Clock, Users, ArrowRight, Sparkles, AlertCircle, Ticket, CheckCircle2, Bell, Lock } from 'lucide-react';
+import { Stethoscope, Building, Phone, Clock, Users, ArrowRight, AlertCircle, Ticket, CheckCircle2, Bell, Lock } from 'lucide-react';
 import { DoctorProfile, PatientRecord, NotificationTimingPreference } from '../types';
 import { bookPatient, getDoctorProfile, checkActiveBooking, getTodayDateString } from '../services/firebaseService';
 
@@ -265,9 +265,9 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-4 bg-gradient-to-r from-sky-600 to-teal-500 hover:from-sky-700 hover:to-teal-600 text-white font-extrabold text-sm sm:text-base rounded-2xl transition shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-teal-800 hover:bg-teal-900 active:scale-[0.98] text-white font-bold text-sm rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                <Sparkles className="w-5 h-5" />
+                <Ticket className="w-4 h-4" />
                 <span>{isSubmitting ? 'جاري إشعار العيادة وتحديد الدور...' : 'تأكيد الحجز والحصول على التذكرة'}</span>
               </button>
             </div>

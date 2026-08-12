@@ -195,7 +195,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             payload.labName || labName.trim() || "معمل التحاليل الطبية",
             payload.responsibleName || responsibleName.trim() || "مدير المعمل",
             payload.phone || phone.trim() || "01000000000",
-            payload.address || address.trim() || "القاهرة، مصر"
+            payload.address || address.trim() || "القاهرة، مصر",
+            user.email || verificationEmail || email.trim()
           );
         }
         setVerifyingLoading(false);
@@ -387,7 +388,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             labName.trim() || "معمل التحاليل الطبية",
             responsibleName.trim() || "مدير المعمل",
             phone.trim() || "01000000000",
-            address.trim() || "القاهرة، مصر"
+            address.trim() || "القاهرة، مصر",
+            user.email || email.trim()
           );
           setLoading(false);
           onShowToast("أهلاً بعودتك!", `تم تفعيل حساب المعمل ${newLab.name}`, "success");

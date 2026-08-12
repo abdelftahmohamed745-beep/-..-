@@ -151,23 +151,39 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 {/* Patient View Preview Button */}
                 <button
-                  onClick={() => onNavigate('booking')}
+                  onClick={() => {
+                    if (currentDoctor?.accountType === 'laboratory') {
+                      onNavigate('lab_public');
+                    } else {
+                      onNavigate('booking');
+                    }
+                  }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition ${
-                    activeTab === 'booking'
+                    activeTab === 'booking' || activeTab === 'lab_public'
                       ? 'bg-slate-900 text-white'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
-                  title="معاينة صفحة حجز المريض كأنك قمت بمسح QR Code"
+                  title={
+                    currentDoctor?.accountType === 'laboratory'
+                      ? "معاينة صفحة المعمل العامة كأنك قمت بمسح QR Code"
+                      : "معاينة صفحة حجز المريض كأنك قمت بمسح QR Code"
+                  }
                 >
                   <ExternalLink className="w-4 h-4 text-sky-500" />
-                  <span className="hidden sm:inline">معاينة صفحة الحجز</span>
+                  <span className="hidden sm:inline">
+                    {currentDoctor?.accountType === 'laboratory' ? "معاينة صفحة المعمل" : "معاينة صفحة الحجز"}
+                  </span>
                 </button>
 
                 {/* QR Code Action */}
                 <button
                   onClick={onOpenQRModal}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition"
-                  title="عرض وطباعة QR Code العيادة"
+                  title={
+                    currentDoctor?.accountType === 'laboratory'
+                      ? "عرض وطباعة QR Code المعمل"
+                      : "عرض وطباعة QR Code العيادة"
+                  }
                 >
                   <QrCode className="w-4 h-4" />
                   <span className="hidden sm:inline">رمز QR</span>

@@ -21,7 +21,10 @@ export const QRModal: React.FC<QRModalProps> = ({
 
   if (!isOpen) return null;
 
-  const bookingUrl = `${window.location.origin}/clinic/${doctor.uid}/book`;
+  const isLab = doctor.accountType === 'laboratory';
+  const bookingUrl = isLab
+    ? `${window.location.origin}/lab/${doctor.uid}`
+    : `${window.location.origin}/clinic/${doctor.uid}/book`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(bookingUrl);
@@ -54,7 +57,9 @@ export const QRModal: React.FC<QRModalProps> = ({
         const pngUrl = canvas.toDataURL('image/png');
         const downloadLink = document.createElement('a');
         downloadLink.href = pngUrl;
-        downloadLink.download = `QR-Dawry-${doctor.name.replace(/\s+/g, '-')}.png`;
+        downloadLink.download = isLab
+          ? `QR-Dawry-Lab-${doctor.clinicName.replace(/\s+/g, '-')}.png`
+          : `QR-Dawry-${doctor.name.replace(/\s+/g, '-')}.png`;
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
@@ -77,29 +82,39 @@ export const QRModal: React.FC<QRModalProps> = ({
         </button>
 
         <div className="flex justify-center mb-3">
-          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+            isLab ? 'bg-teal-50 text-teal-700' : 'bg-sky-50 text-sky-600'
+          }`}>
             <QrCode className="w-6 h-6" />
           </div>
         </div>
 
         <h3 className="text-xl font-bold text-slate-900 font-['Tajawal',sans-serif]">
-          رمز QR الخاص بالعيادة
+          {isLab ? 'رمز QR الخاص بالمختبر' : 'رمز QR الخاص بالعيادة'}
         </h3>
         <p className="text-xs text-slate-500 mt-1">
-          اطبع هذا الرمز وضعه في صالة الانتظار ليتمكن المرضى من مسحه وحجز دورهم فورًا
+          {isLab
+            ? 'اطبع هذا الرمز وضعه في المعمل ليتمكن المرضى من مسحه واستعراض دليل الفحوصات والطلب فورًا'
+            : 'اطبع هذا الرمز وضعه في صالة الانتظار ليتمكن المرضى من مسحه وحجز دورهم فورًا'}
         </p>
 
         {/* Printable Poster Container */}
-        <div className="mt-6 p-6 bg-gradient-to-b from-slate-50 to-sky-50/50 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col items-center" id="printable-qr-poster">
+        <div className={`mt-6 p-6 rounded-2xl border shadow-xs flex flex-col items-center ${
+          isLab
+            ? 'bg-gradient-to-b from-slate-50 to-teal-50/50 border-teal-200/80'
+            : 'bg-gradient-to-b from-slate-50 to-sky-50/50 border-slate-200/80'
+        }`} id="printable-qr-poster">
           
-          <div className="text-xs font-bold text-sky-600 uppercase tracking-widest mb-1">
-            نظام دوري لحجز الأدوار
+          <div className={`text-xs font-bold uppercase tracking-widest mb-1 ${
+            isLab ? 'text-teal-700' : 'text-sky-600'
+          }`}>
+            {isLab ? 'نظام دوري للمختبرات الطبية' : 'نظام دوري لحجز الأدوار'}
           </div>
           <div className="font-extrabold text-lg text-slate-900 font-['Tajawal',sans-serif]">
             {doctor.clinicName}
           </div>
           <div className="text-xs font-semibold text-slate-600 mb-4">
-            {doctor.name} - {doctor.specialty}
+            {isLab ? `${doctor.name} - معمل تحاليل طبية` : `${doctor.name} - ${doctor.specialty}`}
           </div>
 
           {/* QR Code Graphic */}
@@ -113,8 +128,8 @@ export const QRModal: React.FC<QRModalProps> = ({
           </div>
 
           <div className="mt-4 text-xs font-bold text-slate-800 bg-white px-4 py-1.5 rounded-full border border-slate-200 shadow-2xs flex items-center gap-1.5 justify-center">
-            <Smartphone className="w-4 h-4 text-sky-600" />
-            <span>امسح الرمز بموبايلك لحجز دورك مباشرة</span>
+            <Smartphone className={`w-4 h-4 ${isLab ? 'text-teal-700' : 'text-sky-600'}`} />
+            <span>{isLab ? 'امسح الرمز بموبايلك للاطلاع على الفحوصات والطلب' : 'امسح الرمز بموبايلك لحجز دورك مباشرة'}</span>
           </div>
         </div>
 

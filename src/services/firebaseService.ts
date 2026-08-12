@@ -37,7 +37,9 @@ import {
   ClinicExpense,
   PaymentStatus,
   PaymentMethod,
-  ExpenseCategory
+  ExpenseCategory,
+  LabProfile,
+  LabAdminView
 } from "../types";
 import { hasPermission } from "../utils/permissions";
 import {
@@ -185,6 +187,76 @@ export async function getAllDoctorsAdmin(): Promise<DoctorProfile[]> {
 export async function toggleDoctorStatus(doctorId: string, isActive: boolean): Promise<void> {
   const docRef = doc(db, "doctors", doctorId);
   await updateDoc(docRef, { isActive });
+}
+
+// Fetch all laboratories for Platform Admin view
+export async function getAllLabsAdmin(): Promise<LabAdminView[]> {
+  try {
+    const querySnap = await getDocs(collection(db, "labs"));
+    const labs: LabAdminView[] = [];
+
+    const labPromises = querySnap.docs.map(async (docSnap) => {
+      if (!docSnap.exists()) return null;
+      const data = docSnap.data() as LabProfile;
+      data.uid = docSnap.id;
+      let staffCount = 0;
+      let orderCount = 0;
+      let email = data.email || "";
+
+      try {
+        const [staffSnap, orderSnap] = await Promise.all([
+          getDocs(collection(db, "labs", docSnap.id, "staff")),
+          getDocs(collection(db, "labs", docSnap.id, "orders"))
+        ]);
+        staffCount = staffSnap.size;
+        orderCount = orderSnap.size;
+
+        if (!email) {
+          staffSnap.forEach((sDoc) => {
+            const sData = sDoc.data();
+            if (sData.email && (!email || sData.role === 'OWNER')) {
+              email = sData.email;
+            }
+          });
+        }
+
+        if (!email) {
+          const vSnap = await getDoc(doc(db, "email_verifications", docSnap.id));
+          if (vSnap.exists() && vSnap.data()?.email) {
+            email = vSnap.data().email;
+          }
+        }
+      } catch (err) {
+        console.warn(`Could not load subcollections for lab ${docSnap.id}:`, err);
+      }
+
+      const labView: LabAdminView = {
+        ...data,
+        email,
+        staffCount,
+        orderCount
+      };
+      return labView;
+    });
+
+    const results = await Promise.all(labPromises);
+    results.forEach((res) => {
+      if (res) labs.push(res);
+    });
+    return labs;
+  } catch (error) {
+    console.error("Error fetching admin labs list:", error);
+    return [];
+  }
+}
+
+// Admin action: Toggle Laboratory account active/deactivated status
+export async function toggleLabStatusAdmin(labId: string, isActive: boolean): Promise<void> {
+  const docRef = doc(db, "labs", labId);
+  await updateDoc(docRef, {
+    isActive,
+    updatedAt: new Date().toISOString()
+  });
 }
 
 // Admin action: Activate or Extend Subscription (Server-side validation & audit log)

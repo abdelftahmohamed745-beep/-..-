@@ -321,6 +321,7 @@ export interface LabProfile {
   responsibleName: string; // اسم المسؤول
   phone: string;
   whatsappNumber?: string;
+  email?: string;
   address: string;
   governorate?: string; // المحافظة
   district?: string; // المنطقة
@@ -333,6 +334,11 @@ export interface LabProfile {
   homeCollectionNotes?: string;
   createdAt: string;
   isActive?: boolean;
+}
+
+export interface LabAdminView extends LabProfile {
+  staffCount?: number;
+  orderCount?: number;
 }
 
 export interface LabTestCatalogItem {

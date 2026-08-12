@@ -428,12 +428,16 @@ export default function App() {
         activeTab={activeTab}
         onNavigate={(tab) => {
           if (tab === 'booking') {
-            const docId = currentDoctor?.uid || selectedDoctorId;
-            const lastTicket = docId ? localStorage.getItem(`dawry_ticket_${docId}`) : null;
-            if (lastTicket && selectedPatientId) {
-              navigateTo('ticket', { doctorId: docId });
+            if (currentDoctor?.accountType === 'laboratory') {
+              navigateTo('lab_public', { labId: currentDoctor.uid });
             } else {
-              navigateTo('booking', { doctorId: docId });
+              const docId = currentDoctor?.uid || selectedDoctorId;
+              const lastTicket = docId ? localStorage.getItem(`dawry_ticket_${docId}`) : null;
+              if (lastTicket && selectedPatientId) {
+                navigateTo('ticket', { doctorId: docId });
+              } else {
+                navigateTo('booking', { doctorId: docId });
+              }
             }
           } else {
             navigateTo(tab);
@@ -720,7 +724,7 @@ export default function App() {
             isOpen={isQRModalOpen}
             onClose={() => setIsQRModalOpen(false)}
             doctor={currentDoctor}
-            onCopyLink={() => addToast("تم نسخ رابط حجز العيادة بنجاح", "", "success")}
+            onCopyLink={() => addToast(currentDoctor.accountType === 'laboratory' ? "تم نسخ رابط المعمل بنجاح" : "تم نسخ رابط حجز العيادة بنجاح", "", "success")}
           />
 
           <QRScannerModal

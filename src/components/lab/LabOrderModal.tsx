@@ -52,16 +52,16 @@ export const LabOrderModal: React.FC<LabOrderModalProps> = ({
     try {
       const order = await createLabOrder({
         labId: lab.uid,
-        labName: lab.name,
+        labName: lab.name || "المعمل الطبي",
         patientName: patientName.trim(),
         patientPhone: patientPhone.trim(),
-        patientAge: typeof patientAge === 'number' ? patientAge : undefined,
+        patientAge: typeof patientAge === 'number' && !isNaN(patientAge) ? patientAge : 0,
         patientGender,
-        patientNotes: patientNotes.trim() || undefined,
+        patientNotes: patientNotes.trim() || "",
         collectionMethod,
-        homeAddress: collectionMethod === 'HOME_COLLECTION' ? homeAddress.trim() : undefined,
-        homePreferredDate: collectionMethod === 'HOME_COLLECTION' ? homePreferredDate : undefined,
-        homePreferredTime: collectionMethod === 'HOME_COLLECTION' ? homePreferredTime : undefined,
+        homeAddress: collectionMethod === 'HOME_COLLECTION' ? homeAddress.trim() : "",
+        homePreferredDate: collectionMethod === 'HOME_COLLECTION' ? homePreferredDate : "",
+        homePreferredTime: collectionMethod === 'HOME_COLLECTION' ? homePreferredTime : "",
         testIds: selectedTests.map((t) => t.id),
         testNames: selectedTests.map((t) => t.name),
         totalPrice: grandTotal
@@ -73,8 +73,15 @@ export const LabOrderModal: React.FC<LabOrderModalProps> = ({
     } catch (err: unknown) {
       console.error("Lab order error:", err);
       setLoading(false);
-      const errMsg = err instanceof Error ? err.message : "فشل إرسال الطلب";
-      onShowToast("خطأ أثناء إنشاء الطلب", errMsg, "error");
+      let userFriendlyMsg = "حدث خطأ غير متوقع أثناء إنشاء الطلب. يرجى التأكد من البيانات والمحاولة مرة أخرى.";
+      if (err instanceof Error) {
+        if (err.message.includes('permission') || err.message.includes('PERMISSION_DENIED')) {
+          userFriendlyMsg = "عذراً، لا تملك الصلاحيات الكافية لتنفيذ هذا الطلب.";
+        } else if (err.message.includes('network') || err.message.includes('offline')) {
+          userFriendlyMsg = "تعذر الاتصال بالشبكة. يرجى التحقق من اتصال الإنترنت وإعادة المحاولة.";
+        }
+      }
+      onShowToast("خطأ أثناء إنشاء الطلب", userFriendlyMsg, "error");
     }
   };
 
@@ -225,6 +232,17 @@ export const LabOrderModal: React.FC<LabOrderModalProps> = ({
                   أنثى
                 </button>
               </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-bold text-slate-700 mb-1">ملاحظات المريض أو التشخيص (اختياري)</label>
+              <textarea
+                value={patientNotes}
+                onChange={(e) => setPatientNotes(e.target.value)}
+                placeholder="أية ملاحظات خاصة بالفحص أو الحالة الصحية..."
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+              />
             </div>
           </div>
 

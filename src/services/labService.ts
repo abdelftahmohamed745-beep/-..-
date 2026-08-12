@@ -33,6 +33,35 @@ import {
 } from "../types";
 import { normalizePhoneNumber } from "./firebaseService";
 
+function isPlainObject(value: any): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === null || proto === Object.prototype;
+}
+
+/**
+ * Recursively strips `undefined` fields from plain objects and arrays before writing to Firestore.
+ * Preserves Firebase special types (Timestamp, FieldValue/serverTimestamp, DocumentReference, GeoPoint, Date, etc.) without mutating them.
+ */
+export function sanitizeFirestoreData<T extends Record<string, any>>(obj: T): Record<string, any> {
+  if (!isPlainObject(obj)) return obj;
+  const sanitized: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      continue; // Skip undefined fields completely so Firestore doesn't throw
+    } else if (Array.isArray(value)) {
+      sanitized[key] = value.map((item) =>
+        isPlainObject(item) ? sanitizeFirestoreData(item) : item
+      );
+    } else if (isPlainObject(value)) {
+      sanitized[key] = sanitizeFirestoreData(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 // Default standard tests seed for new laboratories
 export const DEFAULT_LAB_TESTS_SEED: Omit<LabTestCatalogItem, 'id' | 'labId' | 'createdAt'>[] = [
   {
@@ -159,7 +188,8 @@ export async function createLabProfile(
   name: string,
   responsibleName: string,
   phone: string,
-  address: string
+  address: string,
+  email?: string
 ): Promise<LabProfile> {
   const normalizedPhone = normalizePhoneNumber(phone);
   const now = new Date().toISOString();
@@ -171,6 +201,7 @@ export async function createLabProfile(
     responsibleName: responsibleName || "مدير المعمل",
     phone: normalizedPhone,
     whatsappNumber: normalizedPhone,
+    email: email ? email.trim().toLowerCase() : "",
     address: address || "القاهرة، مصر",
     governorate: "القاهرة",
     district: "وسط البلد",
@@ -189,7 +220,7 @@ export async function createLabProfile(
   };
 
   // 1. Instantly save main Lab profile document
-  await setDoc(doc(db, "labs", uid), newLab, { merge: true });
+  await setDoc(doc(db, "labs", uid), sanitizeFirestoreData(newLab), { merge: true });
 
   // 2. Seed default test catalog for this lab in background non-blocking task
   seedDefaultCatalogIfEmpty(uid).catch((err) => {
@@ -218,10 +249,10 @@ export async function updateLabProfile(
 ): Promise<void> {
   if (!labId) return;
   const ref = doc(db, "labs", labId);
-  await updateDoc(ref, {
+  await updateDoc(ref, sanitizeFirestoreData({
     ...updates,
     updatedAt: new Date().toISOString()
-  });
+  }));
 }
 
 export async function getAllLabs(): Promise<LabProfile[]> {
@@ -259,7 +290,7 @@ export async function seedDefaultCatalogIfEmpty(labId: string): Promise<void> {
         labId,
         createdAt: nowIso
       };
-      batch.set(ref, newTestItem);
+      batch.set(ref, sanitizeFirestoreData(newTestItem));
     }
 
     await batch.commit();
@@ -298,7 +329,7 @@ export async function addLabTest(
     labId,
     createdAt: new Date().toISOString()
   };
-  await setDoc(ref, item);
+  await setDoc(ref, sanitizeFirestoreData(item));
   return item;
 }
 
@@ -308,10 +339,10 @@ export async function updateLabTest(
   updates: Partial<LabTestCatalogItem>
 ): Promise<void> {
   const ref = doc(db, "labs", labId, "catalog", testId);
-  await updateDoc(ref, {
+  await updateDoc(ref, sanitizeFirestoreData({
     ...updates,
     updatedAt: new Date().toISOString()
-  });
+  }));
 }
 
 export async function deleteLabTest(labId: string, testId: string): Promise<void> {
@@ -351,35 +382,47 @@ export async function createLabOrder(orderData: {
   totalPrice: number;
   paidAmount?: number;
 }): Promise<LabOrder> {
-  const normalizedPhone = normalizePhoneNumber(orderData.patientPhone);
+  const normalizedPhone = normalizePhoneNumber(orderData.patientPhone || "");
   const ref = doc(collection(db, "labs", orderData.labId, "orders"));
   const orderNum = generateOrderNumber();
   const now = new Date().toISOString();
 
+  // Clean and normalize all inputs before creating the order object
+  const cleanLabName = (orderData.labName || "").trim() || "المعمل الطبي";
+  const cleanPatientName = (orderData.patientName || "").trim() || "مريض بدون اسم";
+  const cleanPatientNotes = (orderData.patientNotes || "").trim();
+  const cleanHomeAddress = (orderData.homeAddress || "").trim();
+  const cleanHomeDate = (orderData.homePreferredDate || "").trim();
+  const cleanHomeTime = (orderData.homePreferredTime || "").trim();
+  const cleanTestIds = Array.isArray(orderData.testIds) ? orderData.testIds : [];
+  const cleanTestNames = Array.isArray(orderData.testNames) ? orderData.testNames : [];
+  const cleanTotalPrice = typeof orderData.totalPrice === 'number' && !isNaN(orderData.totalPrice) ? orderData.totalPrice : 0;
+  const cleanPaidAmount = typeof orderData.paidAmount === 'number' && !isNaN(orderData.paidAmount) ? orderData.paidAmount : 0;
+
   const newOrder: LabOrder = {
     id: ref.id,
-    labId: orderData.labId,
-    labName: orderData.labName,
+    labId: orderData.labId || "",
+    labName: cleanLabName,
     orderNumber: orderNum,
-    patientName: orderData.patientName.trim(),
+    patientName: cleanPatientName,
     patientPhone: normalizedPhone,
-    patientAge: orderData.patientAge,
-    patientGender: orderData.patientGender,
-    patientNotes: orderData.patientNotes,
-    collectionMethod: orderData.collectionMethod,
-    homeAddress: orderData.homeAddress,
-    homePreferredDate: orderData.homePreferredDate,
-    homePreferredTime: orderData.homePreferredTime,
-    testIds: orderData.testIds,
-    testNames: orderData.testNames,
-    totalPrice: orderData.totalPrice,
-    paidAmount: orderData.paidAmount || 0,
+    patientAge: typeof orderData.patientAge === 'number' && !isNaN(orderData.patientAge) ? orderData.patientAge : 0,
+    patientGender: orderData.patientGender || 'male',
+    patientNotes: cleanPatientNotes,
+    collectionMethod: orderData.collectionMethod || 'IN_LAB',
+    homeAddress: cleanHomeAddress,
+    homePreferredDate: cleanHomeDate,
+    homePreferredTime: cleanHomeTime,
+    testIds: cleanTestIds,
+    testNames: cleanTestNames,
+    totalPrice: cleanTotalPrice,
+    paidAmount: cleanPaidAmount,
     status: 'NEW',
     createdAt: now,
     updatedAt: now
   };
 
-  await setDoc(ref, newOrder);
+  await setDoc(ref, sanitizeFirestoreData(newOrder));
 
   // Auto-generate initial sample document for barcode scanning & tracking
   const sampleRef = doc(collection(db, "labs", orderData.labId, "samples"));
@@ -387,17 +430,17 @@ export async function createLabOrder(orderData: {
   const sampleItem: LabSample = {
     id: sampleRef.id,
     sampleId: sampleBarcode,
-    labId: orderData.labId,
+    labId: orderData.labId || "",
     orderId: ref.id,
     orderNumber: orderNum,
-    patientName: orderData.patientName,
+    patientName: cleanPatientName,
     patientPhone: normalizedPhone,
-    testNames: orderData.testNames,
+    testNames: cleanTestNames,
     sampleType: "عينات متعددة",
     status: "pending",
     createdAt: now
   };
-  await setDoc(sampleRef, sampleItem);
+  await setDoc(sampleRef, sanitizeFirestoreData(sampleItem));
 
   return newOrder;
 }
@@ -447,10 +490,10 @@ export async function updateLabOrderStatus(
   status: LabOrderStatus
 ): Promise<void> {
   const ref = doc(db, "labs", labId, "orders", orderId);
-  await updateDoc(ref, {
+  await updateDoc(ref, sanitizeFirestoreData({
     status,
     updatedAt: new Date().toISOString()
-  });
+  }));
 }
 
 // Subscribe to Realtime orders update
@@ -462,7 +505,8 @@ export function subscribeToLabOrders(
   const ordersRef = collection(db, "labs", labId, "orders");
   const q = query(ordersRef, orderBy("createdAt", "desc"), limit(100));
   
-  return onSnapshot(q, (snap) => {
+  let unsubFallback: (() => void) | null = null;
+  const unsubMain = onSnapshot(q, (snap) => {
     const list: LabOrder[] = [];
     snap.forEach((d) => {
       list.push(d.data() as LabOrder);
@@ -470,8 +514,9 @@ export function subscribeToLabOrders(
     callback(list);
   }, (err) => {
     // Fallback if index missing
+    console.warn("Lab orders index missing, falling back to un-ordered query:", err);
     const fallbackQ = query(ordersRef, limit(100));
-    return onSnapshot(fallbackQ, (snap) => {
+    unsubFallback = onSnapshot(fallbackQ, (snap) => {
       const list: LabOrder[] = [];
       snap.forEach((d) => {
         list.push(d.data() as LabOrder);
@@ -480,6 +525,11 @@ export function subscribeToLabOrders(
       callback(list);
     });
   });
+
+  return () => {
+    unsubMain();
+    if (unsubFallback) unsubFallback();
+  };
 }
 
 // ============================================================================
@@ -531,7 +581,7 @@ export async function updateSampleStatus(
   if (status === 'received') updates.receivedAt = now;
   if (status === 'completed') updates.status = 'completed';
 
-  await updateDoc(ref, updates);
+  await updateDoc(ref, sanitizeFirestoreData(updates));
 }
 
 // ============================================================================
@@ -552,7 +602,7 @@ export async function saveTestResult(
     updatedAt: now
   };
 
-  await setDoc(ref, newResult);
+  await setDoc(ref, sanitizeFirestoreData(newResult));
   return newResult;
 }
 
@@ -565,14 +615,14 @@ export async function approveAndPublishResult(
 ): Promise<void> {
   const now = new Date().toISOString();
   const ref = doc(db, "labs", labId, "results", resultId);
-  await updateDoc(ref, {
+  await updateDoc(ref, sanitizeFirestoreData({
     status: "published",
     reviewerUid,
     reviewerName,
     generalNotes: generalNotes || "",
     approvedAt: now,
     updatedAt: now
-  });
+  }));
 }
 
 export async function getLabResultsForOrder(labId: string, orderId: string): Promise<LabTestResult[]> {
@@ -625,7 +675,7 @@ export async function addLabStaffMember(
     labId,
     createdAt: now
   };
-  await setDoc(ref, item);
+  await setDoc(ref, sanitizeFirestoreData(item));
   return item;
 }
 
@@ -641,7 +691,7 @@ export async function addLabTransaction(
     labId,
     createdAt: now
   };
-  await setDoc(ref, item);
+  await setDoc(ref, sanitizeFirestoreData(item));
   return item;
 }
 

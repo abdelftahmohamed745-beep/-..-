@@ -260,7 +260,17 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
             <div className="text-6xl font-black text-[#122c4a] font-['Tajawal',sans-serif] tracking-tight my-1">
               #{patient.sequenceNumber}
             </div>
-            <div className="text-[11px] text-slate-500 font-medium">
+            {(patient.visitType || patient.serviceName) && (
+              <div className="mt-2 pt-2 border-t border-sky-200/60 flex items-center justify-center gap-3 text-xs text-[#122c4a] font-bold">
+                <span>نوع الزيارة: {patient.visitType || patient.serviceName}</span>
+                {typeof patient.price === 'number' && (
+                  <span className="bg-sky-100 text-sky-900 px-2.5 py-0.5 rounded-full font-mono">
+                    {patient.price} جنيه
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="text-[11px] text-slate-500 font-medium mt-1">
               تاريخ الحجز: {patient.date}
             </div>
           </div>

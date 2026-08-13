@@ -21,10 +21,12 @@ import {
   subscribeToClinicExpenses,
   createClinicExpense,
   updateClinicExpense,
-  deleteClinicExpense
+  deleteClinicExpense,
+  searchPatientsForDoctor
 } from '../services/firebaseService';
 import { hasPermission } from '../utils/permissions';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
+import { PatientFileModal } from './PatientFileModal';
 import {
   DollarSign,
   TrendingUp,
@@ -84,6 +86,14 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
   // Selected Receipt Modal
   const [selectedReceiptTx, setSelectedReceiptTx] = useState<ClinicTransaction | null>(null);
 
+  // Patient Auto-Fill & Suggestions state
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [patientSuggestions, setPatientSuggestions] = useState<Array<{ id: string; name: string; phone: string; lastVisit?: string; serviceName?: string }>>([]);
+  const [showPatientSuggestions, setShowPatientSuggestions] = useState(false);
+
+  // Patient File Modal state
+  const [activeFileModal, setActiveFileModal] = useState<{ phone: string; name: string } | null>(null);
+
   // Register Payment Form State
   const [patientNameInput, setPatientNameInput] = useState('');
   const [patientPhoneInput, setPatientPhoneInput] = useState('');
@@ -138,9 +148,98 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
       setPatientNameInput(initialPatientForPayment.name);
       setPatientPhoneInput(initialPatientForPayment.phone || '');
       setSelectedPatientId(initialPatientForPayment.id);
+      if (initialPatientForPayment.visitType || initialPatientForPayment.serviceName) {
+        setCustomServiceName(initialPatientForPayment.visitType || initialPatientForPayment.serviceName || '');
+      }
+      if (typeof initialPatientForPayment.price === 'number') {
+        setTotalAmountInput(initialPatientForPayment.price);
+        setPaidAmountInput(initialPatientForPayment.price);
+      }
       setActiveTab('register');
     }
   }, [initialPatientForPayment]);
+
+  // Debounced Patient Search Suggestions Effect
+  useEffect(() => {
+    if (!patientSearchTerm.trim() || patientSearchTerm.length < 2) {
+      setPatientSuggestions([]);
+      setShowPatientSuggestions(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      // 1. Local filter from today's patients list
+      const q = patientSearchTerm.toLowerCase();
+      const localMatches = patientsList.filter(
+        p => p.name.toLowerCase().includes(q) || p.phone?.includes(q)
+      ).map(p => ({
+        id: p.id,
+        name: p.name,
+        phone: p.phone || '',
+        lastVisit: 'حجز اليوم',
+        serviceName: p.visitType || p.serviceName,
+        price: p.price
+      }));
+
+      // 2. Fetch from medical files in DB
+      let remoteMatches: any[] = [];
+      if (organizationId) {
+        remoteMatches = await searchPatientsForDoctor(organizationId, patientSearchTerm);
+      }
+
+      // Merge and remove duplicates by phone
+      const combined = [...localMatches];
+      remoteMatches.forEach(rm => {
+        if (!combined.some(c => c.phone && rm.phone && c.phone.replace(/\D/g, '') === rm.phone.replace(/\D/g, ''))) {
+          combined.push({
+            id: rm.id,
+            name: rm.name,
+            phone: rm.phone || '',
+            lastVisit: rm.lastVisitDate ? `آخر زيارة: ${rm.lastVisitDate}` : 'سجل سابق',
+            serviceName: undefined,
+            price: undefined
+          });
+        }
+      });
+
+      setPatientSuggestions(combined);
+      setShowPatientSuggestions(combined.length > 0);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [patientSearchTerm, patientsList, organizationId]);
+
+  // Select patient suggestion handler
+  const handleSelectPatientSuggestion = (p: { id: string; name: string; phone: string; serviceName?: string; price?: number }) => {
+    setPatientNameInput(p.name);
+    setPatientPhoneInput(p.phone);
+    setSelectedPatientId(p.id);
+    setPatientSearchTerm(p.name);
+    setShowPatientSuggestions(false);
+
+    // Auto select service if matched
+    if (p.serviceName) {
+      setCustomServiceName(p.serviceName);
+      const matchedSrv = services.find(s => s.name.trim() === p.serviceName?.trim());
+      if (matchedSrv) {
+        setSelectedServiceId(matchedSrv.id);
+        setTotalAmountInput(matchedSrv.price);
+        setPaidAmountInput(matchedSrv.price);
+        return;
+      }
+    }
+
+    if (typeof p.price === 'number') {
+      setTotalAmountInput(p.price);
+      setPaidAmountInput(p.price);
+    } else if (services.length > 0) {
+      const defaultSrv = services.find(s => s.active) || services[0];
+      setSelectedServiceId(defaultSrv.id);
+      setCustomServiceName(defaultSrv.name);
+      setTotalAmountInput(defaultSrv.price);
+      setPaidAmountInput(defaultSrv.price);
+    }
+  };
 
   // Subscribe to Realtime Firebase Data
   useEffect(() => {
@@ -735,19 +834,72 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
 
           <form onSubmit={handleRegisterPaymentSubmit} className="space-y-6">
             
-            {/* Patient Picker or Manual Entry */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/60">
+            {/* Patient Picker or Live Search & Auto-fill */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/60 relative">
               
+              {/* Search Patient Auto-Fill */}
+              <div className="md:col-span-2 relative">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Search className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>بحث عن مريض للتعبئة التلقائية (بالاسم أو رقم الموبايل):</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="ابحث باسم المريض أو هاتفه للتعبئة التلقائية..."
+                    value={patientSearchTerm}
+                    onChange={e => {
+                      setPatientSearchTerm(e.target.value);
+                      setShowPatientSuggestions(true);
+                    }}
+                    onFocus={() => {
+                      if (patientSuggestions.length > 0) setShowPatientSuggestions(true);
+                    }}
+                    className="w-full bg-white border border-emerald-300/80 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                  />
+
+                  {/* Suggestions Floating Menu */}
+                  {showPatientSuggestions && patientSuggestions.length > 0 && (
+                    <div className="absolute z-30 top-full right-0 left-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
+                      {patientSuggestions.map(sug => (
+                        <div
+                          key={sug.id + sug.phone}
+                          onClick={() => handleSelectPatientSuggestion(sug)}
+                          className="p-3 hover:bg-emerald-50/80 transition cursor-pointer flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <div className="font-extrabold text-slate-900">{sug.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono dir-ltr text-right">
+                              {sug.phone || 'بدون رقم'}
+                            </div>
+                          </div>
+                          <div className="text-left">
+                            <span className="inline-block bg-emerald-100 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                              {sug.serviceName || sug.lastVisit}
+                            </span>
+                            {typeof sug.price === 'number' && (
+                              <div className="text-[11px] font-mono text-slate-600 font-bold mt-0.5">
+                                {sug.price} ج
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  اختر مريضاً من طابور / سجِّل اليوم:
+                  أو اختر مريضاً من طابور اليوم:
                 </label>
                 <select
                   value={selectedPatientId}
                   onChange={handleSelectPatientDropdown}
                   className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-sky-500 transition"
                 >
-                  <option value="">-- أو ادخل اسم المريض يدوياً بالأسفل --</option>
+                  <option value="">-- اختر مريض اليوم --</option>
                   {patientsList.map(p => (
                     <option key={p.id} value={p.id}>
                       #{p.sequenceNumber} - {p.name} ({p.phone || 'بدون هاتف'})
@@ -1701,6 +1853,17 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL 6: PATIENT MEDICAL & FINANCIAL FILE MODAL */}
+      {activeFileModal && (
+        <PatientFileModal
+          doctorId={organizationId}
+          patientPhone={activeFileModal.phone}
+          patientName={activeFileModal.name}
+          isOpen={!!activeFileModal}
+          onClose={() => setActiveFileModal(null)}
+        />
       )}
 
     </div>

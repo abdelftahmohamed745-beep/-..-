@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { DoctorProfile, DoctorRating } from '../types';
 import { getDoctorProfile, formatPhoneNumberForUrl, getDoctorRatings } from '../services/firebaseService';
+import { getLabProfile } from '../services/labService';
 import { setPageSeo, getDoctorSeoData, DEFAULT_HOMEPAGE_SEO } from '../utils/seo';
 
 interface ClinicProfilePageProps {
@@ -61,13 +62,22 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
         getDoctorRatings(doctorId)
       ]);
       if (isMounted) {
-        setDoctor(profile);
-        setRatings(rList);
-        setLoading(false);
-
         if (profile) {
+          setDoctor(profile);
+          setRatings(rList);
+          setLoading(false);
           setPageSeo(getDoctorSeoData(profile));
         } else {
+          // Check if doctorId is actually a laboratory UID
+          const labProfile = await getLabProfile(doctorId);
+          if (labProfile) {
+            if (typeof window !== 'undefined') {
+              window.location.replace(`/lab/${encodeURIComponent(doctorId)}`);
+            }
+            return;
+          }
+          setDoctor(null);
+          setLoading(false);
           setPageSeo({
             title: 'العيادة غير موجودة | منصة دوري',
             description: 'لم نتمكن من العثور على العيادة أو الطبيب المطلوب في منصة دوري.',

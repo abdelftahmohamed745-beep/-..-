@@ -252,6 +252,10 @@ export interface PatientRecord {
   phone: string;
   status: PatientStatus;
   date: string; // YYYY-MM-DD
+  serviceId?: string;
+  serviceName?: string;
+  visitType?: string;
+  price?: number;
   createdAt: string; // ISO string
   updatedAt?: string;
   calledAt?: string; // ISO string
@@ -373,8 +377,13 @@ export interface LabProfile {
 export interface PatientVisitEntry {
   id: string;
   date: string; // YYYY-MM-DD
+  serviceId?: string;
   serviceName?: string;
+  visitType?: string;
   price?: number;
+  paidAmount?: number;
+  remainingAmount?: number;
+  paymentStatus?: string;
   notes?: string;
   diagnosis?: string;
   prescription?: string;

@@ -604,7 +604,8 @@ export async function bookPatient(
   name: string,
   phone: string,
   userId?: string,
-  notificationPreference: NotificationTimingPreference = 'two_turns'
+  notificationPreference: NotificationTimingPreference = 'two_turns',
+  selectedService?: { serviceId?: string; serviceName: string; visitType?: string; price: number }
 ): Promise<{ patientId: string; sequenceNumber: number; isExisting?: boolean }> {
   // 1. Sanitize & Validate Inputs
   const cleanName = sanitizeInput(name);
@@ -720,6 +721,10 @@ export async function bookPatient(
       phone: normalizedPhone,
       status: 'waiting',
       date: today,
+      serviceId: selectedService?.serviceId || '',
+      serviceName: selectedService?.serviceName || 'كشف',
+      visitType: selectedService?.visitType || selectedService?.serviceName || 'كشف جديد',
+      price: typeof selectedService?.price === 'number' ? selectedService.price : 200,
       createdAt: now,
       updatedAt: now,
       estimatedMinutes: estMins,
@@ -744,6 +749,24 @@ export async function bookPatient(
   // Record rate limiting timestamp ONLY on successful transaction completion
   if (!transactionResult.isExisting) {
     recordBookingSuccess(normalizedPhone);
+
+    // Link visit to Patient Medical File
+    try {
+      await addVisitToPatientMedicalFile(doctorId, cleanName, normalizedPhone, {
+        id: `visit_${Date.now()}`,
+        date: today,
+        serviceId: selectedService?.serviceId,
+        serviceName: selectedService?.serviceName || 'كشف',
+        visitType: selectedService?.visitType || selectedService?.serviceName || 'كشف جديد',
+        price: typeof selectedService?.price === 'number' ? selectedService.price : 200,
+        paidAmount: 0,
+        remainingAmount: typeof selectedService?.price === 'number' ? selectedService.price : 200,
+        status: 'waiting',
+        createdAt: now
+      });
+    } catch (e) {
+      console.warn("Could not auto-link visit to patient medical file:", e);
+    }
   }
 
   // Write Audit Log
@@ -2079,6 +2102,21 @@ export function subscribeToClinicServices(
       callback([]);
     }
   );
+}
+
+export async function getClinicServicesPublic(organizationId: string): Promise<ClinicService[]> {
+  try {
+    const srvRef = collection(db, `organizations/${organizationId}/services`);
+    const snap = await getDocs(query(srvRef, where("active", "==", true)));
+    const list: ClinicService[] = [];
+    snap.forEach((docSnap) => {
+      list.push({ id: docSnap.id, ...docSnap.data() } as ClinicService);
+    });
+    return list;
+  } catch (err) {
+    console.error("Error fetching public clinic services:", err);
+    return [];
+  }
 }
 
 export async function createClinicService(

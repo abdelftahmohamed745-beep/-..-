@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Stethoscope, Building, Phone, Clock, Users, ArrowRight, AlertCircle, Ticket, CheckCircle2, Bell, Lock } from 'lucide-react';
-import { DoctorProfile, PatientRecord, NotificationTimingPreference } from '../types';
-import { bookPatient, getDoctorProfile, checkActiveBooking, getTodayDateString } from '../services/firebaseService';
+import { Stethoscope, Building, Phone, Clock, Users, ArrowRight, AlertCircle, Ticket, CheckCircle2, Bell, Lock, Tag } from 'lucide-react';
+import { DoctorProfile, PatientRecord, NotificationTimingPreference, ClinicService } from '../types';
+import { bookPatient, getDoctorProfile, checkActiveBooking, getTodayDateString, getClinicServicesPublic, getPatientMedicalFile } from '../services/firebaseService';
 
 interface PatientBookingProps {
   doctorId: string;
@@ -22,24 +22,84 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notificationPreference, setNotificationPreference] = useState<NotificationTimingPreference>('two_turns');
+  const [availableServices, setAvailableServices] = useState<ClinicService[]>([]);
+  const [selectedService, setSelectedService] = useState<ClinicService | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingTicket, setExistingTicket] = useState<PatientRecord | null>(null);
 
-  // Fetch doctor details and check for existing local ticket
+  // Fetch doctor details, active services, and check for existing local ticket
   useEffect(() => {
     console.log('[QR] PATIENT_BOOKING_MOUNTED', { doctorId });
     async function loadDoctorData() {
       setLoading(true);
       const profile = await getDoctorProfile(doctorId);
       setDoctor(profile);
+
+      if (profile) {
+        // Fetch active services configured by doctor
+        const dbServices = await getClinicServicesPublic(doctorId);
+        if (dbServices && dbServices.length > 0) {
+          setAvailableServices(dbServices);
+          setSelectedService(dbServices[0]);
+        } else if (profile.servicesAndPrices && profile.servicesAndPrices.length > 0) {
+          const fallbackList: ClinicService[] = profile.servicesAndPrices.map((sp, idx) => ({
+            id: `sp_${idx}`,
+            organizationId: doctorId,
+            name: sp.serviceName,
+            description: sp.serviceName.includes('إعادة') ? 'زيارة متابعة للكشف السابق' : 'فحص أول مرة وتشخيص طبي',
+            price: Number(sp.price) || 200,
+            active: true,
+            createdAt: new Date().toISOString(),
+            createdBy: doctorId
+          }));
+          setAvailableServices(fallbackList);
+          setSelectedService(fallbackList[0]);
+        } else {
+          // Standard defaults if doctor hasn't configured services yet
+          const defaultList: ClinicService[] = [
+            {
+              id: 'srv_default_1',
+              organizationId: doctorId,
+              name: 'كشف جديد',
+              description: 'فحص أول مرة وتشخيص طبي شامل',
+              price: 200,
+              active: true,
+              createdAt: new Date().toISOString(),
+              createdBy: doctorId
+            },
+            {
+              id: 'srv_default_2',
+              organizationId: doctorId,
+              name: 'إعادة كشف',
+              description: 'متابعة للكشف السابق واستعراض الفحوصات',
+              price: 100,
+              active: true,
+              createdAt: new Date().toISOString(),
+              createdBy: doctorId
+            },
+            {
+              id: 'srv_default_3',
+              organizationId: doctorId,
+              name: 'استشارة',
+              description: 'استشارة طبية سريعة ومراجعة تحاليل',
+              price: 150,
+              active: true,
+              createdAt: new Date().toISOString(),
+              createdBy: doctorId
+            }
+          ];
+          setAvailableServices(defaultList);
+          setSelectedService(defaultList[0]);
+        }
+      }
       setLoading(false);
     }
     loadDoctorData();
   }, [doctorId]);
 
-  // Check if phone matches active ticket when typing (debounced to avoid network requests per keystroke)
+  // Check if phone matches active ticket or medical file when typing (auto-fill patient name)
   useEffect(() => {
-    if (phone.length < 10 || !doctor) {
+    if (phone.length < 8 || !doctor) {
       setExistingTicket(null);
       return;
     }
@@ -47,6 +107,15 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
     const timer = setTimeout(() => {
       checkActiveBooking(doctor.uid, phone.trim()).then((ticket) => {
         setExistingTicket(ticket);
+        if (ticket && ticket.name && !name.trim()) {
+          setName(ticket.name);
+        }
+      }).catch(console.error);
+
+      getPatientMedicalFile(doctor.uid, phone.trim()).then((file) => {
+        if (file && file.patientName && !name.trim()) {
+          setName(file.patientName);
+        }
       }).catch(console.error);
     }, 400);
 
@@ -63,14 +132,20 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
     }
 
     setIsSubmitting(true);
-    console.log('[QR] EXISTING_BOOKING_SYSTEM_CALLED', { doctorId: doctor.uid, name: name.trim(), phone: phone.trim() });
+    console.log('[QR] EXISTING_BOOKING_SYSTEM_CALLED', { doctorId: doctor.uid, name: name.trim(), phone: phone.trim(), service: selectedService?.name });
     try {
       const res = await bookPatient(
         doctor.uid,
         name.trim(),
         phone.trim(),
         undefined,
-        notificationPreference
+        notificationPreference,
+        selectedService ? {
+          serviceId: selectedService.id,
+          serviceName: selectedService.name,
+          visitType: selectedService.name,
+          price: selectedService.price
+        } : undefined
       );
       setIsSubmitting(false);
       console.log('[QR] TICKET_CREATED', { patientId: res.patientId, sequenceNumber: res.sequenceNumber, isExisting: res.isExisting });
@@ -212,6 +287,63 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Visit Type / Package Selection Cards */}
+            {availableServices.length > 0 && (
+              <div>
+                <label className="block text-xs font-bold text-[#122c4a] mb-2">
+                  نوع الزيارة / الخدمة <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {availableServices.map((srv) => {
+                    const isSelected = selectedService?.id === srv.id;
+                    return (
+                      <div
+                        key={srv.id}
+                        onClick={() => setSelectedService(srv)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-500/20 shadow-xs'
+                            : 'bg-[#faf8f5] border-[#e7e3da] hover:border-[#122c4a]/30'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className={`font-bold text-xs sm:text-sm ${isSelected ? 'text-emerald-950' : 'text-[#122c4a]'}`}>
+                              {srv.name}
+                            </span>
+                            {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                          </div>
+                          {srv.description && (
+                            <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">
+                              {srv.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 font-semibold">السعر المقرر</span>
+                          <span className={`font-black text-xs sm:text-sm font-mono ${isSelected ? 'text-emerald-700' : 'text-[#122c4a]'}`}>
+                            {srv.price} جنيه
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {selectedService && (
+                  <div className="mt-3 p-3 bg-emerald-50/90 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-bold text-emerald-950">نوع الزيارة: {selectedService.name}</span>
+                    </div>
+                    <div className="font-black text-emerald-800 font-mono">
+                      المبلغ: {selectedService.price} جنيه
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-bold text-[#122c4a] mb-1">
                 الاسم بالكامل <span className="text-rose-500">*</span>

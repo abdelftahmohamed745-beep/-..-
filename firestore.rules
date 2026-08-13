@@ -11,12 +11,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // ADMIN CHECK: Custom claims, Admins collection doc, or explicitly authorized Admin email
+    // ADMIN CHECK: Custom claims, Admins collection doc, or explicitly authorized Admin email with verification
     function isAdmin() {
       return isAuthenticated() && (
         request.auth.token.admin == true ||
         (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true) ||
-        (request.auth.token.email != null && (request.auth.token.email.lower() == 'abdelftahmohamed745@gmail.com' || request.auth.token.email.lower() == 'admin@dawry.app'))
+        (request.auth.token.email != null && request.auth.token.email_verified == true && (request.auth.token.email.lower() == 'abdelftahmohamed745@gmail.com' || request.auth.token.email.lower() == 'admin@dawry.app'))
       );
     }
 
@@ -69,7 +69,8 @@ service cloud.firestore {
         && data.phone.size() <= 20
         && data.sequenceNumber is number
         && data.sequenceNumber > 0
-        && data.status == 'waiting';
+        && data.status == 'waiting'
+        && (data.price == null || (data.price is number && data.price >= 0));
     }
 
     function isValidPatientUpdate() {
@@ -340,13 +341,16 @@ service cloud.firestore {
       }
 
       match /orders/{orderId} {
-        allow read: if true; // Patients track order or lab staff view
+        // Individual order lookup allowed for patient tracking or lab staff; batch list restricted to lab members
+        allow get: if true;
+        allow list: if isLabMember(labId) || isAdmin();
         // Public booking allowed for valid payload
         allow create: if request.resource.data.patientName is string
           && request.resource.data.patientName.size() >= 2
           && request.resource.data.patientPhone is string
           && request.resource.data.patientPhone.size() >= 8
-          && request.resource.data.totalPrice is number;
+          && request.resource.data.totalPrice is number
+          && request.resource.data.totalPrice >= 0;
         // Updates allowed for lab staff member OR patient updating status to CANCELLED
         allow update: if isLabMember(labId) || (
           resource.data.patientPhone == request.resource.data.patientPhone &&
@@ -356,7 +360,9 @@ service cloud.firestore {
       }
 
       match /samples/{sampleId} {
-        allow read: if true; // Scan sample or staff view
+        // Individual sample barcode scan allowed; batch list restricted to lab members
+        allow get: if true;
+        allow list: if isLabMember(labId) || isAdmin();
         allow create, update: if isLabMember(labId) || (
           request.resource.data.patientPhone is string &&
           request.resource.data.orderId is string
@@ -365,7 +371,9 @@ service cloud.firestore {
       }
 
       match /results/{resultId} {
-        allow read: if true; // Patient views published results or staff manages
+        // Patient views published result by ID; batch listing restricted to lab staff
+        allow get: if resource.data.status == 'published' || isLabMember(labId) || isAdmin();
+        allow list: if isLabMember(labId) || isAdmin();
         // Draft / initial entry allowed for lab staff
         allow create: if isLabMember(labId);
         // Direct publish requires Reviewer/Owner/Manager role

@@ -27,6 +27,8 @@ import {
   FollowUpAppointment,
   FollowUpAppointmentStatus,
   FollowUpReminderSettings,
+  PatientMedicalFile,
+  PatientVisitEntry,
   ClinicMember,
   ClinicRole,
   ClinicPermission,
@@ -150,8 +152,8 @@ export async function getAllDoctors(): Promise<DoctorProfile[]> {
         const data = docSnap.data() as DoctorProfile;
         data.referenceCode = data.referenceCode || generateReferenceCode(data.uid);
         data.subscriptionStatus = evaluateSubscriptionStatus(data);
-        // Only include active clinics for public directory
-        if (data.isActive !== false) {
+        // Only include active and non-deleted clinics for public directory
+        if (data.isActive !== false && !data.isDeleted) {
           doctors.push(data);
         }
       }
@@ -163,7 +165,7 @@ export async function getAllDoctors(): Promise<DoctorProfile[]> {
   }
 }
 
-// Fetch all doctors for Platform Admin view
+// Fetch all doctors for Platform Admin view (excludes soft deleted)
 export async function getAllDoctorsAdmin(): Promise<DoctorProfile[]> {
   try {
     const querySnap = await getDocs(collection(db, "doctors"));
@@ -173,7 +175,9 @@ export async function getAllDoctorsAdmin(): Promise<DoctorProfile[]> {
         const data = docSnap.data() as DoctorProfile;
         data.referenceCode = data.referenceCode || generateReferenceCode(data.uid);
         data.subscriptionStatus = evaluateSubscriptionStatus(data);
-        doctors.push(data);
+        if (!data.isDeleted) {
+          doctors.push(data);
+        }
       }
     });
     return doctors;
@@ -241,7 +245,7 @@ export async function getAllLabsAdmin(): Promise<LabAdminView[]> {
 
     const results = await Promise.all(labPromises);
     results.forEach((res) => {
-      if (res) labs.push(res);
+      if (res && !res.isDeleted) labs.push(res);
     });
     return labs;
   } catch (error) {
@@ -2591,5 +2595,260 @@ export async function deleteClinicExpense(
     targetName: oldData?.title || expenseId,
     details: `حذف المصروف (${oldData?.title || expenseId}) بقيمة ${oldData?.amount || 0} ج`
   });
+}
+
+// ============================================================================
+// PATIENT MEDICAL FILES MANAGEMENT (MULTI-TENANT ISOLATION)
+// ============================================================================
+
+export async function getPatientMedicalFile(doctorId: string, phone: string): Promise<PatientMedicalFile | null> {
+  try {
+    const cleanPhone = normalizePhoneNumber(phone);
+    if (!cleanPhone) return null;
+    const fileRef = doc(db, "doctors", doctorId, "patientFiles", cleanPhone);
+    const snap = await getDoc(fileRef);
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as PatientMedicalFile;
+    }
+    return null;
+  } catch (err) {
+    console.error("Error fetching patient medical file:", err);
+    return null;
+  }
+}
+
+export async function savePatientMedicalFile(
+  doctorId: string,
+  fileData: Partial<PatientMedicalFile> & { patientPhone: string; patientName: string }
+): Promise<PatientMedicalFile> {
+  const cleanPhone = normalizePhoneNumber(fileData.patientPhone);
+  const nowIso = new Date().toISOString();
+  const fileRef = doc(db, "doctors", doctorId, "patientFiles", cleanPhone);
+
+  const existingSnap = await getDoc(fileRef);
+  let updatedFile: PatientMedicalFile;
+
+  if (existingSnap.exists()) {
+    const prev = existingSnap.data() as PatientMedicalFile;
+    updatedFile = {
+      ...prev,
+      ...fileData,
+      patientPhone: cleanPhone,
+      updatedAt: nowIso
+    };
+    await setDoc(fileRef, updatedFile, { merge: true });
+  } else {
+    updatedFile = {
+      id: cleanPhone,
+      doctorId,
+      patientName: sanitizeInput(fileData.patientName),
+      patientPhone: cleanPhone,
+      age: fileData.age || undefined,
+      gender: fileData.gender || undefined,
+      bloodGroup: fileData.bloodGroup || '',
+      allergies: fileData.allergies || '',
+      chronicDiseases: fileData.chronicDiseases || '',
+      generalNotes: fileData.generalNotes || '',
+      lastVisitDate: fileData.lastVisitDate || getTodayDateString(),
+      visitsCount: fileData.visitsCount || 1,
+      visits: fileData.visits || [],
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+    await setDoc(fileRef, updatedFile);
+  }
+  return updatedFile;
+}
+
+export async function addVisitToPatientMedicalFile(
+  doctorId: string,
+  patientName: string,
+  patientPhone: string,
+  visitEntry: PatientVisitEntry
+): Promise<void> {
+  try {
+    const cleanPhone = normalizePhoneNumber(patientPhone);
+    if (!cleanPhone) return;
+    const existing = await getPatientMedicalFile(doctorId, cleanPhone);
+
+    if (existing) {
+      const visits = existing.visits || [];
+      const existsIndex = visits.findIndex(v => v.id === visitEntry.id);
+      if (existsIndex >= 0) {
+        visits[existsIndex] = { ...visits[existsIndex], ...visitEntry };
+      } else {
+        visits.unshift(visitEntry);
+      }
+      await savePatientMedicalFile(doctorId, {
+        patientPhone: cleanPhone,
+        patientName: patientName || existing.patientName,
+        lastVisitDate: visitEntry.date || getTodayDateString(),
+        visitsCount: visits.length,
+        visits
+      });
+    } else {
+      await savePatientMedicalFile(doctorId, {
+        patientPhone: cleanPhone,
+        patientName,
+        lastVisitDate: visitEntry.date || getTodayDateString(),
+        visitsCount: 1,
+        visits: [visitEntry]
+      });
+    }
+  } catch (err) {
+    console.error("Error linking visit to patient file:", err);
+  }
+}
+
+export async function searchPatientsForDoctor(doctorId: string, searchTerm: string, limitCount = 20): Promise<PatientMedicalFile[]> {
+  try {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return [];
+
+    const colRef = collection(db, "doctors", doctorId, "patientFiles");
+    const snap = await getDocs(query(colRef, limit(100)));
+    const results: PatientMedicalFile[] = [];
+
+    snap.forEach((docSnap) => {
+      const data = { id: docSnap.id, ...docSnap.data() } as PatientMedicalFile;
+      const nameMatch = data.patientName?.toLowerCase().includes(term);
+      const phoneMatch = data.patientPhone?.includes(term);
+      if (nameMatch || phoneMatch) {
+        results.push(data);
+      }
+    });
+
+    return results.slice(0, limitCount);
+  } catch (err) {
+    console.error("Error searching patients for doctor:", err);
+    return [];
+  }
+}
+
+export async function getAllPatientFilesForDoctor(doctorId: string, limitCount = 50): Promise<PatientMedicalFile[]> {
+  try {
+    const colRef = collection(db, "doctors", doctorId, "patientFiles");
+    const q = query(colRef, limit(limitCount));
+    const snap = await getDocs(q);
+    const list: PatientMedicalFile[] = [];
+    snap.forEach(d => list.push({ id: d.id, ...d.data() } as PatientMedicalFile));
+    return list;
+  } catch (err) {
+    console.error("Error fetching patient files:", err);
+    return [];
+  }
+}
+
+// ============================================================================
+// PLATFORM ADMIN SOFT DELETE & RECYCLE BIN MANAGEMENT (3-DAY POLICY)
+// ============================================================================
+
+export async function softDeleteDoctorAccountByAdmin(doctorId: string, adminUid: string): Promise<void> {
+  const nowIso = new Date().toISOString();
+  await updateDoc(doc(db, "doctors", doctorId), {
+    isDeleted: true,
+    deletedAt: nowIso,
+    deletedByAdminUid: adminUid,
+    isActive: false
+  });
+  writeAuditLog("SOFT_DELETE_DOCTOR", adminUid, doctorId, { deletedAt: nowIso });
+}
+
+export async function softDeleteLabAccountByAdmin(labId: string, adminUid: string): Promise<void> {
+  const nowIso = new Date().toISOString();
+  await updateDoc(doc(db, "labs", labId), {
+    isDeleted: true,
+    deletedAt: nowIso,
+    deletedByAdminUid: adminUid,
+    isActive: false
+  });
+  writeAuditLog("SOFT_DELETE_LAB", adminUid, labId, { deletedAt: nowIso });
+}
+
+export async function restoreDoctorAccountByAdmin(doctorId: string, adminUid: string): Promise<void> {
+  await updateDoc(doc(db, "doctors", doctorId), {
+    isDeleted: false,
+    deletedAt: null,
+    deletedByAdminUid: null,
+    isActive: true
+  });
+  writeAuditLog("RESTORE_DOCTOR", adminUid, doctorId);
+}
+
+export async function restoreLabAccountByAdmin(labId: string, adminUid: string): Promise<void> {
+  await updateDoc(doc(db, "labs", labId), {
+    isDeleted: false,
+    deletedAt: null,
+    deletedByAdminUid: null,
+    isActive: true
+  });
+  writeAuditLog("RESTORE_LAB", adminUid, labId);
+}
+
+export interface DeletedAccountItem {
+  id: string;
+  name: string;
+  type: 'doctor' | 'laboratory';
+  deletedAt: string;
+  deletedByAdminUid?: string;
+  originalData: any;
+}
+
+export async function getDeletedAccountsAdmin(): Promise<DeletedAccountItem[]> {
+  const deletedItems: DeletedAccountItem[] = [];
+
+  try {
+    const docSnap = await getDocs(collection(db, "doctors"));
+    docSnap.forEach((d) => {
+      const data = d.data();
+      if (data.isDeleted === true) {
+        deletedItems.push({
+          id: d.id,
+          name: data.clinicName || data.name || 'عيادة',
+          type: 'doctor',
+          deletedAt: data.deletedAt || new Date().toISOString(),
+          deletedByAdminUid: data.deletedByAdminUid || '',
+          originalData: data
+        });
+      }
+    });
+
+    const labSnap = await getDocs(collection(db, "labs"));
+    labSnap.forEach((l) => {
+      const data = l.data();
+      if (data.isDeleted === true) {
+        deletedItems.push({
+          id: l.id,
+          name: data.name || 'معمل تحاليل',
+          type: 'laboratory',
+          deletedAt: data.deletedAt || new Date().toISOString(),
+          deletedByAdminUid: data.deletedByAdminUid || '',
+          originalData: data
+        });
+      }
+    });
+  } catch (err) {
+    console.error("Error fetching deleted accounts:", err);
+  }
+
+  deletedItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+  return deletedItems;
+}
+
+export async function hardDeleteAccountByAdmin(id: string, type: 'doctor' | 'laboratory', adminUid: string): Promise<void> {
+  if (type === 'doctor') {
+    try {
+      const queueSnap = await getDocs(collection(db, "queues", id, "patients"));
+      for (const p of queueSnap.docs) {
+        await deleteDoc(p.ref);
+      }
+    } catch (e) {
+      console.warn("Error purging queue patients:", e);
+    }
+    await deleteDoc(doc(db, "doctors", id));
+  } else {
+    await deleteDoc(doc(db, "labs", id));
+  }
+  writeAuditLog("HARD_DELETE_ACCOUNT", adminUid, id, { accountType: type });
 }
 

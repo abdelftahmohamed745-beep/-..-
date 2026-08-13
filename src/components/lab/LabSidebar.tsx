@@ -104,7 +104,7 @@ export const LabSidebar: React.FC<LabSidebarProps> = ({
   };
 
   const SidebarContent = (
-    <div className="flex flex-col h-full py-4 bg-white border-l border-slate-200">
+    <div className="flex flex-col h-full py-4 bg-[#fdfcf9] border-l border-[#e7e3da]">
       
       {/* Title */}
       <div className="px-5 mb-4 hidden lg:block">
@@ -122,14 +122,14 @@ export const LabSidebar: React.FC<LabSidebarProps> = ({
             <button
               key={item.id}
               onClick={() => handleSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-teal-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-[#122c4a] text-white shadow-2xs'
+                  : 'text-slate-600 hover:bg-[#f4efe6] hover:text-slate-900'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-teal-300' : 'text-[#1b3a5c]'}`} />
                 <span>{item.label}</span>
               </div>
 
@@ -150,10 +150,10 @@ export const LabSidebar: React.FC<LabSidebarProps> = ({
       </nav>
 
       {/* Footer Info */}
-      <div className="p-4 mx-3 mt-4 bg-slate-50 border border-slate-200 rounded-xl text-right">
+      <div className="p-4 mx-3 mt-4 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-right">
         <div className="flex items-center gap-2 mb-1">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[11px] font-bold text-slate-800">النظام متصل بالشبكة</span>
+          <span className="text-[11px] font-bold text-[#122c4a]">النظام متصل بالشبكة</span>
         </div>
         <p className="text-[10px] text-slate-500">إصدار دوري LIS Enterprise v2.4</p>
       </div>

@@ -55,9 +55,9 @@ export const LabOverviewTab: React.FC<LabOverviewTabProps> = ({
     <div className="space-y-6">
       
       {/* Top Banner & Greeting */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-[#fdfcf9] rounded-xl border border-[#e7e3da] p-5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-900 font-['Tajawal',sans-serif]">
+          <h1 className="text-xl font-extrabold text-[#122c4a] font-['Tajawal',sans-serif]">
             {timeGreeting}، {lab.responsibleName}
           </h1>
           <p className="text-xs text-slate-500 mt-1">
@@ -69,65 +69,128 @@ export const LabOverviewTab: React.FC<LabOverviewTabProps> = ({
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           <button
             onClick={onNewOrder}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs"
+            className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>طلب جديد</span>
           </button>
           <button
             onClick={onScanSample}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5"
+            className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#f4efe6] hover:bg-[#e7e3da] text-[#122c4a] rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <QrCode className="w-4 h-4 text-teal-600" />
             <span>مسح عينة</span>
           </button>
           <button
             onClick={() => onSelectTab('results')}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5"
+            className="flex-1 sm:flex-initial px-3.5 py-2 bg-[#f4efe6] hover:bg-[#e7e3da] text-[#122c4a] rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <FileText className="w-4 h-4 text-sky-600" />
+            <FileText className="w-4 h-4 text-[#1b3a5c]" />
             <span>إدخال نتائج</span>
           </button>
         </div>
       </div>
 
+      {/* Lab Setup Guide Banner (Velvet Blue Styling) */}
+      {(() => {
+        const hasBasicInfo = Boolean(lab.name && lab.phone && lab.address);
+        const hasWorkHours = Boolean(lab.workHours && lab.workHours.open && lab.workHours.close);
+        const hasHomeOrders = lab.acceptsHomeOrders !== false;
+        const hasQr = Boolean(lab.uid);
+
+        const labSteps = [
+          { id: 'info', label: 'بيانات المعمل والعنوان', done: hasBasicInfo, weight: 25, targetTab: 'settings' },
+          { id: 'catalog', label: 'دليل التحاليل والأسعار', done: true, weight: 25, targetTab: 'catalog' },
+          { id: 'hours', label: 'ساعات العمل الرسمية', done: hasWorkHours, weight: 25, targetTab: 'settings' },
+          { id: 'orders', label: 'تفعيل استقبال الطلبات', done: hasHomeOrders, weight: 25, targetTab: 'settings' },
+        ];
+
+        const score = labSteps.reduce((acc, step) => acc + (step.done ? step.weight : 0), 0);
+        if (score === 100) return null;
+
+        return (
+          <div className="bg-[#edf3fa] border border-[#d1dfed] rounded-xl p-4 text-[#122c4a] shadow-2xs">
+            <div className="flex items-center justify-between gap-3 mb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#122c4a] text-white flex items-center justify-center font-extrabold text-xs">
+                  {score}%
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-xs sm:text-sm font-['Tajawal',sans-serif]">
+                    دليل إعداد المعمل — نسبة الإكمال: {score}%
+                  </h3>
+                  <p className="text-[11px] text-slate-600">
+                    أكمل خطوات إعداد المعمل لتفعيل استقبال طلبات التحاليل وإصدار التقارير:
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full bg-white/80 rounded-full h-2 mb-3 border border-[#d1dfed] overflow-hidden">
+              <div className="bg-[#122c4a] h-full rounded-full transition-all duration-500" style={{ width: `${score}%` }} />
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {labSteps.map((step) => (
+                <button
+                  key={step.id}
+                  onClick={() => onSelectTab(step.targetTab)}
+                  className={`p-2 rounded-lg text-xs font-bold text-right transition border cursor-pointer flex items-center justify-between ${
+                    step.done
+                      ? 'bg-white/90 text-slate-900 border-emerald-300'
+                      : 'bg-white/40 text-slate-700 border-[#d1dfed] hover:bg-white'
+                  }`}
+                >
+                  <span className="truncate">{step.label}</span>
+                  {step.done ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Operational Summary Grid */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
         
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+        <div className="bg-[#fdfcf9] rounded-xl border border-[#e7e3da] p-4 shadow-2xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500">طلبات اليوم</span>
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-[#edf3fa] text-[#122c4a] flex items-center justify-center">
               <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black text-slate-900">{todayOrders.length || orders.length}</p>
+          <p className="text-2xl font-black text-[#122c4a]">{todayOrders.length || orders.length}</p>
           <p className="text-[11px] text-slate-400 mt-0.5">إجمالي الطلبات المستلمة</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+        <div className="bg-[#fdfcf9] rounded-xl border border-[#e7e3da] p-4 shadow-2xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500">عينات قيد المعالجة</span>
-            <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-[#edf3fa] text-[#122c4a] flex items-center justify-center">
               <TestTube className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black text-slate-900">{inProgressSamples.length}</p>
+          <p className="text-2xl font-black text-[#122c4a]">{inProgressSamples.length}</p>
           <p className="text-[11px] text-slate-400 mt-0.5">في المختبر حالياً</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+        <div className="bg-[#fdfcf9] rounded-xl border border-[#e7e3da] p-4 shadow-2xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500">تحتاج مراجعة</span>
             <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black text-amber-900">{pendingResultsCount}</p>
+          <p className="text-2xl font-black text-amber-800">{pendingResultsCount}</p>
           <p className="text-[11px] text-slate-400 mt-0.5">بانتظار الاعتماد</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+        <div className="bg-[#fdfcf9] rounded-xl border border-[#e7e3da] p-4 shadow-2xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500">نتائج مكتملة</span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
@@ -138,7 +201,7 @@ export const LabOverviewTab: React.FC<LabOverviewTabProps> = ({
           <p className="text-[11px] text-slate-400 mt-0.5">تم نشرها للمريض</p>
         </div>
 
-        <div className="col-span-2 md:col-span-1 bg-white rounded-xl border border-rose-200 p-4 shadow-2xs bg-rose-50/20">
+        <div className="col-span-2 md:col-span-1 bg-[#fdfcf9] rounded-xl border border-rose-200 p-4 shadow-2xs bg-rose-50/20">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-rose-800">حالات عاجلة</span>
             <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">

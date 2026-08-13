@@ -41,7 +41,14 @@ import {
   getAllSubscriptionLogs,
   OFFICIAL_SUBSCRIPTION_PRICES,
   getAllLabsAdmin,
-  toggleLabStatusAdmin
+  toggleLabStatusAdmin,
+  softDeleteDoctorAccountByAdmin,
+  softDeleteLabAccountByAdmin,
+  restoreDoctorAccountByAdmin,
+  restoreLabAccountByAdmin,
+  getDeletedAccountsAdmin,
+  hardDeleteAccountByAdmin,
+  DeletedAccountItem
 } from '../services/firebaseService';
 
 interface AdminDashboardProps {
@@ -52,8 +59,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
   const [doctors, setDoctors] = useState<DoctorProfile[]>([]);
   const [labs, setLabs] = useState<LabAdminView[]>([]);
   const [subscriptionLogs, setSubscriptionLogs] = useState<SubscriptionLog[]>([]);
+  const [recycleBinItems, setRecycleBinItems] = useState<DeletedAccountItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'doctors' | 'labs' | 'subscriptions' | 'logs'>('doctors');
+  const [activeTab, setActiveTab] = useState<'doctors' | 'labs' | 'subscriptions' | 'logs' | 'recycle_bin'>('doctors');
 
   // Search & Filter state for Doctors
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,14 +89,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [docList, logsList, labsList] = await Promise.all([
+      const [docList, logsList, labsList, deletedList] = await Promise.all([
         getAllDoctorsAdmin(),
         getAllSubscriptionLogs(),
-        getAllLabsAdmin()
+        getAllLabsAdmin(),
+        getDeletedAccountsAdmin()
       ]);
       setDoctors(docList);
       setSubscriptionLogs(logsList);
       setLabs(labsList);
+      setRecycleBinItems(deletedList);
     } catch (err) {
       console.error("Error loading admin data:", err);
     } finally {
@@ -151,17 +161,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
   };
 
   const handleDeleteDoctor = async (docId: string, doctorName: string) => {
-    if (!window.confirm(`هل أنت متأكد تماماً من حذف حساب الطبيب "${doctorName}" كلياً من المنصة؟`)) {
+    if (!window.confirm(`هل أنت متأكد من نقل حساب الطبيب "${doctorName}" إلى سلة المحذوفات المؤقتة؟ (يمكنك استعادته خلال 3 أيام)`)) {
       return;
     }
     setProcessingId(docId);
     try {
-      await deleteDoctorAccountByAdmin(docId, "ADMIN_SESSION");
+      await softDeleteDoctorAccountByAdmin(docId, "ADMIN_SESSION");
       setDoctors(doctors.filter(d => d.uid !== docId));
-      onShowToast("تم حذف/تعطيل حساب الطبيب بواسطة الخادم بنجاح", "", "info");
+      onShowToast("تم نقل الحساب لسلة المحذوفات", "سيتم الاحتفاظ به لمدة 3 أيام قبل الحذف النهائي تلقائياً", "info");
+      const updatedDeleted = await getDeletedAccountsAdmin();
+      setRecycleBinItems(updatedDeleted);
     } catch (err) {
       console.error(err);
       onShowToast("خطأ في حذف الحساب", "", "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDeleteLab = async (labId: string, labName: string) => {
+    if (!window.confirm(`هل أنت متأكد من نقل معمل "${labName}" إلى سلة المحذوفات المؤقتة؟ (يمكنك استعادته خلال 3 أيام)`)) {
+      return;
+    }
+    setProcessingLabId(labId);
+    try {
+      await softDeleteLabAccountByAdmin(labId, "ADMIN_SESSION");
+      setLabs(labs.filter(l => l.uid !== labId));
+      onShowToast("تم نقل المعمل لسلة المحذوفات", "سيتم الاحتفاظ به لمدة 3 أيام قبل الحذف النهائي", "info");
+      const updatedDeleted = await getDeletedAccountsAdmin();
+      setRecycleBinItems(updatedDeleted);
+    } catch (err) {
+      console.error(err);
+      onShowToast("خطأ في حذف المعمل", "", "error");
+    } finally {
+      setProcessingLabId(null);
+    }
+  };
+
+  const handleRestoreAccount = async (id: string, type: 'doctor' | 'laboratory', name: string) => {
+    setProcessingId(id);
+    try {
+      if (type === 'doctor') {
+        await restoreDoctorAccountByAdmin(id, 'ADMIN_SESSION');
+      } else {
+        await restoreLabAccountByAdmin(id, 'ADMIN_SESSION');
+      }
+      onShowToast("تمت استعادة الحساب بنجاح", `تمت إعادة تفعيل "${name}" وإزالته من سلة المحذوفات`, "success");
+      await fetchInitialData();
+    } catch (err) {
+      console.error(err);
+      onShowToast("خطأ أثناء استعادة الحساب", "", "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleHardDeleteAccount = async (id: string, type: 'doctor' | 'laboratory', name: string) => {
+    if (!window.confirm(`تحذير نهائي: هل أنت متأكد من الحذف النهائي كلياً وبلا رجعة لحساب "${name}"؟`)) {
+      return;
+    }
+    setProcessingId(id);
+    try {
+      await hardDeleteAccountByAdmin(id, type, 'ADMIN_SESSION');
+      onShowToast("تم الحذف النهائي بالحساب", "تمت إزالت البيانات كلياً من المنصة", "warning");
+      setRecycleBinItems(recycleBinItems.filter(item => item.id !== id));
+    } catch (err) {
+      console.error(err);
+      onShowToast("خطأ أثناء الحذف النهائي", "", "error");
     } finally {
       setProcessingId(null);
     }
@@ -310,24 +376,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
     <div className="max-w-7xl mx-auto px-4 py-8">
       
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-2xl mb-8 border border-slate-800">
+      <div className="bg-[#122c4a] text-white rounded-3xl p-6 sm:p-8 shadow-2xl mb-8 border border-[#1b3a5c]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-sky-500/20 text-sky-300 rounded-full text-xs font-bold border border-sky-400/30 mb-2">
-              <ShieldAlert className="w-4 h-4" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 text-sky-200 rounded-full text-xs font-bold border border-white/20 mb-2">
+              <ShieldAlert className="w-4 h-4 text-sky-300" />
               <span>إدارة المنصة المركزية</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black font-['Tajawal',sans-serif]">
               لوحة تحكم مدير منصة دوري
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
+            <p className="text-xs sm:text-sm text-slate-200 mt-1">
               إدارة العيادات، كود المرجع الثابت لكل عيادة، وتفعيل الاشتراكات الشهرية والسنوية
             </p>
           </div>
 
           <button
             onClick={fetchInitialData}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition border border-white/10"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition border border-white/10 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>تحديث البيانات</span>
@@ -336,24 +402,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
       </div>
 
       {/* Main Navigation Tabs */}
-      <div className="flex flex-wrap items-center gap-2 bg-slate-200/70 p-1.5 rounded-2xl mb-8 max-w-fit">
+      <div className="flex flex-wrap items-center gap-2 bg-[#f4efe6] p-1.5 rounded-2xl mb-8 max-w-fit">
         <button
           onClick={() => setActiveTab('doctors')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeTab === 'doctors'
-              ? 'bg-white text-slate-900 shadow-sm'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-4 h-4 text-sky-600" />
+          <Users className="w-4 h-4 text-sky-300" />
           <span>العيادات والأطباء ({doctors.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('labs')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeTab === 'labs'
-              ? 'bg-teal-700 text-white shadow-sm'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -363,26 +429,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
 
         <button
           onClick={() => setActiveTab('subscriptions')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeTab === 'subscriptions'
-              ? 'bg-slate-900 text-white shadow-sm'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Zap className="w-4 h-4 text-amber-400" />
+          <Zap className="w-4 h-4 text-amber-300" />
           <span>تفعيل الاشتراك المباشر</span>
         </button>
 
         <button
           onClick={() => setActiveTab('logs')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeTab === 'logs'
-              ? 'bg-white text-slate-900 shadow-sm'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <History className="w-4 h-4" />
+          <History className="w-4 h-4 text-slate-300" />
           <span>سجل التفعيلات السابق ({subscriptionLogs.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('recycle_bin')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
+            activeTab === 'recycle_bin'
+              ? 'bg-rose-900 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Trash2 className="w-4 h-4 text-rose-300" />
+          <span>سلة المحذوفات ({recycleBinItems.length})</span>
         </button>
       </div>
 
@@ -862,6 +940,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
                                   </>
                                 )}
                               </button>
+
+                              {/* Delete Lab (Soft Delete to Recycle Bin) */}
+                              <button
+                                onClick={() => handleDeleteLab(lab.uid, lab.name)}
+                                disabled={processingLabId === lab.uid}
+                                className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl transition"
+                                title="نقل المعمل لسلة المحذوفات"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
 
@@ -1132,7 +1220,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
         </div>
       )}
 
-      {/* LAB DETAILS MODAL */}
+      {/* TAB 4: RECYCLE BIN (SOFT DELETED ACCOUNTS WITH 3-DAY AUTO PURGE RETENTION) */}
+      {activeTab === 'recycle_bin' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-50 text-rose-700 rounded-2xl border border-rose-200">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900 font-['Tajawal',sans-serif]">
+                  سلة المحذوفات المؤقتة (سياسة الاحتفاظ لـ 3 أيام)
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  الحسابات المحذوفة مؤقتاً تظل متوفرة للاستعادة لمدة 3 أيام قبل الحذف النهائي والتلقائي.
+                </p>
+              </div>
+            </div>
+
+            <span className="text-xs font-bold text-rose-800 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200 shrink-0">
+              العناصر المحذوفة: {recycleBinItems.length}
+            </span>
+          </div>
+
+          {recycleBinItems.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <Trash2 className="w-10 h-10 mx-auto mb-2 opacity-40" />
+              <p className="text-xs font-bold">سلة المحذوفات فارغة حالياً</p>
+              <p className="text-[11px] text-slate-400 mt-1">لا توجد حسابات عيادات أو معامل ملغاة مؤقتاً</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 text-[11px] font-extrabold uppercase">
+                    <th className="py-3 px-4">اسم الحساب والنوع</th>
+                    <th className="py-3 px-4">تاريخ النقل للسلة</th>
+                    <th className="py-3 px-4">المهلة المتبقية للحذف النهائي</th>
+                    <th className="py-3 px-4 text-center">الإجراءات المتاحة</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recycleBinItems.map((item) => {
+                    const deletedTime = new Date(item.deletedAt).getTime();
+                    const purgeDeadline = deletedTime + (3 * 24 * 60 * 60 * 1000); // 3 days in ms
+                    const now = Date.now();
+                    const diffMs = Math.max(0, purgeDeadline - now);
+                    const hoursLeft = Math.floor(diffMs / (1000 * 60 * 60));
+                    const daysLeft = Math.floor(hoursLeft / 24);
+                    const remHours = hoursLeft % 24;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                        
+                        <td className="py-3.5 px-4 font-bold text-slate-900">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                              item.type === 'doctor' ? 'bg-sky-100 text-sky-800' : 'bg-teal-100 text-teal-800'
+                            }`}>
+                              {item.type === 'doctor' ? 'عيادة طبيب' : 'معمل تحاليل'}
+                            </span>
+                            <span className="text-sm">{item.name}</span>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-600 font-medium">
+                          {new Date(item.deletedAt).toLocaleString('ar-EG')}
+                        </td>
+
+                        <td className="py-3.5 px-4 font-bold text-rose-700">
+                          {diffMs > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2.5 py-1 rounded-lg border border-amber-200 text-[11px]">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              <span>متبقي {daysLeft > 0 ? `${daysLeft} يوم و ` : ''}${remHours} ساعة</span>
+                            </span>
+                          ) : (
+                            <span className="text-rose-600 text-[11px]">انتهت المهلة (مستحق للحذف التلقائي)</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleRestoreAccount(item.id, item.type, item.name)}
+                              disabled={processingId === item.id}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-2xs flex items-center gap-1"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>استعادة الحساب</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleHardDeleteAccount(item.id, item.type, item.name)}
+                              disabled={processingId === item.id}
+                              className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold rounded-xl text-xs transition border border-rose-200 flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>حذف نهائي</span>
+                            </button>
+                          </div>
+                        </td>
+
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       {selectedLabForDetails && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">

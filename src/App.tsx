@@ -10,7 +10,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase/config';
 import {
   getDoctorProfile,
-  purgeTestAccounts
+  purgeTestAccounts,
+  verifyAdminStatus
 } from './services/firebaseService';
 import { getLabProfile } from './services/labService';
 import { DoctorProfile, ToastMessage } from './types';
@@ -64,6 +65,7 @@ function DoctorDashboardRedirect({ onRedirect }: { onRedirect: () => void }) {
 export default function App() {
   const [currentDoctor, setCurrentDoctor] = useState<DoctorProfile | null>(null);
   const [activeTab, setActiveTab] = useState<NavTabType>('directory');
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [authInitialAccountType, setAuthInitialAccountType] = useState<'doctor' | 'laboratory'>('doctor');
   
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
@@ -344,6 +346,9 @@ export default function App() {
           console.warn("Could not reload user state:", e);
         }
 
+        const adminRes = await verifyAdminStatus(user);
+        setIsPlatformAdmin(adminRes.isAdmin);
+
         let isVerified = user.emailVerified;
         if (!isVerified) {
           try {
@@ -403,6 +408,7 @@ export default function App() {
         }
       } else {
         setCurrentDoctor(null);
+        setIsPlatformAdmin(false);
       }
     });
 
@@ -412,12 +418,13 @@ export default function App() {
   const handleSignOut = async () => {
     await signOut(auth);
     setCurrentDoctor(null);
+    setIsPlatformAdmin(false);
     setActiveTab('directory');
     addToast("تم تسجيل الخروج بنجاح", "", "info");
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-['Cairo',sans-serif]">
+    <div className="min-h-screen bg-[#faf9f6] text-slate-800 flex flex-col font-['Cairo',sans-serif]">
       
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
@@ -426,6 +433,7 @@ export default function App() {
       <Navbar
         currentDoctor={currentDoctor}
         activeTab={activeTab}
+        isAdmin={isPlatformAdmin}
         onNavigate={(tab) => {
           if (tab === 'booking') {
             if (currentDoctor?.accountType === 'laboratory') {

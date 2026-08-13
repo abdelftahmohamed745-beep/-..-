@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Save, Clock, Stethoscope, Building, Phone, MapPin, Camera, MessageCircle, FileText, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
-import { DoctorProfile, ClinicServiceItem } from '../types';
+import { X, Save, Clock, Stethoscope, Building, Phone, MapPin, Camera, MessageCircle, FileText, Plus, Trash2, Image as ImageIcon, Map } from 'lucide-react';
+import { DoctorProfile, ClinicServiceItem, MEDICAL_SPECIALTIES } from '../types';
 import { updateDoctorSettings } from '../services/firebaseService';
 
 interface SettingsModalProps {
@@ -18,10 +18,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [name, setName] = useState(doctor.name || '');
   const [photoUrl, setPhotoUrl] = useState(doctor.photoUrl || '');
-  const [specialty, setSpecialty] = useState(doctor.specialty || '');
+  const [specialty, setSpecialty] = useState(doctor.specialty || MEDICAL_SPECIALTIES[0]);
   const [clinicName, setClinicName] = useState(doctor.clinicName || '');
   const [city, setCity] = useState(doctor.city || 'بغداد');
   const [address, setAddress] = useState(doctor.address || '');
+  const [googleMapsUrl, setGoogleMapsUrl] = useState(doctor.googleMapsUrl || '');
   const [phone, setPhone] = useState(doctor.phone || '');
   const [whatsappNumber, setWhatsappNumber] = useState(doctor.whatsappNumber || '');
   const [description, setDescription] = useState(doctor.description || '');
@@ -70,6 +71,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         clinicName,
         city,
         address,
+        googleMapsUrl,
         phone,
         whatsappNumber,
         description,
@@ -149,13 +151,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">التخصص الطبي</label>
-              <input
-                type="text"
+              <select
                 value={specialty}
                 onChange={(e) => setSpecialty(e.target.value)}
                 required
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-              />
+              >
+                {MEDICAL_SPECIALTIES.map((spec) => (
+                  <option key={spec} value={spec}>
+                    {spec}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -240,6 +247,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Google Maps Location URL */}
+          <div>
+            <label className="block text-xs font-bold text-sky-900 mb-1">رابط الموقع على خرائط Google Maps</label>
+            <div className="relative">
+              <Map className="w-4 h-4 text-sky-600 absolute right-3 top-3" />
+              <input
+                type="url"
+                value={googleMapsUrl}
+                onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                placeholder="https://maps.google.com/?q=33.3152,44.3661"
+                className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 text-left dir-ltr"
+              />
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              * الصق رابط الخريطة لتتيح للمرضى التوجه للعيادة بضغطة زر.
+            </p>
           </div>
 
           {/* Description / Bio */}

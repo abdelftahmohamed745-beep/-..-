@@ -108,6 +108,11 @@ service cloud.firestore {
 
       // Deletion: Restricted strictly to Admin (doctors cannot delete their account directly)
       allow delete: if isAdmin();
+
+      // Isolated Patient Medical Files subcollection (Doctor / Org Member or Admin ONLY)
+      match /patientFiles/{patientId} {
+        allow read, write: if isOrgMember(doctorId) || isAdmin();
+      }
     }
 
     // Queues and Patients subcollection

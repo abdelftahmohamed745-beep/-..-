@@ -260,7 +260,10 @@ export async function getAllLabs(): Promise<LabProfile[]> {
     const snap = await getDocs(collection(db, "labs"));
     const list: LabProfile[] = [];
     snap.forEach((d) => {
-      list.push(d.data() as LabProfile);
+      const data = d.data() as LabProfile;
+      if (!data.isDeleted) {
+        list.push(data);
+      }
     });
     return list;
   } catch (err) {

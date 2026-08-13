@@ -30,12 +30,12 @@ export const CustomWebsiteSection: React.FC = () => {
   const whatsappUrl = `https://wa.me/201032120351?text=${encodeURIComponent(customWebsiteMessage)}`;
 
   return (
-    <div className="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 border border-slate-800 shadow-xs relative overflow-hidden my-6">
+    <div className="bg-[#122c4a] text-white rounded-2xl p-5 sm:p-6 border border-[#1b3a5c] shadow-2xs relative overflow-hidden my-6">
       
       {/* Close Button */}
       <button
         onClick={handleDismiss}
-        className="absolute top-4 left-4 w-7 h-7 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg flex items-center justify-center transition border border-slate-700/80 cursor-pointer z-20 active:scale-95"
+        className="absolute top-4 left-4 w-7 h-7 bg-[#0d223a] hover:bg-[#1b3a5c] text-slate-300 hover:text-white rounded-lg flex items-center justify-center transition border border-[#1b3a5c] cursor-pointer z-20 active:scale-95"
         title="إغلاق التنويه"
         aria-label="إغلاق"
       >

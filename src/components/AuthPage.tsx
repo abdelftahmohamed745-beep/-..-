@@ -11,7 +11,7 @@ import {
   getDoctorProfile
 } from '../services/firebaseService';
 import { createLabProfile, getLabProfile } from '../services/labService';
-import { DoctorProfile, AccountType } from '../types';
+import { DoctorProfile, AccountType, MEDICAL_SPECIALTIES } from '../types';
 import { Stethoscope, Mail, Lock, User, Building, ArrowLeft, ShieldCheck, TestTube, RotateCcw, CheckCircle2, LogOut, KeyRound } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 
@@ -502,22 +502,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         </div>
       ) : (
         /* Main Login / Signup Card */
-        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200/90 mb-8">
+        <div className="bg-[#fdfcf9] rounded-3xl p-6 sm:p-8 shadow-xl border border-[#e7e3da] mb-8">
           
           {/* Toggle Tabs */}
-          <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
+          <div className="flex bg-[#f4efe6] p-1 rounded-2xl mb-6">
             <button
               onClick={() => setIsRegister(false)}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${
-                !isRegister ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                !isRegister ? 'bg-[#122c4a] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               تسجيل دخول
             </button>
             <button
               onClick={() => setIsRegister(true)}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition ${
-                isRegister ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                isRegister ? 'bg-[#122c4a] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               حساب جديد (عيادة / معمل)
@@ -532,13 +532,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setAccountType('doctor')}
-                  className={`p-3.5 rounded-2xl border text-right transition flex items-center gap-3 ${
+                  className={`p-3.5 rounded-2xl border text-right transition flex items-center gap-3 cursor-pointer ${
                     accountType === 'doctor'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-[#122c4a] text-white border-[#122c4a] shadow-md'
+                      : 'bg-[#faf8f5] text-slate-700 border-[#e7e3da] hover:bg-[#f4efe6]'
                   }`}
                 >
-                  <Stethoscope className="w-5 h-5 shrink-0 text-sky-400" />
+                  <Stethoscope className="w-5 h-5 shrink-0 text-sky-300" />
                   <div>
                     <span className="block font-bold text-xs">👨‍⚕️ طبيب / عيادة</span>
                     <span className="text-[10px] opacity-80 block">نظام الحجز والإنذار المبكر</span>
@@ -548,13 +548,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setAccountType('laboratory')}
-                  className={`p-3.5 rounded-2xl border text-right transition flex items-center gap-3 ${
+                  className={`p-3.5 rounded-2xl border text-right transition flex items-center gap-3 cursor-pointer ${
                     accountType === 'laboratory'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-[#122c4a] text-white border-[#122c4a] shadow-md'
+                      : 'bg-[#faf8f5] text-slate-700 border-[#e7e3da] hover:bg-[#f4efe6]'
                   }`}
                 >
-                  <TestTube className="w-5 h-5 shrink-0 text-teal-400" />
+                  <TestTube className="w-5 h-5 shrink-0 text-teal-300" />
                   <div>
                     <span className="block font-bold text-xs">🧪 معمل تحاليل</span>
                     <span className="text-[10px] opacity-80 block">إدارة الفحوصات والنتائج (Dory Labs)</span>
@@ -571,41 +571,45 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطبيب بالكامل</label>
                   <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                    <User className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                     <input
                       type="text"
                       value={doctorName}
                       onChange={(e) => setDoctorName(e.target.value)}
                       placeholder="د. محمد عبد الله"
                       required
-                      className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                      className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">التخصص الطبي</label>
-                  <input
-                    type="text"
+                  <select
                     value={specialty}
                     onChange={(e) => setSpecialty(e.target.value)}
-                    placeholder="استشاري الباطنة والقلب"
                     required
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-                  />
+                    className="w-full px-3 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
+                  >
+                    {MEDICAL_SPECIALTIES.map((spec) => (
+                      <option key={spec} value={spec}>
+                        {spec}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">اسم العيادة / المركز الطبي</label>
                   <div className="relative">
-                    <Building className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                    <Building className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                     <input
                       type="text"
                       value={clinicName}
                       onChange={(e) => setClinicName(e.target.value)}
                       placeholder="عيادة الشفاء التخصصية"
                       required
-                      className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                      className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
                     />
                   </div>
                 </div>
@@ -617,14 +621,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">اسم معمل التحاليل الطبية *</label>
                   <div className="relative">
-                    <TestTube className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                    <TestTube className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                     <input
                       type="text"
                       value={labName}
                       onChange={(e) => setLabName(e.target.value)}
                       placeholder="معمل النيل للتحاليل الطبية"
                       required
-                      className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                      className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
                     />
                   </div>
                 </div>
@@ -632,14 +636,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطبيب / المدير المسؤول *</label>
                   <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                    <User className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                     <input
                       type="text"
                       value={responsibleName}
                       onChange={(e) => setResponsibleName(e.target.value)}
                       placeholder="د. أحمد مصطفى"
                       required
-                      className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                      className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
                     />
                   </div>
                 </div>
@@ -652,7 +656,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="01012345678"
                     required
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-teal-500 dir-ltr text-left"
+                    className="w-full px-3 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] dir-ltr text-left"
                   />
                 </div>
 
@@ -664,7 +668,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     onChange={(e) => setAddress(e.target.value)}
                     placeholder="القاهرة - مدينة نصر - شارع الطيران"
                     required
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                    className="w-full px-3 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
                   />
                 </div>
               </>
@@ -673,14 +677,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">البريد الإلكتروني</label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                <Mail className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="doctor@clinic.com"
                   required
-                  className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-sky-500 dir-ltr text-left"
+                  className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] dir-ltr text-left"
                 />
               </div>
             </div>
@@ -688,14 +692,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور</label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                <Lock className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-sky-500 dir-ltr text-left"
+                  className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] dir-ltr text-left"
                 />
               </div>
             </div>
@@ -703,18 +707,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm rounded-2xl transition shadow-md cursor-pointer"
+              className="w-full py-3 bg-[#122c4a] hover:bg-[#0d223a] text-white font-extrabold text-sm rounded-2xl transition shadow-md cursor-pointer"
             >
               {loading ? 'جاري التحقق...' : isRegister ? 'تسجيل وبدء التجربة المجانية' : 'تسجيل الدخول'}
             </button>
           </form>
 
-        <hr className="my-6 border-slate-100" />
+        <hr className="my-6 border-[#f0ebe1]" />
 
         {/* Patient Preview Link */}
         <button
           onClick={onSelectPatientBookingView}
-          className="w-full py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold text-xs rounded-xl transition border border-sky-200/60 flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full py-2.5 bg-[#edf3fa] hover:bg-[#dce7f3] text-[#122c4a] font-bold text-xs rounded-xl transition border border-[#d1dfed] flex items-center justify-center gap-2 cursor-pointer"
         >
           <span>تصفح صفحة المريض (مسح كود الـ QR)</span>
           <ArrowLeft className="w-4 h-4" />

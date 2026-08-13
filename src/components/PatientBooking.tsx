@@ -104,9 +104,9 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
   if (!doctor) {
     return (
       <div className="max-w-md mx-auto px-4 py-12 text-center">
-        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-md">
+        <div className="bg-[#fdfcf9] p-8 rounded-3xl border border-[#e7e3da] shadow-md">
           <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-slate-900 font-['Tajawal',sans-serif]">
+          <h2 className="text-xl font-bold text-[#122c4a] font-['Tajawal',sans-serif]">
             العيادة غير متوفرة
           </h2>
           <p className="text-xs text-slate-500 mt-2 mb-6">
@@ -115,7 +115,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
           {onBackToDoctorLogin && (
             <button
               onClick={onBackToDoctorLogin}
-              className="w-full py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl"
+              className="w-full py-2.5 bg-[#122c4a] text-white font-bold text-xs rounded-xl hover:bg-[#0d223a] transition cursor-pointer"
             >
               العودة للصفحة الرئيسية
             </button>
@@ -134,30 +134,30 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-b from-slate-900 via-slate-900 to-sky-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 relative overflow-hidden mb-6 text-center"
+        className="bg-[#122c4a] text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-[#1b3a5c] relative overflow-hidden mb-6 text-center"
       >
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 to-teal-400 flex items-center justify-center text-slate-950 mx-auto mb-4 shadow-lg shadow-sky-500/20 font-bold">
-          <Stethoscope className="w-7 h-7" />
+        <div className="w-14 h-14 rounded-2xl bg-[#f4efe6] text-[#122c4a] flex items-center justify-center mx-auto mb-4 shadow-lg font-bold">
+          <Stethoscope className="w-7 h-7 text-[#122c4a]" />
         </div>
 
-        <span className="inline-block px-3 py-1 bg-sky-500/20 text-sky-300 font-bold text-xs rounded-full border border-sky-400/30 mb-2">
+        <span className="inline-block px-3 py-1 bg-white/10 text-sky-200 font-bold text-xs rounded-full border border-white/20 mb-2">
           {doctor.specialty}
         </span>
 
         <h1 className="text-2xl font-black font-['Tajawal',sans-serif] tracking-tight text-white">
           {doctor.clinicName}
         </h1>
-        <p className="text-sm font-bold text-slate-300 mt-0.5">
+        <p className="text-sm font-bold text-slate-200 mt-0.5">
           {doctor.name}
         </p>
 
-        <div className="mt-4 pt-4 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-xs text-slate-300">
-          <div className="flex items-center justify-center gap-1.5 bg-slate-800/60 p-2 rounded-xl">
-            <Clock className="w-3.5 h-3.5 text-sky-400" />
+        <div className="mt-4 pt-4 border-t border-[#1b3a5c] grid grid-cols-2 gap-2 text-xs text-slate-200">
+          <div className="flex items-center justify-center gap-1.5 bg-white/5 p-2 rounded-xl">
+            <Clock className="w-3.5 h-3.5 text-sky-300" />
             <span>{doctor.workHours?.open} - {doctor.workHours?.close}</span>
           </div>
-          <div className="flex items-center justify-center gap-1.5 bg-slate-800/60 p-2 rounded-xl">
-            <Users className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="flex items-center justify-center gap-1.5 bg-white/5 p-2 rounded-xl">
+            <Users className="w-3.5 h-3.5 text-emerald-300" />
             <span>~{doctor.avgConsultTime} دقيقة/مريض</span>
           </div>
         </div>
@@ -165,9 +165,9 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
 
       {/* Subscription Expired Warning */}
       {isExpired ? (
-        <div className="bg-white p-6 rounded-3xl border border-rose-200 shadow-md text-center">
+        <div className="bg-[#fdfcf9] p-6 rounded-3xl border border-rose-200 shadow-md text-center">
           <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-2" />
-          <h3 className="font-bold text-slate-900 text-base font-['Tajawal',sans-serif]">
+          <h3 className="font-bold text-[#122c4a] text-base font-['Tajawal',sans-serif]">
             نظام الحجز غير متاح حالياً
           </h3>
           <p className="text-xs text-slate-500 mt-1">
@@ -180,10 +180,10 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200/80"
+          className="bg-[#fdfcf9] rounded-3xl p-6 sm:p-8 shadow-xl border border-[#e7e3da]"
         >
           <div className="mb-6">
-            <h2 className="text-xl font-bold text-slate-900 font-['Tajawal',sans-serif]">
+            <h2 className="text-xl font-bold text-[#122c4a] font-['Tajawal',sans-serif]">
               احجز دورك الآن في صالة الانتظار
             </h2>
             <p className="text-xs text-slate-500 mt-1">
@@ -204,7 +204,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
               <button
                 type="button"
                 onClick={() => onBookingSuccess(existingTicket.id)}
-                className="mt-1 w-full py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition shadow-2xs"
+                className="mt-1 w-full py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition shadow-2xs cursor-pointer"
               >
                 انتقل إلى تذكرتك الحالية
               </button>
@@ -213,7 +213,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-[#122c4a] mb-1">
                 الاسم بالكامل <span className="text-rose-500">*</span>
               </label>
               <input
@@ -222,37 +222,37 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="أدخل اسمك كما في الهوية"
                 required
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition"
+                className="w-full px-4 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-[#122c4a] mb-1">
                 رقم الموبايل <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                <Phone className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="010XXXXXXXX"
                   required
-                  className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition font-mono"
+                  className="w-full pl-4 pr-10 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition font-mono"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-[#122c4a] mb-1">
                 توقيت إشعار قرب الدور المفضل
               </label>
               <div className="relative">
-                <Bell className="w-4 h-4 text-sky-600 absolute right-3.5 top-3.5 pointer-events-none" />
+                <Bell className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5 pointer-events-none" />
                 <select
                   value={notificationPreference}
                   onChange={(e) => setNotificationPreference(e.target.value as NotificationTimingPreference)}
-                  className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition appearance-none"
+                  className="w-full pl-4 pr-10 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition appearance-none"
                 >
                   <option value="two_turns">تنبيهي قبل دوري بدورين (افتراضي)</option>
                   <option value="one_turn">تنبيهي قبل دوري بدور واحد</option>
@@ -265,7 +265,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 bg-teal-800 hover:bg-teal-900 active:scale-[0.98] text-white font-bold text-sm rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 bg-[#122c4a] hover:bg-[#0d223a] active:scale-[0.98] text-white font-bold text-sm rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <Ticket className="w-4 h-4" />
                 <span>{isSubmitting ? 'جاري إشعار العيادة وتحديد الدور...' : 'تأكيد الحجز والحصول على التذكرة'}</span>

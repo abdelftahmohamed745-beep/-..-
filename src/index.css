@@ -1,1 +1,101 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-velvet-white: #faf8f5;
+    --card-velvet-white: #fdfcf9;
+    --border-velvet: #e7e3da;
+    
+    /* Laboratories Color Identity: Velvet Blue */
+    --velvet-blue-900: #122c4a;
+    --velvet-blue-800: #1b3a5c;
+    --velvet-blue-700: #1e4570;
+    --velvet-blue-50: #edf3fa;
+    --velvet-blue-border: #d1dfed;
+
+    /* Doctors & Clinics Color Identity: Velvet Green */
+    --velvet-green-900: #143d30;
+    --velvet-green-800: #1c5242;
+    --velvet-green-700: #256653;
+    --velvet-green-50: #eef7f4;
+    --velvet-green-border: #c4e5db;
+  }
+
+  body {
+    background-color: var(--bg-velvet-white);
+    color: #1e293b;
+    font-family: 'Cairo', 'Tajawal', sans-serif;
+  }
+}
+
+/* Custom Velvet Color Utility Helpers */
+.bg-velvet-white {
+  background-color: #faf8f5;
+}
+
+.bg-velvet-card {
+  background-color: #fdfcf9;
+}
+
+.border-velvet {
+  border-color: #e7e3da;
+}
+
+/* Velvet Blue (Labs) */
+.bg-velvet-blue {
+  background-color: #122c4a;
+}
+
+.bg-velvet-blue:hover {
+  background-color: #0d223a;
+}
+
+.bg-velvet-blue-soft {
+  background-color: #edf3fa;
+}
+
+.text-velvet-blue {
+  color: #122c4a;
+}
+
+.text-velvet-blue-soft {
+  color: #1b3a5c;
+}
+
+.border-velvet-blue {
+  border-color: #122c4a;
+}
+
+.border-velvet-blue-soft {
+  border-color: #d1dfed;
+}
+
+/* Velvet Green (Doctors & Clinics) */
+.bg-velvet-green {
+  background-color: #1c5242;
+}
+
+.bg-velvet-green:hover {
+  background-color: #143d30;
+}
+
+.bg-velvet-green-soft {
+  background-color: #eef7f4;
+}
+
+.text-velvet-green {
+  color: #143d30;
+}
+
+.text-velvet-green-soft {
+  color: #1c5242;
+}
+
+.border-velvet-green {
+  border-color: #1c5242;
+}
+
+.border-velvet-green-soft {
+  border-color: #c4e5db;
+}
+

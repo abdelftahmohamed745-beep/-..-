@@ -159,6 +159,28 @@ export interface ClinicServiceItem {
 
 export type AccountType = 'doctor' | 'laboratory';
 
+export const MEDICAL_SPECIALTIES = [
+  'طب أطفال',
+  'باطنية وقلب',
+  'جراحة عامة',
+  'نسائية وتوليد',
+  'طب وجراحة العيون',
+  'أنف وأذن وحنجرة',
+  'طب وجراحة العظام',
+  'أمراض الجلدية والتناسلية',
+  'طب الأسنان',
+  'أورام',
+  'أمراض الكلى والمجاري البولية',
+  'مخ وأعصاب',
+  'طب نفسي وعلاج نفسي',
+  'علاج طبيعي وإعادة تأهيل',
+  'مسالك بولية',
+  'أمراض الغدد الصماء والسكري',
+  'أمراض الجهاز الهضمي والكبد',
+  'طب عام وأسرة',
+  'معمل تحاليل طبية'
+] as const;
+
 export interface DoctorProfile {
   uid: string;
   accountType?: AccountType;
@@ -185,6 +207,12 @@ export interface DoctorProfile {
   isAdmin?: boolean; // Platform administrator flag
   ratingAverage?: number; // e.g. 4.8
   ratingCount?: number; // e.g. 15
+  latitude?: number;
+  longitude?: number;
+  googleMapsUrl?: string;
+  isDeleted?: boolean;
+  deletedAt?: string; // ISO string when soft-deleted
+  deletedByAdminUid?: string;
 }
 
 export interface SubscriptionLog {
@@ -334,6 +362,42 @@ export interface LabProfile {
   homeCollectionNotes?: string;
   createdAt: string;
   isActive?: boolean;
+  latitude?: number;
+  longitude?: number;
+  googleMapsUrl?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedByAdminUid?: string;
+}
+
+export interface PatientVisitEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  serviceName?: string;
+  price?: number;
+  notes?: string;
+  diagnosis?: string;
+  prescription?: string;
+  status: PatientStatus;
+  createdAt: string;
+}
+
+export interface PatientMedicalFile {
+  id: string; // Document ID (usually phone number or auto-id)
+  doctorId: string;
+  patientName: string;
+  patientPhone: string;
+  age?: number;
+  gender?: 'male' | 'female';
+  bloodGroup?: string;
+  allergies?: string;
+  chronicDiseases?: string;
+  generalNotes?: string;
+  lastVisitDate?: string;
+  visitsCount: number;
+  visits: PatientVisitEntry[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LabAdminView extends LabProfile {

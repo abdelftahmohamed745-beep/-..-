@@ -16,10 +16,14 @@ import {
   CheckCircle2,
   Clock,
   UserPlus,
-  X
+  X,
+  Map,
+  Filter,
+  RotateCcw
 } from 'lucide-react';
-import { DoctorProfile } from '../types';
+import { DoctorProfile, MEDICAL_SPECIALTIES } from '../types';
 import { getAllDoctors, formatPhoneNumberForUrl } from '../services/firebaseService';
+import { getAllLabs } from '../services/labService';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 
 interface DoctorsDirectoryProps {
@@ -35,8 +39,10 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
   onNavigateAuth,
   onShowToast
 }) => {
-  const [doctors, setDoctors] = useState<DoctorProfile[]>([]);
+  const [profiles, setProfiles] = useState<DoctorProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState<'all' | 'clinic' | 'laboratory'>('all');
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('all');
   const [selectedCity, setSelectedCity] = useState<string>('all');
   const [loading, setLoading] = useState(true);
 
@@ -44,11 +50,40 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
     let isMounted = true;
     async function loadDirectory() {
       setLoading(true);
-      const list = await getAllDoctors();
+      try {
+        const [doctorsList, labsList] = await Promise.all([
+          getAllDoctors(),
+          getAllLabs()
+        ]);
 
-      if (isMounted) {
-        setDoctors(list);
-        setLoading(false);
+        const mappedLabs: DoctorProfile[] = labsList.map((lab) => ({
+          uid: lab.uid,
+          accountType: 'laboratory',
+          name: lab.responsibleName || lab.name,
+          specialty: "معمل تحاليل",
+          clinicName: lab.name,
+          qrCodeId: lab.uid,
+          subscriptionStatus: 'active',
+          trialEndDate: new Date().toISOString(),
+          city: (lab as any).city || "بغداد",
+          address: lab.address,
+          phone: lab.phone,
+          whatsappNumber: lab.phone,
+          latitude: lab.latitude,
+          longitude: lab.longitude,
+          googleMapsUrl: lab.googleMapsUrl,
+          avgConsultTime: 15,
+          workHours: { open: "08:00", close: "23:00", maxPatientsPerDay: 100, daysOfWeek: [] },
+          createdAt: lab.createdAt
+        }));
+
+        if (isMounted) {
+          setProfiles([...doctorsList, ...mappedLabs]);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Error loading directory items:", err);
+        if (isMounted) setLoading(false);
       }
     }
     loadDirectory();
@@ -57,24 +92,48 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
     };
   }, []);
 
-  // Filter doctors by search query and city
-  const filteredDoctors = doctors.filter((doc) => {
+  // Filter profiles by search query, account type, specialty, and city
+  const filteredProfiles = profiles.filter((item) => {
     const query = searchQuery.trim().toLowerCase();
-    const nameMatch = doc.name?.toLowerCase().includes(query);
-    const specMatch = doc.specialty?.toLowerCase().includes(query);
-    const clinicMatch = doc.clinicName?.toLowerCase().includes(query);
-    const cityMatch = doc.city?.toLowerCase().includes(query) || doc.address?.toLowerCase().includes(query);
+
+    const nameMatch = item.name?.toLowerCase().includes(query);
+    const specMatch = item.specialty?.toLowerCase().includes(query);
+    const clinicMatch = item.clinicName?.toLowerCase().includes(query);
+    const cityMatch = item.city?.toLowerCase().includes(query) || item.address?.toLowerCase().includes(query);
 
     const matchesSearch = !query || nameMatch || specMatch || clinicMatch || cityMatch;
-    const matchesCity = selectedCity === 'all' || doc.city === selectedCity || doc.address?.includes(selectedCity);
 
-    return matchesSearch && matchesCity;
+    const isLab = item.accountType === 'laboratory';
+    const matchesType =
+      selectedType === 'all' ||
+      (selectedType === 'clinic' && !isLab) ||
+      (selectedType === 'laboratory' && isLab);
+
+    const matchesSpecialty =
+      selectedSpecialty === 'all' ||
+      item.specialty === selectedSpecialty;
+
+    const matchesCity =
+      selectedCity === 'all' ||
+      item.city === selectedCity ||
+      item.address?.includes(selectedCity);
+
+    return matchesSearch && matchesType && matchesSpecialty && matchesCity;
   });
 
   // Extract unique cities
   const cities = Array.from(
-    new Set(doctors.map((d) => d.city || d.address?.split('،')[0] || 'بغداد').filter(Boolean))
+    new Set(profiles.map((d) => d.city || d.address?.split('،')[0] || 'بغداد').filter(Boolean))
   );
+
+  const hasActiveFilters = searchQuery !== '' || selectedType !== 'all' || selectedSpecialty !== 'all' || selectedCity !== 'all';
+
+  const resetAllFilters = () => {
+    setSearchQuery('');
+    setSelectedType('all');
+    setSelectedSpecialty('all');
+    setSelectedCity('all');
+  };
 
   const handleScrollToSearch = () => {
     const el = document.getElementById('directory');
@@ -94,35 +153,43 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
       
       {/* Hero Header Section */}
       <header className="text-center max-w-3xl mx-auto space-y-4">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 font-bold text-xs">
-          <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
-          <span>المنصة الطبية لتنظيم العيادات والمعامل الطبية</span>
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#edf3fa] border border-[#d1dfed] text-[#122c4a] font-bold text-xs">
+          <ShieldCheck className="w-3.5 h-3.5 text-[#1b3a5c]" />
+          <span>منصة دوري للعيادات الطبية ومختبرات التحاليل</span>
         </div>
 
-        <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-snug">
-          دوري — النظام الذكي للعيادات والمختبرات الطبية
+        <h1 className="text-2xl sm:text-4xl font-extrabold text-[#122c4a] tracking-tight leading-snug font-['Tajawal',sans-serif]">
+          دوري — المنصة الطبية الشاملة للعيادات والمختبرات
         </h1>
 
         <p className="text-slate-600 text-xs sm:text-sm leading-relaxed max-w-2xl mx-auto font-medium">
-          نظام متكامل لتنظيم طابور الانتظار المباشر، إدارة حجز المواعيد، وسجلات الفحوصات والنتائج الطبية بكل دقة وأمان.
+          تساعد المرضى في الوصول للعيادات والمعامل وحجز الدور مباشرة، وتساعد الأطباء وأصحاب المختبرات في إدارة المواعيد والعمليات بكل سهولة.
         </p>
 
-        {/* Hero Action Buttons */}
+        {/* Hero 3 Action Buttons */}
         <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
           <button
-            onClick={() => onNavigateAuth('doctor')}
-            className="px-5 py-3 bg-teal-800 hover:bg-teal-900 active:scale-[0.98] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
+            onClick={handleScrollToSearch}
+            className="px-5 py-3 bg-[#fdfcf9] hover:bg-[#f4efe6] active:scale-[0.98] text-[#122c4a] font-bold text-xs sm:text-sm rounded-xl transition-all border border-[#e7e3da] shadow-2xs flex items-center gap-2 cursor-pointer"
           >
-            <UserPlus className="w-4 h-4" />
-            <span>تسجيل عيادة أو معمل مجاناً</span>
+            <Search className="w-4 h-4 text-[#1b3a5c]" />
+            <span>ابحث عن طبيب أو معمل</span>
           </button>
 
           <button
-            onClick={handleScrollToSearch}
-            className="px-5 py-3 bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-800 font-bold text-xs sm:text-sm rounded-xl transition-all border border-slate-200/90 shadow-2xs flex items-center gap-2 cursor-pointer"
+            onClick={() => onNavigateAuth('doctor')}
+            className="px-5 py-3 bg-[#1c5242] hover:bg-[#143d30] active:scale-[0.98] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
           >
-            <Search className="w-4 h-4 text-slate-500" />
-            <span>البحث عن العيادات والمختبرات</span>
+            <Stethoscope className="w-4 h-4 text-emerald-200" />
+            <span>أنا طبيب / عيادة</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateAuth('laboratory')}
+            className="px-5 py-3 bg-[#122c4a] hover:bg-[#0d223a] active:scale-[0.98] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
+          >
+            <TestTube className="w-4 h-4 text-sky-300" />
+            <span>أنا معمل تحاليل</span>
           </button>
         </div>
       </header>
@@ -130,89 +197,89 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
       {/* Account Type Portals */}
       <section aria-label="بوابات الدخول والتسجيل" className="grid md:grid-cols-2 gap-5">
         
-        {/* Doctor Portal Card */}
-        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs hover:border-teal-500/40 hover:shadow-xs transition duration-150 flex flex-col justify-between group">
+        {/* Doctor Portal Card (Velvet Green Identity) */}
+        <div className="bg-[#fdfcf9] rounded-2xl p-5 sm:p-6 border border-[#c4e5db] shadow-2xs hover:border-[#1c5242]/50 transition duration-150 flex flex-col justify-between group">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-800 flex items-center justify-center font-bold border border-teal-100/80">
-                <Stethoscope className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-[#eef7f4] text-[#143d30] flex items-center justify-center font-bold border border-[#c4e5db]">
+                <Stethoscope className="w-5 h-5 text-[#1c5242]" />
               </div>
-              <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100">
-                للأطباء والعيادات
+              <span className="text-[11px] font-bold text-[#143d30] bg-[#eef7f4] px-2.5 py-1 rounded-full border border-[#c4e5db]">
+                🩺 للأطباء والعيادات
               </span>
             </div>
 
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-800 transition">
-                إدارة العيادة وطابور الانتظار
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-[#143d30] transition">
+                إدارة العيادة وطابور المرضى
               </h2>
               <p className="text-xs text-slate-600 leading-relaxed mt-1">
-                تتبع حركة المرضى في الوقت الفعلي، إرسال إشعارات الدور التلقائية، وعرض الشاشة التفاعلية للتلفزيون.
+                تنظيم الحجوزات، طابور الانتظار المباشر، تنبيهات الدور التلقائية، وشاشة التلفزيون التفاعلية للانتظار.
               </p>
             </div>
 
             <ul className="text-xs text-slate-600 space-y-1.5 pt-1">
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                <span>طابور رقمي مباشر مع تنبيهات صويتة</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#1c5242] shrink-0" />
+                <span>طابور رقمي مباشر وإشعارات قرب الدور</span>
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                <span>حجز المواعيد المسبقة والكشوفات اليومية</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#1c5242] shrink-0" />
+                <span>إدارة سجلات المرضى والروشتات والمتابعات</span>
               </li>
             </ul>
           </div>
 
-          <div className="pt-4 mt-4 border-t border-slate-100">
+          <div className="pt-4 mt-4 border-t border-[#eef7f4]">
             <button
               onClick={() => onNavigateAuth('doctor')}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+              className="w-full py-2.5 bg-[#1c5242] hover:bg-[#143d30] active:scale-[0.98] text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
             >
-              <span>دخول / إنشاء حساب عيادة</span>
+              <span>دخول / تسجيل حساب عيادة</span>
               <ArrowLeft className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Laboratory Portal Card */}
-        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs hover:border-emerald-500/40 hover:shadow-xs transition duration-150 flex flex-col justify-between group">
+        {/* Laboratory Portal Card (Velvet Blue Identity) */}
+        <div className="bg-[#fdfcf9] rounded-2xl p-5 sm:p-6 border border-[#d1dfed] shadow-2xs hover:border-[#122c4a]/50 transition duration-150 flex flex-col justify-between group">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold border border-emerald-100/80">
-                <TestTube className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold border border-[#d1dfed]">
+                <TestTube className="w-5 h-5 text-[#1b3a5c]" />
               </div>
-              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                لمعامل التحاليل (Dory Labs)
+              <span className="text-[11px] font-bold text-[#122c4a] bg-[#edf3fa] px-2.5 py-1 rounded-full border border-[#d1dfed]">
+                🧪 للمختبرات والمعامل
               </span>
             </div>
 
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-emerald-800 transition">
-                إدارة الفحوصات والتقارير المخبرية
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-[#122c4a] transition">
+                إدارة الفحوصات والنتائج المخبرية
               </h2>
               <p className="text-xs text-slate-600 leading-relaxed mt-1">
-                إدارة الفحوصات والطلبات، طباعة الباركود، إدخال النتائج، وإصدار تقارير PDF موثقة بشفرة QR.
+                استلام الطلبات، إدارة العينات والباركود، إدخال النتائج، ونشر تقارير PDF موثقة للمرضى بكود QR.
               </p>
             </div>
 
             <ul className="text-xs text-slate-600 space-y-1.5 pt-1">
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#1b3a5c] shrink-0" />
                 <span>تتبع حالة العينة ومراحل التحليل</span>
               </li>
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                <span>تقارير PDF طبية موثقة مع مشاركة سريعة</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#1b3a5c] shrink-0" />
+                <span>تقارير PDF موثقة ومتاحة إلكترونياً للمريض</span>
               </li>
             </ul>
           </div>
 
-          <div className="pt-4 mt-4 border-t border-slate-100">
+          <div className="pt-4 mt-4 border-t border-[#edf3fa]">
             <button
               onClick={() => onNavigateAuth('laboratory')}
-              className="w-full py-2.5 bg-teal-800 hover:bg-teal-900 active:scale-[0.98] text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+              className="w-full py-2.5 bg-[#122c4a] hover:bg-[#0d223a] active:scale-[0.98] text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
             >
-              <span>دخول / إنشاء حساب معمل</span>
+              <span>دخول / تسجيل حساب معمل</span>
               <ArrowLeft className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -224,24 +291,80 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
       <div id="directory" className="pt-4">
         
         {/* Search & Filter Bar */}
-        <section aria-label="البحث والفلترة" className="bg-white rounded-2xl p-4 shadow-2xs border border-slate-200/80 mb-6">
-          <div className="flex flex-col md:flex-row items-center gap-3">
+        <section aria-label="البحث والفلترة" className="bg-[#fdfcf9] rounded-2xl p-5 shadow-2xs border border-[#e7e3da] mb-6 space-y-4">
+          
+          {/* Row 1: Account Type Selector Tabs */}
+          <div className="flex items-center gap-2 border-b border-[#f0ebe1] pb-3 overflow-x-auto">
+            <span className="text-xs font-extrabold text-slate-500 shrink-0 flex items-center gap-1 ml-2">
+              <Filter className="w-3.5 h-3.5" />
+              <span>التصنيف:</span>
+            </span>
+            
+            <button
+              onClick={() => setSelectedType('all')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                selectedType === 'all'
+                  ? 'bg-[#122c4a] text-white shadow-2xs'
+                  : 'bg-[#edf3fa] text-slate-700 hover:bg-[#dce7f3]'
+              }`}
+            >
+              <span>الكل ({profiles.length})</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedType('clinic')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                selectedType === 'clinic'
+                  ? 'bg-[#122c4a] text-white shadow-2xs'
+                  : 'bg-[#edf3fa] text-slate-700 hover:bg-[#dce7f3]'
+              }`}
+            >
+              <Stethoscope className="w-3.5 h-3.5" />
+              <span>عيادات أطباء ({profiles.filter(p => p.accountType !== 'laboratory').length})</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedType('laboratory')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                selectedType === 'laboratory'
+                  ? 'bg-[#122c4a] text-white shadow-2xs'
+                  : 'bg-[#edf3fa] text-slate-700 hover:bg-[#dce7f3]'
+              }`}
+            >
+              <TestTube className="w-3.5 h-3.5" />
+              <span>معامل تحاليل ({profiles.filter(p => p.accountType === 'laboratory').length})</span>
+            </button>
+
+            {hasActiveFilters && (
+              <button
+                onClick={resetAllFilters}
+                className="mr-auto px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-bold transition flex items-center gap-1 text-xs shrink-0 cursor-pointer"
+                title="إعادة ضبط الفلاتر"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>مسح الفلاتر</span>
+              </button>
+            )}
+          </div>
+
+          {/* Row 2: Search Input & Selectors */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
             
             {/* Text Search Input */}
-            <div className="relative flex-1 w-full">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+            <div className="relative md:col-span-6 w-full">
+              <Search className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
               <input
                 id="search-input"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ابحث باسم الطبيب، التخصص، العيادة، أو المدينة..."
-                className="w-full pl-8 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-700 transition"
+                placeholder="ابحث باسم الطبيب، التخصص، المعمل، أو الخدمة..."
+                className="w-full pl-8 pr-10 py-2.5 bg-[#fdfcf9] border border-[#e7e3da] rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 transition"
+                  className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 transition cursor-pointer"
                   title="مسح البحث"
                 >
                   <X className="w-4 h-4" />
@@ -249,61 +372,65 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
               )}
             </div>
 
-            {/* City Filter Pills */}
-            <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-              <button
-                onClick={() => setSelectedCity('all')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer active:scale-95 ${
-                  selectedCity === 'all'
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+            {/* Specialty Dropdown */}
+            <div className="md:col-span-3">
+              <select
+                value={selectedSpecialty}
+                onChange={(e) => setSelectedSpecialty(e.target.value)}
+                className="w-full py-2.5 px-3 bg-[#fdfcf9] border border-[#e7e3da] rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition cursor-pointer"
               >
-                جميع المدن ({doctors.length})
-              </button>
-              {cities.map((city) => (
-                <button
-                  key={city}
-                  onClick={() => setSelectedCity(city)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer active:scale-95 ${
-                    selectedCity === city
-                      ? 'bg-teal-800 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {city}
-                </button>
-              ))}
+                <option value="all">جميع التخصصات</option>
+                <option value="معمل تحاليل">معمل تحاليل</option>
+                {MEDICAL_SPECIALTIES.map((spec) => (
+                  <option key={spec} value={spec}>
+                    {spec}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* City Dropdown */}
+            <div className="md:col-span-3">
+              <select
+                value={selectedCity}
+                onChange={(e) => setSelectedCity(e.target.value)}
+                className="w-full py-2.5 px-3 bg-[#fdfcf9] border border-[#e7e3da] rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition cursor-pointer"
+              >
+                <option value="all">جميع المدن</option>
+                {cities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
             </div>
 
           </div>
         </section>
 
-        {/* Doctor Cards Grid */}
-        <section aria-label="قائمة الأطباء والعيادات">
+        {/* Doctor & Lab Cards Grid */}
+        <section aria-label="قائمة الأطباء والمعامل">
           {loading ? (
             <div className="py-16 text-center">
-              <div className="w-8 h-8 border-3 border-teal-700 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-slate-500 font-semibold text-xs">جاري تحميل دليل الأطباء والعيادات...</p>
+              <div className="w-8 h-8 border-3 border-[#122c4a] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-slate-500 font-semibold text-xs">جاري تحميل دليل العيادات والمختبرات...</p>
             </div>
-          ) : filteredDoctors.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center border border-slate-200/90 max-w-md mx-auto shadow-2xs">
-              <Stethoscope className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          ) : filteredProfiles.length === 0 ? (
+            <div className="bg-[#fdfcf9] rounded-2xl p-8 text-center border border-[#e7e3da] max-w-md mx-auto shadow-2xs">
+              <Stethoscope className="w-10 h-10 text-[#1b3a5c] mx-auto mb-3 opacity-50" />
               <h3 className="font-bold text-slate-800 text-sm mb-1">لم نتمكن من العثور على نتائج مطابقة</h3>
-              <p className="text-xs text-slate-500 mb-4">جرب البحث بكلمة أخرى أو اختيار جميع المدن</p>
+              <p className="text-xs text-slate-500 mb-4">جرب البحث بكلمة أخرى أو تغيير خيارات الفلترة</p>
               <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCity('all');
-                }}
-                className="px-4 py-2 bg-teal-800 text-white rounded-xl text-xs font-bold cursor-pointer active:scale-95 transition"
+                onClick={resetAllFilters}
+                className="px-4 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white rounded-xl text-xs font-bold cursor-pointer active:scale-95 transition"
               >
-                إعادة ضبط البحث
+                إعادة ضبط جميع الفلاتر
               </button>
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredDoctors.map((doc) => {
+              {filteredProfiles.map((doc) => {
+                const isLab = doc.accountType === 'laboratory';
                 const rawPhone = doc.phone ? doc.phone.trim() : "";
                 const rawWhatsapp = doc.whatsappNumber ? doc.whatsappNumber.trim() : rawPhone;
 
@@ -313,30 +440,40 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
                 const hasPhone = Boolean(cleanPhone && cleanPhone.length > 5);
                 const hasWhatsapp = Boolean(cleanWhatsapp && cleanWhatsapp.length > 5);
 
+                const mapUrl = doc.googleMapsUrl || (doc.latitude && doc.longitude ? `https://maps.google.com/?q=${doc.latitude},${doc.longitude}` : null);
+
                 return (
                   <div
                     key={doc.uid}
-                    className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs hover:shadow-xs hover:border-slate-300 transition duration-150 flex flex-col justify-between group relative"
+                    className={`bg-[#fdfcf9] rounded-2xl border p-5 shadow-2xs hover:shadow-xs transition duration-150 flex flex-col justify-between group relative ${
+                      isLab ? 'border-[#d1dfed] hover:border-[#122c4a]/40' : 'border-[#c4e5db] hover:border-[#1c5242]/40'
+                    }`}
                   >
                     <div>
                       
-                      {/* Top Doctor Avatar & Specialty */}
+                      {/* Top Avatar & Specialty Badge */}
                       <div className="flex items-start gap-3 mb-3.5">
                         {doc.photoUrl ? (
                           <img
                             src={doc.photoUrl}
                             alt={doc.name}
-                            className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
+                            className="w-14 h-14 rounded-xl object-cover border border-[#e7e3da] shadow-2xs shrink-0"
                           />
                         ) : (
-                          <div className="w-14 h-14 rounded-xl bg-teal-800 text-white flex items-center justify-center font-bold text-xl shadow-2xs shrink-0">
-                            {doc.name ? doc.name.replace("د.", "").trim().charAt(0) : "ط"}
+                          <div className={`w-14 h-14 rounded-xl text-white flex items-center justify-center font-bold text-xl shadow-2xs shrink-0 ${
+                            isLab ? 'bg-[#122c4a]' : 'bg-[#1c5242]'
+                          }`}>
+                            {isLab ? <TestTube className="w-7 h-7 text-sky-300" /> : (doc.name ? doc.name.replace("د.", "").trim().charAt(0) : "ط")}
                           </div>
                         )}
 
                         <div className="space-y-1 min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="inline-block px-2 py-0.5 bg-teal-50 text-teal-800 font-bold text-[11px] rounded-full border border-teal-100">
+                            <span className={`inline-block px-2.5 py-0.5 font-bold text-[11px] rounded-full border ${
+                              isLab
+                                ? 'bg-[#edf3fa] text-[#122c4a] border-[#d1dfed]'
+                                : 'bg-[#eef7f4] text-[#143d30] border-[#c4e5db]'
+                            }`}>
                               {doc.specialty}
                             </span>
 
@@ -349,7 +486,9 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
                             ) : null}
                           </div>
 
-                          <h3 className="font-bold text-slate-900 text-sm sm:text-base font-['Tajawal',sans-serif] group-hover:text-teal-800 transition truncate">
+                          <h3 className={`font-bold text-slate-900 text-sm sm:text-base font-['Tajawal',sans-serif] transition truncate ${
+                            isLab ? 'group-hover:text-[#122c4a]' : 'group-hover:text-[#143d30]'
+                          }`}>
                             {doc.name}
                           </h3>
                           <p className="text-xs text-slate-600 font-medium flex items-center gap-1">
@@ -359,10 +498,24 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
                         </div>
                       </div>
 
-                      {/* City / Address */}
-                      <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span className="truncate">{doc.city ? `${doc.city} - ${doc.address}` : doc.address}</span>
+                      {/* City / Address & Map Link */}
+                      <div className="text-xs text-slate-600 font-medium flex items-center justify-between gap-1.5 mb-3 bg-[#faf8f5] p-2.5 rounded-xl border border-[#e7e3da]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <MapPin className="w-3.5 h-3.5 text-[#1b3a5c] shrink-0" />
+                          <span className="truncate">{doc.city ? `${doc.city} - ${doc.address}` : doc.address}</span>
+                        </div>
+                        {mapUrl && (
+                          <a
+                            href={mapUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] text-[#122c4a] hover:underline font-bold flex items-center gap-1 shrink-0 bg-[#edf3fa] px-2 py-1 rounded-lg border border-[#d1dfed]"
+                            title="عرض على الخريطة"
+                          >
+                            <Map className="w-3 h-3 text-[#1b3a5c]" />
+                            <span>الخريطة</span>
+                          </a>
+                        )}
                       </div>
 
                       {/* Working Hours Badge */}
@@ -376,24 +529,32 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
                     </div>
 
                     {/* Bottom Action Buttons */}
-                    <div className="pt-3 border-t border-slate-100 space-y-2">
+                    <div className="pt-3 border-t border-[#f0ebe1] space-y-2">
                       
-                      {/* Primary Row: View Clinic & Book Turn */}
+                      {/* Primary Row: View Clinic / Lab & Book Turn */}
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => onSelectDoctorClinic(doc.uid)}
-                          className="w-full py-2 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          className={`w-full py-2 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border ${
+                            isLab
+                              ? 'bg-[#edf3fa] hover:bg-[#dce7f3] text-[#122c4a] border-[#d1dfed]'
+                              : 'bg-[#eef7f4] hover:bg-[#d8ede7] text-[#143d30] border-[#c4e5db]'
+                          }`}
                         >
-                          <Eye className="w-3.5 h-3.5 text-slate-600" />
-                          <span>عرض العيادة</span>
+                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                          <span>{isLab ? 'صفحة المعمل' : 'عرض العيادة'}</span>
                         </button>
 
                         <button
                           onClick={() => onBookTurn(doc.uid)}
-                          className="w-full py-2 bg-teal-800 hover:bg-teal-900 active:scale-[0.98] text-white font-bold text-xs rounded-xl transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                          className={`w-full py-2 active:scale-[0.98] text-white font-bold text-xs rounded-xl transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer ${
+                            isLab
+                              ? 'bg-[#122c4a] hover:bg-[#0d223a]'
+                              : 'bg-[#1c5242] hover:bg-[#143d30]'
+                          }`}
                         >
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>حجز دور</span>
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          <span>{isLab ? 'طلب فحص' : 'حجز دور'}</span>
                         </button>
                       </div>
 
@@ -403,20 +564,20 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
                           {hasPhone ? (
                             <a
                               href={`tel:${cleanPhone}`}
-                              className="py-1.5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 text-center"
+                              className="py-1.5 bg-[#122c4a] hover:bg-[#0d223a] active:scale-[0.98] text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 text-center"
                             >
-                              <Phone className="w-3 h-3" />
+                              <Phone className="w-3 h-3 text-sky-300" />
                               <span>اتصال</span>
                             </a>
                           ) : (
-                            <div className="py-1.5 bg-slate-50 text-slate-400 rounded-xl text-[11px] font-medium text-center border border-dashed border-slate-200">
+                            <div className="py-1.5 bg-[#faf8f5] text-slate-400 rounded-xl text-[11px] font-medium text-center border border-dashed border-[#e7e3da]">
                               الهاتف غير مضاف
                             </div>
                           )}
 
                           {hasWhatsapp ? (
                             <a
-                              href={`https://wa.me/${cleanWhatsapp}?text=${encodeURIComponent(`مرحبًا دكتور ${doc.name}، أريد الاستفسار عن المواعيد.`)}`}
+                              href={`https://wa.me/${cleanWhatsapp}?text=${encodeURIComponent(`مرحبًا، أريد الاستفسار عن المواعيد والخدمات.`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="py-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-[0.98] text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 text-center"
@@ -425,7 +586,7 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
                               <span>واتساب</span>
                             </a>
                           ) : (
-                            <div className="py-1.5 bg-slate-50 text-slate-400 rounded-xl text-[11px] font-medium text-center border border-dashed border-slate-200">
+                            <div className="py-1.5 bg-[#faf8f5] text-slate-400 rounded-xl text-[11px] font-medium text-center border border-dashed border-[#e7e3da]">
                               الواتساب غير مضاف
                             </div>
                           )}

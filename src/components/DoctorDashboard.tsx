@@ -220,9 +220,93 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
     }
   };
 
+  // State for dismissing setup guide manually
+  const [hideSetupGuide, setHideSetupGuide] = useState(false);
+
+  // Clinic Setup Score Calculation
+  const hasBasicInfo = Boolean(doctor.name && doctor.clinicName && doctor.phone && doctor.address);
+  const hasSpecialty = Boolean(doctor.specialty && doctor.specialty !== "طبيب عام");
+  const hasServices = Boolean(doctor.services && doctor.services.length > 0);
+  const hasWorkHours = Boolean(doctor.workHours && doctor.workHours.open && doctor.workHours.close);
+  const hasMapLocation = Boolean(doctor.googleMapsUrl || (doctor.latitude && doctor.longitude));
+  const hasBookingEnabled = doctor.acceptsBookings !== false;
+
+  const setupSteps = [
+    { id: 'info', label: 'بيانات العيادة الأساسية', done: hasBasicInfo, weight: 20 },
+    { id: 'specialty', label: 'التخصص الطبي', done: hasSpecialty, weight: 15 },
+    { id: 'services', label: 'الخدمات والأسعار', done: hasServices, weight: 20 },
+    { id: 'hours', label: 'ساعات العمل والحد اليومي', done: hasWorkHours, weight: 15 },
+    { id: 'map', label: 'رابط موقع Google Maps', done: hasMapLocation, weight: 15 },
+    { id: 'booking', label: 'تفعيل الحجز المباشر', done: hasBookingEnabled, weight: 15 },
+  ];
+
+  const setupCompletionScore = setupSteps.reduce((acc, step) => acc + (step.done ? step.weight : 0), 0);
+  const isSetupComplete = setupCompletionScore === 100;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       
+      {/* Clinic Setup Guide Banner (Velvet Green Styling) */}
+      {!isSetupComplete && !hideSetupGuide && (
+        <div className="bg-[#eef7f4] border border-[#c4e5db] rounded-2xl p-5 text-[#143d30] shadow-2xs relative">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#1c5242] text-white flex items-center justify-center font-bold text-sm shadow-2xs">
+                {setupCompletionScore}%
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base font-['Tajawal',sans-serif]">
+                  دليل إعداد العيادة — نسبة الإكمال: {setupCompletionScore}%
+                </h3>
+                <p className="text-xs text-slate-600">
+                  أكمل الخطوات التالية للبدء في استقبال المرضى وطباعة رمز QR الخاص بعيادتك:
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setHideSetupGuide(true)}
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 bg-white/60 hover:bg-white px-2.5 py-1 rounded-lg transition cursor-pointer"
+            >
+              إخفاء
+            </button>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-white/80 rounded-full h-2.5 mb-4 border border-[#c4e5db] overflow-hidden">
+            <div
+              className="bg-[#1c5242] h-full rounded-full transition-all duration-500"
+              style={{ width: `${setupCompletionScore}%` }}
+            />
+          </div>
+
+          {/* Checklist Items */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1">
+            {setupSteps.map((step) => (
+              <button
+                key={step.id}
+                onClick={onOpenSettingsModal}
+                className={`p-2.5 rounded-xl text-xs font-bold text-right transition border cursor-pointer flex flex-col justify-between ${
+                  step.done
+                    ? 'bg-white/90 text-emerald-900 border-emerald-300'
+                    : 'bg-white/40 text-slate-700 border-[#c4e5db] hover:bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] opacity-75">+{step.weight}%</span>
+                  {step.done ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                </div>
+                <span className="line-clamp-2">{step.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Expired / Trial Warning Banner */}
       {doctor.subscriptionStatus === 'expired' && (
         <div className="bg-rose-50 border border-rose-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-rose-900 shadow-2xs">
@@ -307,35 +391,35 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         
         {/* Waiting */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
           <div>
             <div className="text-xs text-slate-500 font-bold">في الانتظار</div>
-            <div className="text-2xl font-black text-sky-600 font-['Tajawal',sans-serif] mt-1">
+            <div className="text-2xl font-black text-[#122c4a] font-['Tajawal',sans-serif] mt-1">
               {waitingPatients.length}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">جاهزون للدخول</div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
-            <Users className="w-5 h-5" />
+          <div className="w-11 h-11 rounded-2xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold">
+            <Users className="w-5 h-5 text-[#1b3a5c]" />
           </div>
         </div>
 
         {/* Called */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
           <div>
             <div className="text-xs text-slate-500 font-bold">في الكشف الآن</div>
-            <div className="text-2xl font-black text-amber-500 font-['Tajawal',sans-serif] mt-1">
+            <div className="text-2xl font-black text-amber-600 font-['Tajawal',sans-serif] mt-1">
               {calledPatient ? `#${calledPatient.sequenceNumber}` : '0'}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">داخل الغرفة</div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+          <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
             <UserCheck className="w-5 h-5" />
           </div>
         </div>
 
         {/* Done */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
           <div>
             <div className="text-xs text-slate-500 font-bold">تم الكشف اليوم</div>
             <div className="text-2xl font-black text-emerald-600 font-['Tajawal',sans-serif] mt-1">
@@ -343,13 +427,13 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">حالات مكتملة</div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
         {/* Avg Consult Time (Live Auto Calculated) */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
           <div>
             <div className="text-xs text-slate-500 font-bold">متوسط وقت الكشف</div>
             <div className="text-2xl font-black text-slate-900 font-['Tajawal',sans-serif] mt-1">
@@ -359,47 +443,47 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               محسوبة تلقائياً من الكشوفات
             </div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-            <Clock className="w-5 h-5" />
+          <div className="w-11 h-11 rounded-2xl bg-[#f4efe6] text-[#122c4a] flex items-center justify-center font-bold">
+            <Clock className="w-5 h-5 text-[#1b3a5c]" />
           </div>
         </div>
 
         {/* Doctor Rating Card */}
         <button
           onClick={() => setShowReviewsModal(true)}
-          className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-5 rounded-2xl border border-amber-200/90 shadow-xs flex items-center justify-between hover:border-amber-400 transition text-right group cursor-pointer"
+          className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between hover:border-[#122c4a]/40 transition text-right group cursor-pointer"
         >
           <div>
-            <div className="text-xs text-amber-900 font-bold flex items-center gap-1">
+            <div className="text-xs text-[#122c4a] font-bold flex items-center gap-1">
               <span>تقييم العيادة</span>
-              <span className="text-[10px] text-amber-700 underline group-hover:text-amber-900">(عرض)</span>
+              <span className="text-[10px] text-[#1b3a5c] underline group-hover:text-[#122c4a]">(عرض)</span>
             </div>
-            <div className="text-2xl font-black text-amber-950 font-['Tajawal',sans-serif] mt-1 flex items-center gap-1 dir-ltr">
+            <div className="text-2xl font-black text-[#122c4a] font-['Tajawal',sans-serif] mt-1 flex items-center gap-1 dir-ltr">
               <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
               <span>{doctor.ratingAverage ? doctor.ratingAverage : "0.0"}</span>
             </div>
-            <div className="text-[10px] text-amber-800 font-medium mt-0.5">
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
               {doctorRatings.length} تقييم مريض
             </div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold shadow-xs">
-            <Star className="w-5 h-5 fill-current" />
+          <div className="w-11 h-11 rounded-2xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold shadow-2xs border border-[#d1dfed]">
+            <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
           </div>
         </button>
 
       </div>
 
       {/* Section Navigation Tabs */}
-      <div className="flex items-center gap-2 bg-slate-200/60 p-1.5 rounded-2xl max-w-2xl overflow-x-auto">
+      <div className="flex items-center gap-2 bg-[#f4efe6] p-1.5 rounded-2xl max-w-2xl overflow-x-auto">
         <button
           onClick={() => setActiveSection('queue')}
           className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
             activeSection === 'queue'
-              ? 'bg-white text-slate-900 shadow-xs'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-4 h-4 text-sky-600" />
+          <Users className="w-4 h-4 text-sky-300" />
           <span>طابور اليوم ({patients.length})</span>
         </button>
 
@@ -407,11 +491,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           onClick={() => setActiveSection('followups')}
           className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
             activeSection === 'followups'
-              ? 'bg-white text-slate-900 shadow-xs'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Calendar className="w-4 h-4 text-sky-600" />
+          <Calendar className="w-4 h-4 text-sky-300" />
           <span>إعادة الكشف</span>
         </button>
 
@@ -419,11 +503,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           onClick={() => setActiveSection('team')}
           className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
             activeSection === 'team'
-              ? 'bg-white text-slate-900 shadow-xs'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-4 h-4 text-purple-600" />
+          <Users className="w-4 h-4 text-sky-300" />
           <span>فريق العمل</span>
         </button>
 
@@ -432,11 +516,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             onClick={() => setActiveSection('finance')}
             className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeSection === 'finance'
-                ? 'bg-white text-slate-900 shadow-xs'
+                ? 'bg-[#122c4a] text-white shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <DollarSign className="w-4 h-4 text-emerald-600" />
+            <DollarSign className="w-4 h-4 text-emerald-400" />
             <span>المالية</span>
           </button>
         )}
@@ -469,59 +553,59 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         />
       ) : (
         /* Main Queue Management Section */
-        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="bg-[#fdfcf9] rounded-3xl border border-[#e7e3da] shadow-2xs overflow-hidden">
         
         {/* Controls Toolbar */}
-        <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="p-4 sm:p-6 border-b border-[#f0ebe1] bg-[#faf8f5] flex flex-col md:flex-row items-center justify-between gap-4">
           
           {/* Status Filter Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
             <button
               onClick={() => setFilterStatus('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 filterStatus === 'all'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-[#122c4a] text-white shadow-2xs'
+                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
               }`}
             >
               الكل ({patients.length})
             </button>
             <button
               onClick={() => setFilterStatus('waiting')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 filterStatus === 'waiting'
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-[#122c4a] text-white shadow-2xs'
+                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
               }`}
             >
               في الانتظار ({waitingPatients.length})
             </button>
             <button
               onClick={() => setFilterStatus('called')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 filterStatus === 'called'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-amber-600 text-white shadow-2xs'
+                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
               }`}
             >
               في الكشف ({calledPatient ? 1 : 0})
             </button>
             <button
               onClick={() => setFilterStatus('done')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 filterStatus === 'done'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
               }`}
             >
               مكتمل ({donePatients.length})
             </button>
             <button
               onClick={() => setFilterStatus('cancelled')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
                 filterStatus === 'cancelled'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-rose-600 text-white shadow-2xs'
+                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
               }`}
             >
               ملغي ({cancelledPatients.length})
@@ -532,20 +616,20 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           <div className="flex items-center gap-2 w-full md:w-auto">
             {/* Search Input */}
             <div className="relative flex-1 md:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+              <Search className="w-4 h-4 text-[#1b3a5c] absolute right-3 top-2.5" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث بالموبايل أو الاسم أو الدور..."
-                className="w-full pl-3 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                className="w-full pl-3 pr-9 py-2 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
               />
             </div>
 
             {/* TV Queue Display */}
             <button
               onClick={() => setShowTVQueue(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
               title="شاشة الانتظار للتلفزيون (TV Queue Display)"
             >
               <Monitor className="w-4 h-4 text-teal-400" />
@@ -555,16 +639,16 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             {/* Quick Scanner */}
             <button
               onClick={onOpenScannerModal}
-              className="p-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl transition shadow-2xs"
+              className="p-2 bg-[#fdfcf9] hover:bg-[#f4efe6] text-slate-700 border border-[#e7e3da] rounded-xl transition shadow-2xs cursor-pointer"
               title="ماسح الكاميرا للتذاكر"
             >
-              <QrCode className="w-4 h-4 text-sky-600" />
+              <QrCode className="w-4 h-4 text-[#122c4a]" />
             </button>
 
             {/* Add Walk-In Patient */}
             <button
               onClick={() => setIsManualAddOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl transition shadow-xs shrink-0"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>إضافة مريض</span>
@@ -578,12 +662,12 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           {loading ? (
             <div className="space-y-3 py-6">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 bg-slate-100 rounded-2xl animate-pulse" />
+                <div key={i} className="h-16 bg-[#f4efe6] rounded-2xl animate-pulse" />
               ))}
             </div>
           ) : displayedPatients.length === 0 ? (
-            <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-              <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <div className="text-center py-12 bg-[#faf8f5] rounded-2xl border border-dashed border-[#e7e3da]">
+              <Users className="w-12 h-12 text-[#1b3a5c]/40 mx-auto mb-3" />
               <h3 className="font-bold text-slate-700 text-base font-['Tajawal',sans-serif]">
                 لا يوجد مرضي في القائمة حالياً
               </h3>
@@ -592,7 +676,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               </p>
               <button
                 onClick={onOpenQRModal}
-                className="mt-4 px-4 py-2 bg-slate-900 text-white font-semibold text-xs rounded-xl hover:bg-slate-800 transition"
+                className="mt-4 px-4 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-semibold text-xs rounded-xl transition cursor-pointer"
               >
                 عرض رمز QR للطباعة
               </button>
@@ -614,11 +698,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                       exit={{ opacity: 0, scale: 0.95 }}
                       className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
                         isCalled
-                          ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-400/20 shadow-sm'
+                          ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/20 shadow-xs'
                           : isWaiting
-                          ? 'bg-white border-slate-200/90 hover:border-sky-300 shadow-2xs'
+                          ? 'bg-[#fdfcf9] border-[#e7e3da] hover:border-[#122c4a]/50 shadow-2xs'
                           : isDone
-                          ? 'bg-slate-50/80 border-slate-200 opacity-80'
+                          ? 'bg-[#f8f6f0] border-[#e7e3da] opacity-80'
                           : 'bg-rose-50/30 border-rose-200/60 opacity-60'
                       }`}
                     >
@@ -628,7 +712,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                         {/* Sequence Badge */}
                         <div className={`w-12 h-12 rounded-2xl font-black text-lg flex items-center justify-center shrink-0 shadow-2xs font-['Tajawal',sans-serif] ${
                           isCalled ? 'bg-amber-500 text-slate-950 animate-pulse' :
-                          isWaiting ? 'bg-sky-600 text-white' :
+                          isWaiting ? 'bg-[#122c4a] text-white' :
                           isDone ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-600'
                         }`}>
                           #{patient.sequenceNumber}

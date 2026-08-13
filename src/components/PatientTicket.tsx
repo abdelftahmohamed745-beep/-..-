@@ -215,16 +215,16 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl overflow-hidden relative"
+        className="bg-[#fdfcf9] rounded-3xl border border-[#e7e3da] shadow-2xl overflow-hidden relative"
       >
         
         {/* Ticket Header */}
-        <div className="bg-slate-900 text-white p-6 text-center relative">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span className="bg-slate-800 px-3 py-1 rounded-full font-mono">
+        <div className="bg-[#122c4a] text-white p-6 text-center relative">
+          <div className="flex items-center justify-between text-xs text-slate-300 mb-2">
+            <span className="bg-white/10 px-3 py-1 rounded-full font-mono text-slate-200">
               تذكرة دوري المباشرة
             </span>
-            <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+            <span className="flex items-center gap-1 text-emerald-300 font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
               تحديث مباشر (Live)
             </span>
@@ -233,7 +233,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
           <h2 className="text-xl font-bold font-['Tajawal',sans-serif] text-white">
             {doctor.clinicName}
           </h2>
-          <p className="text-xs text-slate-300 mt-0.5">
+          <p className="text-xs text-slate-200 mt-0.5">
             {doctor.name} - {doctor.specialty}
           </p>
         </div>
@@ -244,7 +244,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
           {/* Patient Details */}
           <div>
             <span className="text-xs text-slate-400 font-medium">اسم المريض</span>
-            <h3 className="text-lg font-bold text-slate-900 font-['Tajawal',sans-serif] mt-0.5">
+            <h3 className="text-lg font-bold text-[#122c4a] font-['Tajawal',sans-serif] mt-0.5">
               {patient.name}
             </h3>
             <span className="text-xs text-slate-500 font-mono dir-ltr inline-block mt-0.5">
@@ -253,11 +253,11 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
           </div>
 
           {/* Sequence Number Highlight */}
-          <div className="bg-gradient-to-b from-sky-50 to-teal-50/50 rounded-3xl p-6 border border-sky-100 shadow-inner">
-            <div className="text-xs font-bold text-sky-700 uppercase tracking-wider mb-1">
+          <div className="bg-[#edf3fa] rounded-3xl p-6 border border-[#d1dfed] shadow-inner">
+            <div className="text-xs font-bold text-[#122c4a] uppercase tracking-wider mb-1">
               رقم دورك الثابت
             </div>
-            <div className="text-6xl font-black text-slate-900 font-['Tajawal',sans-serif] tracking-tight my-1">
+            <div className="text-6xl font-black text-[#122c4a] font-['Tajawal',sans-serif] tracking-tight my-1">
               #{patient.sequenceNumber}
             </div>
             <div className="text-[11px] text-slate-500 font-medium">
@@ -271,13 +271,13 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
               
               {/* Progress Bar */}
               <div>
-                <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5">
+                <div className="flex items-center justify-between text-xs font-bold text-[#122c4a] mb-1.5">
                   <span>التقدم نحو العيادة:</span>
-                  <span className="text-sky-600">{progressPercent}%</span>
+                  <span className="text-sky-700">{progressPercent}%</span>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200">
+                <div className="w-full bg-[#f4efe6] rounded-full h-3 overflow-hidden p-0.5 border border-[#e7e3da]">
                   <div
-                    className="bg-gradient-to-r from-sky-500 to-teal-400 h-full rounded-full transition-all duration-500 shadow-xs"
+                    className="bg-[#122c4a] h-full rounded-full transition-all duration-500 shadow-2xs"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -287,12 +287,12 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
               <div className="grid grid-cols-2 gap-3 text-right">
                 
                 {/* People Ahead */}
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                <div className="bg-[#faf8f5] p-4 rounded-2xl border border-[#e7e3da]">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mb-1">
-                    <Users className="w-4 h-4 text-sky-600" />
+                    <Users className="w-4 h-4 text-[#1b3a5c]" />
                     <span>المتبقين قبلك</span>
                   </div>
-                  <div className="text-2xl font-black text-slate-900 font-['Tajawal',sans-serif]">
+                  <div className="text-2xl font-black text-[#122c4a] font-['Tajawal',sans-serif]">
                     {peopleAhead === 0 ? 'أنت التالي!' : `${peopleAhead} أشخاص`}
                   </div>
                 </div>

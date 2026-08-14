@@ -27,9 +27,14 @@ import {
   Phone,
   MapPin,
   ExternalLink,
-  Info
+  Info,
+  Bell,
+  Send,
+  Radio,
+  Sparkles,
+  Megaphone
 } from 'lucide-react';
-import { DoctorProfile, SubscriptionStatus, SubscriptionPlan, SubscriptionLog, LabAdminView } from '../types';
+import { DoctorProfile, SubscriptionStatus, SubscriptionPlan, SubscriptionLog, LabAdminView, AdminAnnouncement, AnnouncementType, AnnouncementTarget } from '../types';
 import {
   getAllDoctorsAdmin,
   toggleDoctorStatus,
@@ -48,7 +53,11 @@ import {
   restoreLabAccountByAdmin,
   getDeletedAccountsAdmin,
   hardDeleteAccountByAdmin,
-  DeletedAccountItem
+  DeletedAccountItem,
+  createAnnouncementAdmin,
+  updateAnnouncementAdmin,
+  deleteAnnouncementAdmin,
+  getAllAnnouncementsAdmin
 } from '../services/firebaseService';
 
 interface AdminDashboardProps {
@@ -60,8 +69,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
   const [labs, setLabs] = useState<LabAdminView[]>([]);
   const [subscriptionLogs, setSubscriptionLogs] = useState<SubscriptionLog[]>([]);
   const [recycleBinItems, setRecycleBinItems] = useState<DeletedAccountItem[]>([]);
+  const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'doctors' | 'labs' | 'subscriptions' | 'logs' | 'recycle_bin'>('doctors');
+  const [activeTab, setActiveTab] = useState<'doctors' | 'labs' | 'subscriptions' | 'logs' | 'recycle_bin' | 'announcements'>('doctors');
+
+  // Announcement Form State
+  const [annTitle, setAnnTitle] = useState('');
+  const [annMessage, setAnnMessage] = useState('');
+  const [annType, setAnnType] = useState<AnnouncementType>('announcement');
+  const [annTarget, setAnnTarget] = useState<AnnouncementTarget>('all');
+  const [annTargetUid, setAnnTargetUid] = useState('');
+  const [annActionLink, setAnnActionLink] = useState('');
+  const [annActionLabel, setAnnActionLabel] = useState('');
+  const [isSubmittingAnn, setIsSubmittingAnn] = useState(false);
 
   // Search & Filter state for Doctors
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,20 +109,86 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [docList, logsList, labsList, deletedList] = await Promise.all([
+      const [docList, logsList, labsList, deletedList, annList] = await Promise.all([
         getAllDoctorsAdmin(),
         getAllSubscriptionLogs(),
         getAllLabsAdmin(),
-        getDeletedAccountsAdmin()
+        getDeletedAccountsAdmin(),
+        getAllAnnouncementsAdmin()
       ]);
       setDoctors(docList);
       setSubscriptionLogs(logsList);
       setLabs(labsList);
       setRecycleBinItems(deletedList);
+      setAnnouncements(annList);
     } catch (err) {
       console.error("Error loading admin data:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!annTitle.trim() || !annMessage.trim()) {
+      onShowToast("بيانات غير مكتملة", "يرجى كتابة عنوان ونص الإعلان بالتفصيل", "warning");
+      return;
+    }
+
+    setIsSubmittingAnn(true);
+    try {
+      await createAnnouncementAdmin('ADMIN_SESSION', {
+        title: annTitle,
+        message: annMessage,
+        type: annType,
+        target: annTarget,
+        targetUid: annTargetUid,
+        actionLink: annActionLink,
+        actionLabel: annActionLabel
+      });
+
+      onShowToast("تم نشر الإعلان / التنبيه بنجاح", "سيظهر لجميع المستخدمين المستهدفين في الوقت الفعلي", "success");
+      setAnnTitle('');
+      setAnnMessage('');
+      setAnnActionLink('');
+      setAnnActionLabel('');
+      setAnnTargetUid('');
+
+      const updated = await getAllAnnouncementsAdmin();
+      setAnnouncements(updated);
+    } catch (err: any) {
+      console.error("Error creating announcement:", err);
+      onShowToast("فشل نشر الإعلان", err.message, "error");
+    } finally {
+      setIsSubmittingAnn(false);
+    }
+  };
+
+  const handleToggleAnnouncementActive = async (annId: string, currentStatus: boolean) => {
+    try {
+      await updateAnnouncementAdmin('ADMIN_SESSION', annId, { isActive: !currentStatus });
+      onShowToast(
+        !currentStatus ? "تم تفعيل الإعلان" : "تم تعطيل الإعلان",
+        !currentStatus ? "الإعلان متاح الآن في مركز التنبيهات" : "تم إيقاف ظهور الإعلان",
+        "info"
+      );
+      const updated = await getAllAnnouncementsAdmin();
+      setAnnouncements(updated);
+    } catch (err: any) {
+      console.error("Error toggling announcement:", err);
+      onShowToast("حدث خطأ", err.message, "error");
+    }
+  };
+
+  const handleDeleteAnnouncement = async (annId: string) => {
+    if (!confirm("هل أنت متأكد من رغبتك في حذف هذا الإعلان نهائياً؟")) return;
+    try {
+      await deleteAnnouncementAdmin('ADMIN_SESSION', annId);
+      onShowToast("تم حذف الإعلان نهائياً", "", "success");
+      setAnnouncements(announcements.filter(a => a.id !== annId));
+    } catch (err: any) {
+      console.error("Error deleting announcement:", err);
+      onShowToast("فشل الحذف", err.message, "error");
     }
   };
 
@@ -452,6 +538,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
         </button>
 
         <button
+          onClick={() => setActiveTab('announcements')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeTab === 'announcements'
+              ? 'bg-[#122c4a] text-white shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Megaphone className="w-4 h-4 text-purple-300" />
+          <span>مركز الإعلانات والتنبيهات ({announcements.length})</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('recycle_bin')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition ${
             activeTab === 'recycle_bin'
@@ -758,6 +856,265 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 5: ADMIN ANNOUNCEMENTS & NOTIFICATION CENTER */}
+      {activeTab === 'announcements' && (
+        <div className="space-y-6">
+          {/* Create New Announcement Form Card */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+              <div className="p-3 bg-purple-50 text-purple-700 rounded-2xl border border-purple-200">
+                <Megaphone className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900 font-['Tajawal',sans-serif]">
+                  إنشاء ونشر إعلان / تنبيه جديد
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  أرسل تحديثات النظام، رسائل الصيانة، الإشعارات العامة أو التنبيهات الموجهة مباشرة للعيادات والمعامل
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    عنوان الإعلان / التنبيه *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: تحديث أمني جديد، موعد صيانة مجدولة، ميزة جديدة..."
+                    value={annTitle}
+                    onChange={(e) => setAnnTitle(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    نوع الإشعار
+                  </label>
+                  <select
+                    value={annType}
+                    onChange={(e) => setAnnType(e.target.value as AnnouncementType)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="announcement">📢 إعلان عام (Announcement)</option>
+                    <option value="update">🚀 تحديث جديد للنظام (System Update)</option>
+                    <option value="feature">✨ ميزة جديدة (New Feature)</option>
+                    <option value="warning">⚠️ تنبيه هام / تحذير (Warning)</option>
+                    <option value="maintenance">🛠️ موعد صيانة (Maintenance)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  نص ومحتوى الإعلان *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="اكتب التفاصيل الكاملة للإعلان أو التعليمات التي تريد إيصالها للمستخدمين..."
+                  value={annMessage}
+                  onChange={(e) => setAnnMessage(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    الفئة المستهدفة
+                  </label>
+                  <select
+                    value={annTarget}
+                    onChange={(e) => setAnnTarget(e.target.value as AnnouncementTarget)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="all">🌍 جميع المستخدمين والزوار</option>
+                    <option value="doctors">🩺 الأطباء والعيادات فقط</option>
+                    <option value="labs">🧪 المعامل الطبية فقط</option>
+                    <option value="staff">👥 طاقم العمل وموظفي الاستقبال</option>
+                    <option value="specific">🎯 حساب محدد (بواسطة UID)</option>
+                  </select>
+                </div>
+
+                {annTarget === 'specific' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      معرف المستخدم المستهدف (UID) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="أدخل الـ UID للحساب المستهدف..."
+                      value={annTargetUid}
+                      onChange={(e) => setAnnTargetUid(e.target.value)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    رابط الإجراء التفاعلي (اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: /settings أو رابط خارجي..."
+                    value={annActionLink}
+                    onChange={(e) => setAnnActionLink(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    نص زر الإجراء (اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: تجربة الميزة، الاطلاع على الدليل..."
+                    value={annActionLabel}
+                    onChange={(e) => setAnnActionLabel(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isSubmittingAnn}
+                  className="px-6 py-3 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>{isSubmittingAnn ? 'جاري النشر في الوقت الفعلي...' : 'نشر وتعميم الإعلان الآن'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* List of Published Announcements */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">
+                سجل الإعلانات المنشورة ({announcements.length})
+              </h3>
+              <span className="text-xs text-slate-500">
+                يتم التحديث المباشر للمستخدمين عبر تقنية البث اللحظي
+              </span>
+            </div>
+
+            {announcements.length === 0 ? (
+              <div className="py-12 text-center text-slate-400">
+                <Megaphone className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p className="text-xs font-bold">لا توجد إعلانات سابقة</p>
+                <p className="text-[11px] text-slate-400 mt-1">قم بنشر أول إعلان ليصل لكل مستخدمي النظام فوراً</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {announcements.map((ann) => {
+                  const typeColors: Record<AnnouncementType, { bg: string; text: string; badge: string }> = {
+                    announcement: { bg: 'bg-sky-50', text: 'text-sky-800', badge: '📢 إعلان عام' },
+                    update: { bg: 'bg-indigo-50', text: 'text-indigo-800', badge: '🚀 تحديث نظام' },
+                    feature: { bg: 'bg-emerald-50', text: 'text-emerald-800', badge: '✨ ميزة جديدة' },
+                    new_feature: { bg: 'bg-emerald-50', text: 'text-emerald-800', badge: '✨ ميزة جديدة' },
+                    warning: { bg: 'bg-amber-50', text: 'text-amber-800', badge: '⚠️ تنبيه هام' },
+                    maintenance: { bg: 'bg-rose-50', text: 'text-rose-800', badge: '🛠️ صيانة مجدولة' }
+                  };
+
+                  const targetLabels: Record<AnnouncementTarget, string> = {
+                    all: '🌍 الجميع',
+                    doctors: '🩺 الأطباء فقط',
+                    labs: '🧪 المعامل فقط',
+                    staff: '👥 الطاقم والموظفين',
+                    specific: `🎯 مستخدم محدد (${ann.targetUid})`
+                  };
+
+                  const style = typeColors[ann.type] || typeColors.announcement;
+
+                  return (
+                    <div
+                      key={ann.id}
+                      className={`p-5 rounded-2xl border transition ${
+                        ann.isActive ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-50 border-slate-200 opacity-60'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${style.bg} ${style.text}`}>
+                            {style.badge}
+                          </span>
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">
+                            {targetLabels[ann.target] || ann.target}
+                          </span>
+                          {ann.isActive ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              ● منشور ونشط
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">
+                              ○ متوقف / معطل
+                            </span>
+                          )}
+                        </div>
+
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {new Date(ann.createdAt).toLocaleString('ar-EG')}
+                        </span>
+                      </div>
+
+                      <div className="py-3">
+                        <h4 className="font-bold text-slate-900 text-sm mb-1">{ann.title}</h4>
+                        <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
+                          {ann.message}
+                        </p>
+                        {ann.actionLink && (
+                          <div className="mt-2.5">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-50 text-purple-700 text-xs font-bold rounded-lg border border-purple-100">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              {ann.actionLabel || 'الرابط التفاعلي'}: <span className="font-mono">{ann.actionLink}</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
+                        <span className="text-[11px] text-slate-400 font-mono">ID: {ann.id}</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAnnouncementActive(ann.id, ann.isActive)}
+                            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                              ann.isActive
+                                ? 'bg-amber-100 hover:bg-amber-200 text-amber-800'
+                                : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
+                            }`}
+                          >
+                            {ann.isActive ? 'تعطيل الإعلان' : 'تفعيل الإعلان مجدداً'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAnnouncement(ann.id)}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl font-bold transition cursor-pointer flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف نهائي</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1330,6 +1687,268 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
           )}
         </div>
       )}
+
+      {/* TAB 5: ADMIN ANNOUNCEMENTS & NOTIFICATION CENTER */}
+      {activeTab === 'announcements' && (
+        <div className="space-y-6">
+          
+          {/* Create New Announcement Form Card */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+              <div className="p-3 bg-purple-50 text-purple-700 rounded-2xl border border-purple-200">
+                <Megaphone className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900 font-['Tajawal',sans-serif]">
+                  إنشاء ونشر إعلان / تنبيه جديد
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  أرسل تحديثات النظام، رسائل الصيانة، الإشعارات العامة أو التنبيهات الموجهة مباشرة للعيادات والمعامل
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    عنوان الإعلان / التنبيه *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: تحديث أمني جديد، موعد صيانة مجدولة، ميزة جديدة..."
+                    value={annTitle}
+                    onChange={(e) => setAnnTitle(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    نوع الإشعار
+                  </label>
+                  <select
+                    value={annType}
+                    onChange={(e) => setAnnType(e.target.value as AnnouncementType)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="announcement">📢 إعلان عام (Announcement)</option>
+                    <option value="update">🚀 تحديث جديد للنظام (System Update)</option>
+                    <option value="feature">✨ ميزة جديدة (New Feature)</option>
+                    <option value="warning">⚠️ تنبيه هام / تحذير (Warning)</option>
+                    <option value="maintenance">🛠️ موعد صيانة (Maintenance)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  نص ومحتوى الإعلان *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="اكتب التفاصيل الكاملة للإعلان أو التعليمات التي تريد إيصالها للمستخدمين..."
+                  value={annMessage}
+                  onChange={(e) => setAnnMessage(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    الفئة المستهدفة
+                  </label>
+                  <select
+                    value={annTarget}
+                    onChange={(e) => setAnnTarget(e.target.value as AnnouncementTarget)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="all">🌍 جميع المستخدمين والزوار</option>
+                    <option value="doctors">🩺 الأطباء والعيادات فقط</option>
+                    <option value="labs">🧪 المعامل الطبية فقط</option>
+                    <option value="staff">👥 طاقم العمل وموظفي الاستقبال</option>
+                    <option value="specific">🎯 حساب محدد (بواسطة UID)</option>
+                  </select>
+                </div>
+
+                {annTarget === 'specific' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      معرف المستخدم المستهدف (UID) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="أدخل الـ UID للحساب المستهدف..."
+                      value={annTargetUid}
+                      onChange={(e) => setAnnTargetUid(e.target.value)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    رابط الإجراء التفاعلي (اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: /settings أو رابط خارجي..."
+                    value={annActionLink}
+                    onChange={(e) => setAnnActionLink(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    نص زر الإجراء (اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: تجربة الميزة، الاطلاع على الدليل..."
+                    value={annActionLabel}
+                    onChange={(e) => setAnnActionLabel(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isSubmittingAnn}
+                  className="px-6 py-3 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>{isSubmittingAnn ? 'جاري النشر في الوقت الفعلي...' : 'نشر وتعميم الإعلان الآن'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* List of Published Announcements */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">
+                سجل الإعلانات المنشورة ({announcements.length})
+              </h3>
+              <span className="text-xs text-slate-500">
+                يتم التحديث المباشر للمستخدمين عبر تقنية البث اللحظي
+              </span>
+            </div>
+
+            {announcements.length === 0 ? (
+              <div className="py-12 text-center text-slate-400">
+                <Megaphone className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p className="text-xs font-bold">لا توجد إعلانات سابقة</p>
+                <p className="text-[11px] text-slate-400 mt-1">قم بنشر أول إعلان ليصل لكل مستخدمي النظام فوراً</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {announcements.map((ann) => {
+                  const typeColors: Record<AnnouncementType, { bg: string; text: string; badge: string }> = {
+                    announcement: { bg: 'bg-sky-50', text: 'text-sky-800', badge: '📢 إعلان عام' },
+                    update: { bg: 'bg-indigo-50', text: 'text-indigo-800', badge: '🚀 تحديث نظام' },
+                    feature: { bg: 'bg-emerald-50', text: 'text-emerald-800', badge: '✨ ميزة جديدة' },
+                    new_feature: { bg: 'bg-emerald-50', text: 'text-emerald-800', badge: '✨ ميزة جديدة' },
+                    warning: { bg: 'bg-amber-50', text: 'text-amber-800', badge: '⚠️ تنبيه هام' },
+                    maintenance: { bg: 'bg-rose-50', text: 'text-rose-800', badge: '🛠️ صيانة مجدولة' }
+                  };
+
+                  const targetLabels: Record<AnnouncementTarget, string> = {
+                    all: '🌍 الجميع',
+                    doctors: '🩺 الأطباء فقط',
+                    labs: '🧪 المعامل فقط',
+                    staff: '👥 الطاقم والموظفين',
+                    specific: `🎯 مستخدم محدد (${ann.targetUid})`
+                  };
+
+                  const style = typeColors[ann.type] || typeColors.announcement;
+
+                  return (
+                    <div
+                      key={ann.id}
+                      className={`p-5 rounded-2xl border transition ${
+                        ann.isActive ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-50 border-slate-200 opacity-60'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${style.bg} ${style.text}`}>
+                            {style.badge}
+                          </span>
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">
+                            {targetLabels[ann.target] || ann.target}
+                          </span>
+                          {ann.isActive ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              ● منشور ونشط
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">
+                              ○ متوقف / معطل
+                            </span>
+                          )}
+                        </div>
+
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {new Date(ann.createdAt).toLocaleString('ar-EG')}
+                        </span>
+                      </div>
+
+                      <div className="py-3">
+                        <h4 className="font-bold text-slate-900 text-sm mb-1">{ann.title}</h4>
+                        <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
+                          {ann.message}
+                        </p>
+                        {ann.actionLink && (
+                          <div className="mt-2.5">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-50 text-purple-700 text-xs font-bold rounded-lg border border-purple-100">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              {ann.actionLabel || 'الرابط التفاعلي'}: <span className="font-mono">{ann.actionLink}</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
+                        <span className="text-[11px] text-slate-400 font-mono">ID: {ann.id}</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAnnouncementActive(ann.id, ann.isActive)}
+                            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                              ann.isActive
+                                ? 'bg-amber-100 hover:bg-amber-200 text-amber-800'
+                                : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
+                            }`}
+                          >
+                            {ann.isActive ? 'تعطيل الإعلان' : 'تفعيل الإعلان مجدداً'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAnnouncement(ann.id)}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl font-bold transition cursor-pointer flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف نهائي</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
       {selectedLabForDetails && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 border border-slate-200 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">

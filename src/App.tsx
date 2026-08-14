@@ -11,10 +11,13 @@ import { auth, db } from './firebase/config';
 import {
   getDoctorProfile,
   purgeTestAccounts,
-  verifyAdminStatus
+  verifyAdminStatus,
+  subscribeAnnouncementsForUser,
+  fetchUserReadAnnouncements,
+  saveUserReadAnnouncements
 } from './services/firebaseService';
 import { getLabProfile } from './services/labService';
-import { DoctorProfile, ToastMessage } from './types';
+import { DoctorProfile, ToastMessage, AdminAnnouncement } from './types';
 
 // Components
 import { Navbar, NavTabType } from './components/Navbar';
@@ -33,6 +36,7 @@ import { QRModal } from './components/QRModal';
 import { QRScannerModal } from './components/QRScannerModal';
 import { SettingsModal } from './components/SettingsModal';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
+import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { ClinicInvitationAcceptModal } from './components/ClinicInvitationAcceptModal';
 import { ToastContainer } from './components/Toast';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
@@ -201,7 +205,94 @@ export default function App() {
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+
+  // System Announcements State
+  const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
+  const [readAnnouncementIds, setReadAnnouncementIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('dawry_read_announcements');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Subscribe to real-time announcements broadcast
+  useEffect(() => {
+    const role = isPlatformAdmin
+      ? 'admin'
+      : currentDoctor?.accountType === 'laboratory'
+      ? 'laboratory'
+      : currentDoctor
+      ? 'doctor'
+      : 'visitor';
+
+    const unsubscribe = subscribeAnnouncementsForUser(
+      role,
+      currentDoctor?.uid || null,
+      (liveAnnouncements) => {
+        setAnnouncements(liveAnnouncements);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentDoctor?.uid, currentDoctor?.accountType, isPlatformAdmin]);
+
+  // Sync read states from cloud when user logs in
+  useEffect(() => {
+    if (!currentDoctor?.uid) return;
+    let isMounted = true;
+    fetchUserReadAnnouncements(currentDoctor.uid).then((remoteIds) => {
+      if (!isMounted || !remoteIds || remoteIds.length === 0) return;
+      setReadAnnouncementIds((prev) => {
+        const merged = Array.from(new Set([...prev, ...remoteIds]));
+        try {
+          localStorage.setItem('dawry_read_announcements', JSON.stringify(merged));
+        } catch {
+          // Ignore local storage error
+        }
+        return merged;
+      });
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentDoctor?.uid]);
+
+  const handleMarkAnnouncementRead = (id: string) => {
+    setReadAnnouncementIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const updated = [...prev, id];
+      try {
+        localStorage.setItem('dawry_read_announcements', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Failed to save read announcements to storage', err);
+      }
+      if (currentDoctor?.uid) {
+        saveUserReadAnnouncements(currentDoctor.uid, updated);
+      }
+      return updated;
+    });
+  };
+
+  const handleMarkAllAnnouncementsRead = () => {
+    const allIds = announcements.map((a) => a.id);
+    setReadAnnouncementIds(allIds);
+    try {
+      localStorage.setItem('dawry_read_announcements', JSON.stringify(allIds));
+    } catch (err) {
+      console.error('Failed to save read announcements to storage', err);
+    }
+    if (currentDoctor?.uid) {
+      saveUserReadAnnouncements(currentDoctor.uid, allIds);
+    }
+  };
+
+  const unreadAnnouncementsCount = announcements.filter(
+    (a) => !readAnnouncementIds.includes(a.id)
+  ).length;
 
   // Toasts state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -434,6 +525,7 @@ export default function App() {
         currentDoctor={currentDoctor}
         activeTab={activeTab}
         isAdmin={isPlatformAdmin}
+        unreadNotificationCount={unreadAnnouncementsCount}
         onNavigate={(tab) => {
           if (tab === 'booking') {
             if (currentDoctor?.accountType === 'laboratory') {
@@ -453,7 +545,7 @@ export default function App() {
         }}
         onOpenQRModal={() => setIsQRModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
-        onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+        onOpenNotificationModal={() => setIsNotificationCenterOpen(true)}
         onSignOut={handleSignOut}
       />
 
@@ -719,6 +811,15 @@ export default function App() {
       </footer>
 
       {/* Modals */}
+      <NotificationCenterModal
+        isOpen={isNotificationCenterOpen}
+        onClose={() => setIsNotificationCenterOpen(false)}
+        announcements={announcements}
+        readAnnouncementIds={readAnnouncementIds}
+        onMarkAsRead={handleMarkAnnouncementRead}
+        onMarkAllAsRead={handleMarkAllAnnouncementsRead}
+      />
+
       <NotificationSettingsModal
         isOpen={isNotificationModalOpen}
         onClose={() => setIsNotificationModalOpen(false)}

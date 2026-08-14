@@ -8,6 +8,7 @@ interface NavbarProps {
   currentDoctor: DoctorProfile | null;
   activeTab: NavTabType;
   isAdmin?: boolean;
+  unreadNotificationCount?: number;
   onNavigate: (tab: NavTabType) => void;
   onOpenQRModal: () => void;
   onOpenSettingsModal: () => void;
@@ -19,6 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentDoctor,
   activeTab,
   isAdmin = false,
+  unreadNotificationCount = 0,
   onNavigate,
   onOpenQRModal,
   onOpenSettingsModal,
@@ -118,17 +120,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right Navigation Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
             
-            {/* Near-Turn Notification Bell Button */}
+            {/* Notification Center Bell Button */}
             {onOpenNotificationModal && (
               <button
                 onClick={onOpenNotificationModal}
-                className="p-2 text-slate-600 hover:text-sky-600 hover:bg-sky-50 rounded-xl transition relative"
-                title="إعدادات ورسائل إشعارات قرب الدور"
-                aria-label="إعدادات رسائل وتنبيهات الإشعارات"
+                className="p-2 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition relative cursor-pointer"
+                title="مركز التنبيهات والإعلانات"
+                aria-label="مركز التنبيهات والإعلانات"
               >
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-sky-500 rounded-full animate-ping" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-sky-600 rounded-full" />
+                {unreadNotificationCount > 0 ? (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-purple-600 text-white rounded-full text-[10px] font-black flex items-center justify-center border-2 border-white shadow-2xs">
+                    {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                  </span>
+                ) : (
+                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                )}
               </button>
             )}
 

@@ -566,3 +566,24 @@ export interface LabAuditLog {
   timestamp: string;
 }
 
+export type AnnouncementType = 'update' | 'maintenance' | 'announcement' | 'warning' | 'new_feature' | 'feature';
+export type AnnouncementTarget = 'all' | 'doctors' | 'labs' | 'staff' | 'specific';
+
+export interface AdminAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  type: AnnouncementType;
+  target: AnnouncementTarget;
+  targetUid?: string;
+  targetName?: string;
+  actionLink?: string;
+  actionLabel?: string;
+  isActive: boolean;
+  createdAt: string; // ISO string
+  createdBy: string; // Admin UID
+  createdByName?: string;
+  expiresAt?: string;
+}
+
+

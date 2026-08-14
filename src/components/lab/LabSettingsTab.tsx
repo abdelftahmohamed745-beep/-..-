@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LabProfile } from '../../types';
 import { updateLabProfile } from '../../services/labService';
 import { Settings, Building, Phone, MapPin, Clock, Home, Save, CheckCircle } from 'lucide-react';
+import { ImageUpload } from '../ui/ImageUpload';
 
 interface LabSettingsTabProps {
   lab: LabProfile;
@@ -22,7 +23,8 @@ export const LabSettingsTab: React.FC<LabSettingsTabProps> = ({
     offersHomeCollection: lab.offersHomeCollection,
     homeCollectionFee: lab.homeCollectionFee || 100,
     openTime: lab.workHours?.open || "08:00",
-    closeTime: lab.workHours?.close || "23:00"
+    closeTime: lab.workHours?.close || "23:00",
+    logoUrl: lab.logoUrl || ''
   });
 
   const [saving, setSaving] = useState(false);
@@ -43,6 +45,7 @@ export const LabSettingsTab: React.FC<LabSettingsTabProps> = ({
         address: form.address.trim(),
         offersHomeCollection: form.offersHomeCollection,
         homeCollectionFee: form.homeCollectionFee,
+        logoUrl: form.logoUrl,
         workHours: {
           ...lab.workHours,
           open: form.openTime,
@@ -71,7 +74,21 @@ export const LabSettingsTab: React.FC<LabSettingsTabProps> = ({
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4 text-xs">
         
+        {/* Lab Logo Direct Upload */}
+        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <ImageUpload
+            label="شعار المختبر الرسمي (Logo)"
+            helperText="يظهر الشعار في رأس صفحة التحاليل العامة، ونتائج التحاليل المطبوعة للمرضى"
+            currentImageUrl={form.logoUrl}
+            onChange={(dataUrl) => setForm({ ...form, logoUrl: dataUrl })}
+            onRemove={() => setForm({ ...form, logoUrl: '' })}
+            variant="avatar"
+            maxDimension={600}
+          />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
           <div>
             <label className="block font-bold text-slate-800 mb-1">اسم المختبر الرسمي</label>
             <input

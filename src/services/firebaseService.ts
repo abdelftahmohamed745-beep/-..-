@@ -41,7 +41,10 @@ import {
   PaymentMethod,
   ExpenseCategory,
   LabProfile,
-  LabAdminView
+  LabAdminView,
+  AdminAnnouncement,
+  AnnouncementType,
+  AnnouncementTarget
 } from "../types";
 import { hasPermission } from "../utils/permissions";
 import {
@@ -2889,4 +2892,162 @@ export async function hardDeleteAccountByAdmin(id: string, type: 'doctor' | 'lab
   }
   writeAuditLog("HARD_DELETE_ACCOUNT", adminUid, id, { accountType: type });
 }
+
+// ============================================================================
+// ADMIN ANNOUNCEMENTS & NOTIFICATION CENTER SERVICES
+// ============================================================================
+
+export async function createAnnouncementAdmin(
+  adminUid: string,
+  announcement: {
+    title: string;
+    message: string;
+    type: AnnouncementType;
+    target: AnnouncementTarget;
+    targetUid?: string;
+    targetName?: string;
+    actionLink?: string;
+    actionLabel?: string;
+    expiresAt?: string;
+  }
+): Promise<string> {
+  const annId = `ann_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const ref = doc(db, "announcements", annId);
+  const data: AdminAnnouncement = {
+    id: annId,
+    title: announcement.title.trim(),
+    message: announcement.message.trim(),
+    type: announcement.type,
+    target: announcement.target,
+    targetUid: announcement.targetUid || '',
+    targetName: announcement.targetName || '',
+    actionLink: announcement.actionLink?.trim() || '',
+    actionLabel: announcement.actionLabel?.trim() || '',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    createdBy: adminUid,
+    expiresAt: announcement.expiresAt || ''
+  };
+
+  await setDoc(ref, data);
+  writeAuditLog("CREATE_ANNOUNCEMENT", adminUid, annId, { title: data.title, type: data.type });
+  return annId;
+}
+
+export async function updateAnnouncementAdmin(
+  adminUid: string,
+  announcementId: string,
+  updates: Partial<AdminAnnouncement>
+): Promise<void> {
+  const ref = doc(db, "announcements", announcementId);
+  await updateDoc(ref, updates);
+  writeAuditLog("UPDATE_ANNOUNCEMENT", adminUid, announcementId, updates);
+}
+
+export async function deleteAnnouncementAdmin(
+  adminUid: string,
+  announcementId: string
+): Promise<void> {
+  const ref = doc(db, "announcements", announcementId);
+  await deleteDoc(ref);
+  writeAuditLog("DELETE_ANNOUNCEMENT", adminUid, announcementId);
+}
+
+export async function getAllAnnouncementsAdmin(): Promise<AdminAnnouncement[]> {
+  try {
+    const snap = await getDocs(collection(db, "announcements"));
+    const list: AdminAnnouncement[] = [];
+    snap.forEach((d) => {
+      list.push(d.data() as AdminAnnouncement);
+    });
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return list;
+  } catch (err) {
+    console.error("Error fetching announcements for admin:", err);
+    return [];
+  }
+}
+
+export function subscribeAnnouncementsForUser(
+  userRole: 'visitor' | 'doctor' | 'laboratory' | 'staff' | 'admin' | 'guest' | string,
+  userUid: string | null | undefined,
+  callback: (announcements: AdminAnnouncement[]) => void
+): () => void {
+  const q = collection(db, "announcements");
+
+  const unsubscribe = onSnapshot(
+    q,
+    (snapshot) => {
+      const list: AdminAnnouncement[] = [];
+      const now = Date.now();
+
+      snapshot.forEach((docSnap) => {
+        const item = docSnap.data() as AdminAnnouncement;
+        if (!item.isActive) return;
+
+        if (item.expiresAt) {
+          const expTime = new Date(item.expiresAt).getTime();
+          if (now > expTime) return;
+        }
+
+        // Filter based on target and user profile
+        if (item.target === 'all') {
+          list.push(item);
+        } else if (item.target === 'doctors' && (userRole === 'doctor' || userRole === 'admin')) {
+          list.push(item);
+        } else if (item.target === 'labs' && (userRole === 'laboratory' || userRole === 'lab' || userRole === 'admin')) {
+          list.push(item);
+        } else if (item.target === 'staff' && (userRole === 'staff' || userRole === 'doctor' || userRole === 'laboratory' || userRole === 'lab' || userRole === 'admin')) {
+          list.push(item);
+        } else if (item.target === 'specific' && (Boolean(userUid && item.targetUid === userUid) || userRole === 'admin')) {
+          list.push(item);
+        }
+      });
+
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn("Announcements subscription error:", err);
+      callback([]);
+    }
+  );
+
+  return unsubscribe;
+}
+
+/**
+ * Persists read announcement IDs across devices for authenticated accounts
+ */
+export async function fetchUserReadAnnouncements(userId: string): Promise<string[]> {
+  if (!userId) return [];
+  try {
+    const prefDoc = await getDoc(doc(db, "user_preferences", userId));
+    if (prefDoc.exists()) {
+      const data = prefDoc.data();
+      return Array.isArray(data?.readAnnouncements) ? data.readAnnouncements : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn("Could not fetch remote user preferences:", err);
+    return [];
+  }
+}
+
+export async function saveUserReadAnnouncements(userId: string, readIds: string[]): Promise<void> {
+  if (!userId || !Array.isArray(readIds)) return;
+  try {
+    await setDoc(
+      doc(db, "user_preferences", userId),
+      {
+        readAnnouncements: readIds,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn("Could not sync read announcements to remote cloud:", err);
+  }
+}
+
 

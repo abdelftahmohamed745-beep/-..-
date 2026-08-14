@@ -142,22 +142,106 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
   const [methodFilter, setMethodFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Helper for Smart Auto-Fill of Payment Form
+  const autoFillFormForPatient = (p: {
+    id: string;
+    name: string;
+    phone?: string;
+    serviceName?: string;
+    visitType?: string;
+    serviceId?: string;
+    price?: number;
+  }) => {
+    setPatientNameInput(p.name);
+    setPatientPhoneInput(p.phone || '');
+    setSelectedPatientId(p.id);
+    setPatientSearchTerm(p.name);
+    setShowPatientSuggestions(false);
+
+    // 1. Look for current booking/queue item for this patient
+    const cleanPhone = p.phone ? p.phone.replace(/\D/g, '') : '';
+    const currentBooking = patientsList.find(b =>
+      b.id === p.id || (cleanPhone && b.phone && b.phone.replace(/\D/g, '') === cleanPhone)
+    );
+
+    let targetServiceName = currentBooking?.serviceName || currentBooking?.visitType || p.serviceName || p.visitType;
+    let targetServiceId = currentBooking?.serviceId || p.serviceId;
+    let targetPrice = typeof currentBooking?.price === 'number' ? currentBooking.price : p.price;
+
+    // 2. Check if patient has any existing transaction with outstanding balance
+    const existingTx = transactions.find(tx => {
+      if (tx.paymentStatus === 'REFUNDED') return false;
+      const sameId = Boolean(tx.patientId && p.id && tx.patientId === p.id);
+      const samePhone = Boolean(cleanPhone && tx.patientPhone && tx.patientPhone.replace(/\D/g, '') === cleanPhone);
+      return sameId || samePhone;
+    });
+
+    if (existingTx && existingTx.remainingAmount > 0) {
+      if (!targetServiceName) targetServiceName = existingTx.serviceName;
+      if (!targetServiceId) targetServiceId = existingTx.serviceId;
+
+      setTotalAmountInput(existingTx.remainingAmount);
+      setPaidAmountInput(existingTx.remainingAmount);
+
+      if (targetServiceId) {
+        const matchedSrv = services.find(s => s.id === targetServiceId);
+        if (matchedSrv) setSelectedServiceId(matchedSrv.id);
+      } else if (targetServiceName) {
+        const matchedSrv = services.find(s => s.name.trim() === targetServiceName?.trim());
+        if (matchedSrv) setSelectedServiceId(matchedSrv.id);
+      }
+
+      setCustomServiceName(targetServiceName || existingTx.serviceName || 'كشف عيادة');
+      setNotesInput(`سداد المبلغ المتبقي (${existingTx.remainingAmount} ج)`);
+      return;
+    }
+
+    // 3. Match with clinic service catalog
+    let matchedService: ClinicService | undefined;
+    if (targetServiceId) {
+      matchedService = services.find(s => s.id === targetServiceId);
+    }
+    if (!matchedService && targetServiceName) {
+      matchedService = services.find(s => s.name.trim() === targetServiceName?.trim());
+    }
+
+    if (matchedService) {
+      setSelectedServiceId(matchedService.id);
+      setCustomServiceName(matchedService.name);
+      const finalPrice = typeof targetPrice === 'number' ? targetPrice : matchedService.price;
+      setTotalAmountInput(finalPrice);
+      setPaidAmountInput(finalPrice);
+    } else if (targetServiceName) {
+      setSelectedServiceId('');
+      setCustomServiceName(targetServiceName);
+      if (typeof targetPrice === 'number') {
+        setTotalAmountInput(targetPrice);
+        setPaidAmountInput(targetPrice);
+      } else if (services.length > 0) {
+        const defaultSrv = services.find(s => s.active) || services[0];
+        setTotalAmountInput(defaultSrv.price);
+        setPaidAmountInput(defaultSrv.price);
+      }
+    } else if (typeof targetPrice === 'number') {
+      setCustomServiceName('كشف عيادة');
+      setTotalAmountInput(targetPrice);
+      setPaidAmountInput(targetPrice);
+    } else if (services.length > 0) {
+      const defaultSrv = services.find(s => s.active) || services[0];
+      setSelectedServiceId(defaultSrv.id);
+      setCustomServiceName(defaultSrv.name);
+      setTotalAmountInput(defaultSrv.price);
+      setPaidAmountInput(defaultSrv.price);
+    }
+  };
+
   // Auto-fill form if initialPatientForPayment is passed
   useEffect(() => {
     if (initialPatientForPayment) {
-      setPatientNameInput(initialPatientForPayment.name);
-      setPatientPhoneInput(initialPatientForPayment.phone || '');
-      setSelectedPatientId(initialPatientForPayment.id);
-      if (initialPatientForPayment.visitType || initialPatientForPayment.serviceName) {
-        setCustomServiceName(initialPatientForPayment.visitType || initialPatientForPayment.serviceName || '');
-      }
-      if (typeof initialPatientForPayment.price === 'number') {
-        setTotalAmountInput(initialPatientForPayment.price);
-        setPaidAmountInput(initialPatientForPayment.price);
-      }
+      autoFillFormForPatient(initialPatientForPayment);
       setActiveTab('register');
     }
-  }, [initialPatientForPayment]);
+  }, [initialPatientForPayment, services, transactions]);
 
   // Debounced Patient Search Suggestions Effect
   useEffect(() => {
@@ -211,34 +295,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
 
   // Select patient suggestion handler
   const handleSelectPatientSuggestion = (p: { id: string; name: string; phone: string; serviceName?: string; price?: number }) => {
-    setPatientNameInput(p.name);
-    setPatientPhoneInput(p.phone);
-    setSelectedPatientId(p.id);
-    setPatientSearchTerm(p.name);
-    setShowPatientSuggestions(false);
-
-    // Auto select service if matched
-    if (p.serviceName) {
-      setCustomServiceName(p.serviceName);
-      const matchedSrv = services.find(s => s.name.trim() === p.serviceName?.trim());
-      if (matchedSrv) {
-        setSelectedServiceId(matchedSrv.id);
-        setTotalAmountInput(matchedSrv.price);
-        setPaidAmountInput(matchedSrv.price);
-        return;
-      }
-    }
-
-    if (typeof p.price === 'number') {
-      setTotalAmountInput(p.price);
-      setPaidAmountInput(p.price);
-    } else if (services.length > 0) {
-      const defaultSrv = services.find(s => s.active) || services[0];
-      setSelectedServiceId(defaultSrv.id);
-      setCustomServiceName(defaultSrv.name);
-      setTotalAmountInput(defaultSrv.price);
-      setPaidAmountInput(defaultSrv.price);
-    }
+    autoFillFormForPatient(p);
   };
 
   // Subscribe to Realtime Firebase Data
@@ -296,8 +353,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
 
     const found = patientsList.find(p => p.id === pId);
     if (found) {
-      setPatientNameInput(found.name);
-      setPatientPhoneInput(found.phone || '');
+      autoFillFormForPatient(found);
     }
   };
 

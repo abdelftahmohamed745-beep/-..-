@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Save, Clock, Stethoscope, Building, Phone, MapPin, Camera, MessageCircle, FileText, Plus, Trash2, Image as ImageIcon, Map } from 'lucide-react';
+import { X, Save, Clock, Stethoscope, Building, Phone, MapPin, MessageCircle, FileText, Plus, Trash2, Image as ImageIcon, Map, Sparkles } from 'lucide-react';
 import { DoctorProfile, ClinicServiceItem, MEDICAL_SPECIALTIES } from '../types';
 import { updateDoctorSettings } from '../services/firebaseService';
+import { ImageUpload } from './ui/ImageUpload';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -36,8 +37,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newSrvName, setNewSrvName] = useState('');
   const [newSrvPrice, setNewSrvPrice] = useState('');
 
-  // Clinic photos
-  const [clinicPhotosText, setClinicPhotosText] = useState<string>((doctor.clinicPhotos || []).join('\n'));
+  // Clinic photos list
+  const [clinicPhotos, setClinicPhotos] = useState<string[]>(doctor.clinicPhotos || []);
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -54,14 +55,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setServices(services.filter((_, i) => i !== index));
   };
 
+  const handleAddClinicPhoto = (dataUrl: string) => {
+    if (!dataUrl) return;
+    setClinicPhotos([...clinicPhotos, dataUrl]);
+  };
+
+  const handleRemoveClinicPhoto = (index: number) => {
+    setClinicPhotos(clinicPhotos.filter((_, i) => i !== index));
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-
-    const photosList = clinicPhotosText
-      .split('\n')
-      .map(s => s.trim())
-      .filter(s => s.length > 5);
 
     try {
       await updateDoctorSettings(doctor.uid, {
@@ -76,7 +81,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         whatsappNumber,
         description,
         servicesAndPrices: services,
-        clinicPhotos: photosList,
+        clinicPhotos: clinicPhotos,
         avgConsultTime: Number(avgConsultTime),
         workHours: {
           open: openTime,
@@ -95,6 +100,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onShowToast("خطأ في حفظ الإعدادات", "يرجى التأكد من البيانات والمحاولة مجدداً", "error");
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
@@ -116,8 +122,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         <form onSubmit={handleSave} className="space-y-5">
           
-          {/* Doctor Name & Photo */}
-          <div className="grid sm:grid-cols-2 gap-3">
+          {/* Doctor Name & Direct Photo Upload */}
+          <div className="grid sm:grid-cols-2 gap-4 items-start">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطبيب بالكامل</label>
               <div className="relative">
@@ -133,17 +139,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">رابط صورة الطبيب (URL)</label>
-              <div className="relative">
-                <Camera className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
-                <input
-                  type="url"
-                  value={photoUrl}
-                  onChange={(e) => setPhotoUrl(e.target.value)}
-                  placeholder="https://example.com/doctor.jpg"
-                  className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 text-left dir-ltr"
-                />
-              </div>
+              <ImageUpload
+                label="صورة الطبيب الشخصية"
+                helperText="تظهر في بطاقة الطبيب والدليل وصفحة الحجز"
+                currentImageUrl={photoUrl}
+                onChange={(dataUrl) => setPhotoUrl(dataUrl)}
+                onRemove={() => setPhotoUrl('')}
+                variant="avatar"
+                maxDimension={600}
+              />
             </div>
           </div>
 
@@ -334,18 +338,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Clinic Photos Gallery URLs */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              روابط صور العيادة (رابط واحد في كل سطر)
-            </label>
-            <textarea
-              rows={2}
-              value={clinicPhotosText}
-              onChange={(e) => setClinicPhotosText(e.target.value)}
-              placeholder="https://example.com/clinic1.jpg&#10;https://example.com/clinic2.jpg"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 text-left dir-ltr"
+          {/* Clinic Photos Gallery */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-xs font-bold text-slate-800">
+                  معرض صور العيادة والمركز الطبي
+                </label>
+                <span className="text-[10px] text-slate-500">
+                  أضف صور الاستقبال، غرف الكشف، والأجهزة الطبية لتعريف المرضى بعيادتك
+                </span>
+              </div>
+              <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-full border border-sky-200">
+                {clinicPhotos.length} صور
+              </span>
+            </div>
+
+            {/* Upload New Photo */}
+            <ImageUpload
+              helperText="اختر صورة من هاتفك أو جهازك لإضافتها للمعرض مباشرة"
+              onChange={handleAddClinicPhoto}
+              variant="card"
+              maxDimension={1000}
             />
+
+            {/* Gallery Thumbnails List */}
+            {clinicPhotos.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pt-2">
+                {clinicPhotos.map((photo, pIdx) => (
+                  <div key={pIdx} className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-video bg-white shadow-2xs">
+                    <img
+                      src={photo}
+                      alt={`صورة عيادة ${pIdx + 1}`}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveClinicPhoto(pIdx)}
+                      className="absolute top-1 left-1 p-1 bg-rose-600 text-white rounded-lg opacity-90 hover:opacity-100 transition shadow-sm cursor-pointer"
+                      title="حذف الصورة من المعرض"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <hr className="border-slate-100" />

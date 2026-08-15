@@ -244,34 +244,70 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           </div>
 
           {/* Date & Time Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-sky-600" />
                 <span>تاريخ إعادة الكشف <span className="text-rose-500">*</span></span>
               </label>
-              <input
-                type="date"
-                min={todayStr}
-                value={appointmentDate}
-                onChange={(e) => setAppointmentDate(e.target.value)}
-                required
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition"
-              />
+              <div className="flex items-center gap-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 7);
+                    setAppointmentDate(d.toISOString().split('T')[0]);
+                  }}
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-sky-100 text-slate-700 hover:text-sky-800 rounded-md font-semibold transition cursor-pointer"
+                >
+                  +7 أيام
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 14);
+                    setAppointmentDate(d.toISOString().split('T')[0]);
+                  }}
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-sky-100 text-slate-700 hover:text-sky-800 rounded-md font-semibold transition cursor-pointer"
+                >
+                  +أسبوعين
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 30);
+                    setAppointmentDate(d.toISOString().split('T')[0]);
+                  }}
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-sky-100 text-slate-700 hover:text-sky-800 rounded-md font-semibold transition cursor-pointer"
+                >
+                  +شهر
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-sky-600" />
-                <span>وقت الموعد <span className="text-rose-500">*</span></span>
-              </label>
-              <input
-                type="time"
-                value={appointmentTime}
-                onChange={(e) => setAppointmentTime(e.target.value)}
-                required
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <input
+                  type="date"
+                  min={todayStr}
+                  value={appointmentDate}
+                  onChange={(e) => setAppointmentDate(e.target.value)}
+                  required
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition"
+                />
+              </div>
+
+              <div>
+                <input
+                  type="time"
+                  value={appointmentTime}
+                  onChange={(e) => setAppointmentTime(e.target.value)}
+                  required
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition"
+                />
+              </div>
             </div>
           </div>
 

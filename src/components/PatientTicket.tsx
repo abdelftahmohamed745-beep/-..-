@@ -14,7 +14,10 @@ import {
   Phone,
   QrCode,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Copy,
+  Check,
+  KeyRound
 } from 'lucide-react';
 import { PatientRecord, DoctorProfile } from '../types';
 import { subscribeToPatientTicket, updatePatientStatus } from '../services/firebaseService';
@@ -40,6 +43,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
   const [allPatients, setAllPatients] = useState<PatientRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [copiedRef, setCopiedRef] = useState(false);
 
   // Audio trigger guards
   const previousStatusRef = useRef<string | null>(null);
@@ -104,17 +108,26 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
   };
 
   const handleShareTicket = () => {
-    const url = window.location.href;
+    const refText = patient?.bookingReference ? `\nرمز الحجز السريع: ${patient.bookingReference}` : '';
+    const shareText = `تذكرتي في ${doctor?.clinicName || 'العيادة'}:\nرقم الدور: #${patient?.sequenceNumber}${refText}\nالاسم: ${patient?.name}\nالتاريخ: ${patient?.date}`;
     if (navigator.share) {
       navigator.share({
         title: `تذكرة دوري - ${patient?.name}`,
-        text: `تذكرة دوري برقم #${patient?.sequenceNumber} لدى ${doctor?.clinicName}`,
-        url: url
+        text: shareText,
+        url: window.location.href
       }).catch(console.error);
     } else {
-      navigator.clipboard.writeText(url);
-      onShowToast("تم نسخ رابط التذكرة", "يمكنك فتح الرابط لمتابعة دورك من أي جهاز", "success");
+      navigator.clipboard.writeText(shareText);
+      onShowToast("تم نسخ بيانات التذكرة", "يمكنك إرسالها أو فتحها من أي جهاز", "success");
     }
+  };
+
+  const handleCopyBookingReference = () => {
+    if (!patient?.bookingReference) return;
+    navigator.clipboard.writeText(patient.bookingReference);
+    setCopiedRef(true);
+    onShowToast("تم نسخ رمز الحجز السريع", `${patient.bookingReference} - يمكنك استخدامه للاسترجاع من أي جهاز`, "success");
+    setTimeout(() => setCopiedRef(false), 2000);
   };
 
   if (loading) {
@@ -239,17 +252,44 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
         </div>
 
         {/* Ticket Body */}
-        <div className="p-6 sm:p-8 text-center space-y-6">
+        <div className="p-6 sm:p-8 text-center space-y-5">
           
-          {/* Patient Details */}
-          <div>
-            <span className="text-xs text-slate-400 font-medium">اسم المريض</span>
-            <h3 className="text-lg font-bold text-[#122c4a] font-['Tajawal',sans-serif] mt-0.5">
-              {patient.name}
-            </h3>
-            <span className="text-xs text-slate-500 font-mono dir-ltr inline-block mt-0.5">
-              {patient.phone}
-            </span>
+          {/* Patient Details & Quick Booking Reference */}
+          <div className="space-y-2">
+            <div>
+              <span className="text-xs text-slate-400 font-medium">اسم المريض</span>
+              <h3 className="text-lg font-bold text-[#122c4a] font-['Tajawal',sans-serif] mt-0.5">
+                {patient.name}
+              </h3>
+              <span className="text-xs text-slate-500 font-mono dir-ltr inline-block mt-0.5">
+                {patient.phone}
+              </span>
+            </div>
+
+            {/* Quick Booking Reference Code Pill */}
+            {patient.bookingReference && (
+              <div className="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 px-3 py-1.5 rounded-2xl">
+                <KeyRound className="w-3.5 h-3.5 text-sky-700" />
+                <span className="text-[11px] font-bold text-sky-900">رمز الحجز:</span>
+                <span className="font-mono font-black text-xs text-sky-950 tracking-wider">
+                  {patient.bookingReference}
+                </span>
+                <button
+                  onClick={handleCopyBookingReference}
+                  className="p-1 hover:bg-sky-100 text-sky-700 rounded-md transition cursor-pointer"
+                  title="نسخ رمز الحجز للاسترجاع السريع"
+                >
+                  {copiedRef ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            )}
+
+            {/* Unified Patient ID */}
+            {patient.patientId && (
+              <div className="text-[10px] text-slate-400 font-mono">
+                الهوية الطبية: {patient.patientId}
+              </div>
+            )}
           </div>
 
           {/* Sequence Number Highlight */}
@@ -386,7 +426,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
       )}
 
       {/* Patient Follow-Up Appointments Section */}
-      {patient.phone && (
+      {(patient.phone || patient.patientId) && (
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -394,6 +434,7 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
         >
           <PatientFollowUpSection
             patientPhone={patient.phone}
+            patientId={patient.patientId}
             onShowToast={onShowToast}
           />
         </motion.div>

@@ -44,7 +44,8 @@ import {
   LabAdminView,
   AdminAnnouncement,
   AnnouncementType,
-  AnnouncementTarget
+  AnnouncementTarget,
+  PatientProfile
 } from "../types";
 import { hasPermission } from "../utils/permissions";
 import {
@@ -69,6 +70,213 @@ export function generateReferenceCode(uid: string): string {
   const clean = uid.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
   const code = clean.length >= 6 ? clean.slice(-6) : clean.padEnd(6, '0');
   return `REF-${code}`;
+}
+
+// Generate short, human-friendly 6-character booking recovery reference (e.g., D-4821 or D-7923)
+export function generateBookingReference(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // Exclude ambiguous 0/O, 1/I
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `D-${code}`;
+}
+
+// Generate unified, permanent Patient Identity ID (e.g., PID-849201)
+export function generatePatientId(phone?: string): string {
+  const cleanPhone = phone ? normalizePhoneNumber(phone) : '';
+  if (cleanPhone && cleanPhone.length >= 4) {
+    const lastDigits = cleanPhone.slice(-4);
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    return `PID-${lastDigits}${randomSuffix}`;
+  }
+  const randomNum = Math.floor(100000 + Math.random() * 900000);
+  return `PID-${randomNum}`;
+}
+
+// Unified Patient Identity Profile Management
+export async function getOrCreatePatientProfile(
+  name: string,
+  phone: string,
+  additionalData?: Partial<PatientProfile>
+): Promise<PatientProfile> {
+  const cleanName = sanitizeInput(name);
+  const cleanPhone = normalizePhoneNumber(phone);
+  const nowIso = new Date().toISOString();
+
+  if (!cleanPhone) {
+    throw new Error("رقم الهاتف مطلوب لتسجيل ملف المريض");
+  }
+
+  try {
+    // 1. Check if patient profile already exists by phone in 'patients' collection
+    const q = query(collection(db, "patients"), where("phone", "==", cleanPhone), limit(1));
+    const snap = await getDocs(q);
+
+    if (!snap.empty) {
+      const existingDoc = snap.docs[0];
+      const existingData = existingDoc.data() as PatientProfile;
+      const docId = existingDoc.id;
+
+      // Update name/details if newly provided
+      const updates: Partial<PatientProfile> = {
+        updatedAt: nowIso
+      };
+      if (cleanName && cleanName !== existingData.name) {
+        updates.name = cleanName;
+      }
+      if (additionalData) {
+        if (additionalData.gender) updates.gender = additionalData.gender;
+        if (additionalData.bloodGroup) updates.bloodGroup = additionalData.bloodGroup;
+        if (additionalData.allergies) updates.allergies = additionalData.allergies;
+        if (additionalData.chronicDiseases) updates.chronicDiseases = additionalData.chronicDiseases;
+        if (additionalData.birthDate) updates.birthDate = additionalData.birthDate;
+        if (additionalData.age) updates.age = additionalData.age;
+        if (additionalData.nationalId) updates.nationalId = additionalData.nationalId;
+        if (additionalData.emergencyContact) updates.emergencyContact = additionalData.emergencyContact;
+        if (additionalData.uid) updates.uid = additionalData.uid;
+      }
+
+      await updateDoc(doc(db, "patients", docId), updates);
+      return {
+        ...existingData,
+        ...updates,
+        id: docId,
+        patientId: existingData.patientId || docId
+      };
+    }
+
+    // 2. Create brand new unified patient profile
+    const pid = generatePatientId(cleanPhone);
+    const newProfile: PatientProfile = {
+      id: pid,
+      patientId: pid,
+      name: cleanName || "مريض",
+      phone: cleanPhone,
+      accountType: 'patient',
+      gender: additionalData?.gender,
+      birthDate: additionalData?.birthDate,
+      age: additionalData?.age,
+      bloodGroup: additionalData?.bloodGroup || '',
+      allergies: additionalData?.allergies || '',
+      chronicDiseases: additionalData?.chronicDiseases || '',
+      nationalId: additionalData?.nationalId || '',
+      emergencyContact: additionalData?.emergencyContact || '',
+      uid: additionalData?.uid || '',
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    await setDoc(doc(db, "patients", pid), newProfile);
+    return newProfile;
+  } catch (err) {
+    console.error("Error creating or getting patient profile:", err);
+    // Fallback in-memory patient profile to prevent blocking booking flow
+    const fallbackPid = generatePatientId(cleanPhone);
+    return {
+      id: fallbackPid,
+      patientId: fallbackPid,
+      name: cleanName || "مريض",
+      phone: cleanPhone,
+      accountType: 'patient',
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+  }
+}
+
+// Get Patient Profile by Phone or PatientID
+export async function getPatientProfile(patientIdOrPhone: string): Promise<PatientProfile | null> {
+  const cleanTerm = patientIdOrPhone.trim();
+  if (!cleanTerm) return null;
+
+  try {
+    // Check direct doc ID
+    const docRef = doc(db, "patients", cleanTerm);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as PatientProfile;
+    }
+
+    // Check by normalized phone
+    const cleanPhone = normalizePhoneNumber(cleanTerm);
+    if (cleanPhone) {
+      const qPhone = query(collection(db, "patients"), where("phone", "==", cleanPhone), limit(1));
+      const snapPhone = await getDocs(qPhone);
+      if (!snapPhone.empty) {
+        const d = snapPhone.docs[0];
+        return { id: d.id, ...d.data() } as PatientProfile;
+      }
+    }
+
+    // Check by patientId field
+    const qPid = query(collection(db, "patients"), where("patientId", "==", cleanTerm), limit(1));
+    const snapPid = await getDocs(qPid);
+    if (!snapPid.empty) {
+      const d = snapPid.docs[0];
+      return { id: d.id, ...d.data() } as PatientProfile;
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Error fetching patient profile:", err);
+    return null;
+  }
+}
+
+// Quick Booking Ticket Recovery & Search by Reference Code or Phone
+export async function findTicketByReferenceOrPhone(
+  doctorId: string,
+  queryTerm: string
+): Promise<PatientRecord | null> {
+  const cleanTerm = queryTerm.trim().toUpperCase();
+  if (!cleanTerm || !doctorId) return null;
+
+  const today = getTodayDateString();
+  const queueColRef = collection(db, "queues", doctorId, "patients");
+
+  try {
+    // 1. Match by Booking Reference (e.g. D-4821)
+    const qRef = query(
+      queueColRef,
+      where("date", "==", today),
+      where("bookingReference", "==", cleanTerm),
+      limit(1)
+    );
+    const snapRef = await getDocs(qRef);
+    if (!snapRef.empty) {
+      const d = snapRef.docs[0];
+      return { id: d.id, ...d.data() } as PatientRecord;
+    }
+
+    // 2. Match by Normalized Phone Number
+    const normalizedPhone = normalizePhoneNumber(queryTerm);
+    if (normalizedPhone) {
+      const qPhone = query(
+        queueColRef,
+        where("date", "==", today),
+        where("phone", "==", normalizedPhone),
+        limit(1)
+      );
+      const snapPhone = await getDocs(qPhone);
+      if (!snapPhone.empty) {
+        const d = snapPhone.docs[0];
+        return { id: d.id, ...d.data() } as PatientRecord;
+      }
+    }
+
+    // 3. Match by direct Patient Record ID or Patient ID
+    const docRef = doc(db, "queues", doctorId, "patients", queryTerm.trim());
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as PatientRecord;
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Error searching ticket by reference/phone:", err);
+    return null;
+  }
 }
 
 export function normalizePhoneNumber(phone: string): string {
@@ -609,7 +817,7 @@ export async function bookPatient(
   userId?: string,
   notificationPreference: NotificationTimingPreference = 'two_turns',
   selectedService?: { serviceId?: string; serviceName: string; visitType?: string; price: number }
-): Promise<{ patientId: string; sequenceNumber: number; isExisting?: boolean }> {
+): Promise<{ patientId: string; sequenceNumber: number; isExisting?: boolean; bookingReference?: string; patientProfileId?: string }> {
   // 1. Sanitize & Validate Inputs
   const cleanName = sanitizeInput(name);
   const normalizedPhone = normalizePhoneNumber(phone);
@@ -632,17 +840,29 @@ export async function bookPatient(
     return {
       patientId: existingBooking.id,
       sequenceNumber: existingBooking.sequenceNumber,
-      isExisting: true
+      isExisting: true,
+      bookingReference: existingBooking.bookingReference,
+      patientProfileId: existingBooking.patientId
     };
   }
 
-  // 3. Anti-Spam Rate Limiting Check for NEW bookings
+  // 3. Resolve / Create Unified Patient Profile
+  let patientProfile: PatientProfile | null = null;
+  try {
+    patientProfile = await getOrCreatePatientProfile(cleanName, normalizedPhone, { uid: userId });
+  } catch (e) {
+    console.warn("Patient profile auto-provision error:", e);
+  }
+  const pid = patientProfile?.patientId || generatePatientId(normalizedPhone);
+  const bookingRef = generateBookingReference();
+
+  // 4. Anti-Spam Rate Limiting Check for NEW bookings
   const rateCheck = checkBookingRateLimit(normalizedPhone);
   if (!rateCheck.allowed) {
     throw new Error(`يرجى الانتظار ${rateCheck.remainingSeconds} ثانية قبل محاولة الحجز مرة أخرى`);
   }
 
-  // 3. Verify doctor subscription status & active account
+  // 5. Verify doctor subscription status & active account
   const doctor = await getDoctorProfile(doctorId);
   if (!doctor) {
     throw new Error("الطبيب غير موجود في النظام");
@@ -657,7 +877,7 @@ export async function bookPatient(
     throw new Error("عذراً، نظام الحجز غير متاح حالياً لدى هذه العيادة لانتهاء فترة الاشتراك. يرجى مراجعة موظف الاستقبال.");
   }
 
-  // 5. Atomic Queue Sequence Number Generation via Transaction
+  // 6. Atomic Queue Sequence Number Generation via Transaction
   const today = getTodayDateString();
   const counterRef = doc(db, "queues", doctorId, "dailyCounters", today);
   const now = new Date().toISOString();
@@ -688,7 +908,9 @@ export async function bookPatient(
         return {
           patientId: patientSnap.id,
           sequenceNumber: existingData.sequenceNumber,
-          isExisting: true
+          isExisting: true,
+          bookingReference: existingData.bookingReference,
+          patientProfileId: existingData.patientId || pid
         };
       }
       // If previous ticket today was completed/cancelled, allocate new auto-ID doc
@@ -715,6 +937,8 @@ export async function bookPatient(
     const estMins = Math.max(0, (nextSeq - 1) * (doctor.avgConsultTime || 12));
 
     const patientData: Omit<PatientRecord, 'id'> = {
+      patientId: pid,
+      bookingReference: bookingRef,
       doctorId,
       clinicId: doctorId,
       userId: userId || '',
@@ -746,7 +970,13 @@ export async function bookPatient(
 
     transaction.set(targetPatientRef, patientData);
 
-    return { patientId: targetPatientRef.id, sequenceNumber: nextSeq, isExisting: false };
+    return {
+      patientId: targetPatientRef.id,
+      sequenceNumber: nextSeq,
+      isExisting: false,
+      bookingReference: bookingRef,
+      patientProfileId: pid
+    };
   });
 
   // Record rate limiting timestamp ONLY on successful transaction completion
@@ -766,7 +996,7 @@ export async function bookPatient(
         remainingAmount: typeof selectedService?.price === 'number' ? selectedService.price : 200,
         status: 'waiting',
         createdAt: now
-      });
+      }, pid);
     } catch (e) {
       console.warn("Could not auto-link visit to patient medical file:", e);
     }
@@ -776,13 +1006,17 @@ export async function bookPatient(
   writeAuditLog("BOOK_PATIENT_TICKET", userId || "PATIENT_PUBLIC", doctorId, {
     sequenceNumber: transactionResult.sequenceNumber,
     ticketId: transactionResult.patientId,
+    bookingReference: transactionResult.bookingReference || bookingRef,
+    patientId: pid,
     isExisting: transactionResult.isExisting || false
   });
 
   return {
     patientId: transactionResult.patientId,
     sequenceNumber: transactionResult.sequenceNumber,
-    isExisting: transactionResult.isExisting
+    isExisting: transactionResult.isExisting,
+    bookingReference: transactionResult.bookingReference || bookingRef,
+    patientProfileId: pid
   };
 }
 
@@ -858,10 +1092,15 @@ export function subscribeToPatientTicket(
     // Prevent premature state emit until BOTH doctor and queue snapshots have loaded
     if (!doctorLoaded || !queueLoaded) return;
     const normalizedTarget = normalizePhoneNumber(patientId);
-    let myPatient = allPatients.find(p => p.id === patientId) || null;
-    if (!myPatient && normalizedTarget) {
-      myPatient = allPatients.find(p => p.phone === normalizedTarget) || null;
-    }
+    const upperTarget = (patientId || '').trim().toUpperCase();
+
+    let myPatient = allPatients.find(p => 
+      p.id === patientId ||
+      (p.bookingReference && p.bookingReference.toUpperCase() === upperTarget) ||
+      (p.patientId && p.patientId.toUpperCase() === upperTarget) ||
+      (normalizedTarget && p.phone === normalizedTarget)
+    ) || null;
+
     callback({
       patient: myPatient,
       doctor: currentDoctor,
@@ -1250,8 +1489,18 @@ export async function createFollowUpAppointment(params: {
   const cleanReason = reason ? sanitizeInput(reason) : "";
   const nowIso = new Date().toISOString();
 
+  let resolvedPid = patientId || "";
+  if (!resolvedPid && cleanPhone) {
+    try {
+      const pProfile = await getOrCreatePatientProfile(cleanName, cleanPhone);
+      resolvedPid = pProfile.patientId || pProfile.id;
+    } catch {
+      resolvedPid = generatePatientId(cleanPhone);
+    }
+  }
+
   const appointmentData: Omit<FollowUpAppointment, 'id'> = {
-    patientId: patientId || "",
+    patientId: resolvedPid || "",
     patientName: cleanName,
     patientPhone: cleanPhone,
     doctorId,
@@ -1273,6 +1522,8 @@ export async function createFollowUpAppointment(params: {
   writeAuditLog("CREATE_FOLLOWUP_APPOINTMENT", "DOCTOR", doctorId, {
     appointmentId: docRef.id,
     patientName: cleanName,
+    patientPhone: cleanPhone,
+    patientId: resolvedPid,
     appointmentDate,
     appointmentTime
   });
@@ -1312,22 +1563,52 @@ export function subscribeToDoctorFollowUps(
 }
 
 // Get patient follow-up appointments by phone or patientId
-export async function getPatientFollowUpAppointments(phone: string): Promise<FollowUpAppointment[]> {
+export async function getPatientFollowUpAppointments(
+  queryTarget: string | { phone?: string; patientId?: string }
+): Promise<FollowUpAppointment[]> {
   try {
-    const cleanPhone = phone.trim();
-    if (!cleanPhone) return [];
+    let cleanPhone = '';
+    let targetPid = '';
 
-    const q = query(
-      collection(db, "followUpAppointments"),
-      where("patientPhone", "==", cleanPhone)
-    );
+    if (typeof queryTarget === 'string') {
+      const trimmed = queryTarget.trim();
+      if (trimmed.startsWith('PID-')) {
+        targetPid = trimmed;
+      } else {
+        cleanPhone = trimmed;
+      }
+    } else if (queryTarget) {
+      cleanPhone = (queryTarget.phone || '').trim();
+      targetPid = (queryTarget.patientId || '').trim();
+    }
 
-    const snapshot = await getDocs(q);
-    const list: FollowUpAppointment[] = [];
-    snapshot.forEach((d) => {
-      list.push({ id: d.id, ...d.data() } as FollowUpAppointment);
-    });
+    if (!cleanPhone && !targetPid) return [];
 
+    const map = new Map<string, FollowUpAppointment>();
+
+    if (cleanPhone) {
+      const qPhone = query(
+        collection(db, "followUpAppointments"),
+        where("patientPhone", "==", cleanPhone)
+      );
+      const snapPhone = await getDocs(qPhone);
+      snapPhone.forEach((d) => {
+        map.set(d.id, { id: d.id, ...d.data() } as FollowUpAppointment);
+      });
+    }
+
+    if (targetPid) {
+      const qPid = query(
+        collection(db, "followUpAppointments"),
+        where("patientId", "==", targetPid)
+      );
+      const snapPid = await getDocs(qPid);
+      snapPid.forEach((d) => {
+        map.set(d.id, { id: d.id, ...d.data() } as FollowUpAppointment);
+      });
+    }
+
+    const list = Array.from(map.values());
     list.sort((a, b) => {
       const dtA = new Date(`${a.appointmentDate}T${a.appointmentTime}`).getTime();
       const dtB = new Date(`${b.appointmentDate}T${b.appointmentTime}`).getTime();
@@ -1341,41 +1622,94 @@ export async function getPatientFollowUpAppointments(phone: string): Promise<Fol
   }
 }
 
-// Real-time subscriber for patient follow-up appointments by phone
+// Real-time subscriber for patient follow-up appointments by phone or patientId
 export function subscribeToPatientFollowUps(
-  phone: string,
+  queryTarget: string | { phone?: string; patientId?: string },
   callback: (appointments: FollowUpAppointment[]) => void
 ) {
-  const cleanPhone = phone.trim();
-  if (!cleanPhone) {
+  let cleanPhone = '';
+  let targetPid = '';
+
+  if (typeof queryTarget === 'string') {
+    const trimmed = queryTarget.trim();
+    if (trimmed.startsWith('PID-')) {
+      targetPid = trimmed;
+    } else {
+      cleanPhone = trimmed;
+    }
+  } else if (queryTarget) {
+    cleanPhone = (queryTarget.phone || '').trim();
+    targetPid = (queryTarget.patientId || '').trim();
+  }
+
+  if (!cleanPhone && !targetPid) {
     callback([]);
     return () => {};
   }
 
-  const q = query(
-    collection(db, "followUpAppointments"),
-    where("patientPhone", "==", cleanPhone)
-  );
+  const phoneMap = new Map<string, FollowUpAppointment>();
+  const pidMap = new Map<string, FollowUpAppointment>();
 
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const list: FollowUpAppointment[] = [];
-      snapshot.forEach((d) => {
-        list.push({ id: d.id, ...d.data() } as FollowUpAppointment);
-      });
-      list.sort((a, b) => {
-        const dtA = new Date(`${a.appointmentDate}T${a.appointmentTime}`).getTime();
-        const dtB = new Date(`${b.appointmentDate}T${b.appointmentTime}`).getTime();
-        return dtA - dtB;
-      });
-      callback(list);
-    },
-    (err) => {
-      console.error("Error subscribing to patient follow-ups:", err);
-      callback([]);
-    }
-  );
+  const emitCombined = () => {
+    const combined = new Map<string, FollowUpAppointment>();
+    phoneMap.forEach((val, key) => combined.set(key, val));
+    pidMap.forEach((val, key) => combined.set(key, val));
+    const list = Array.from(combined.values());
+    list.sort((a, b) => {
+      const dtA = new Date(`${a.appointmentDate}T${a.appointmentTime}`).getTime();
+      const dtB = new Date(`${b.appointmentDate}T${b.appointmentTime}`).getTime();
+      return dtA - dtB;
+    });
+    callback(list);
+  };
+
+  const unsubs: (() => void)[] = [];
+
+  if (cleanPhone) {
+    const qPhone = query(
+      collection(db, "followUpAppointments"),
+      where("patientPhone", "==", cleanPhone)
+    );
+    const unsubPhone = onSnapshot(
+      qPhone,
+      (snapshot) => {
+        phoneMap.clear();
+        snapshot.forEach((d) => {
+          phoneMap.set(d.id, { id: d.id, ...d.data() } as FollowUpAppointment);
+        });
+        emitCombined();
+      },
+      (err) => {
+        console.error("Error subscribing to phone follow-ups:", err);
+      }
+    );
+    unsubs.push(unsubPhone);
+  }
+
+  if (targetPid) {
+    const qPid = query(
+      collection(db, "followUpAppointments"),
+      where("patientId", "==", targetPid)
+    );
+    const unsubPid = onSnapshot(
+      qPid,
+      (snapshot) => {
+        pidMap.clear();
+        snapshot.forEach((d) => {
+          pidMap.set(d.id, { id: d.id, ...d.data() } as FollowUpAppointment);
+        });
+        emitCombined();
+      },
+      (err) => {
+        console.error("Error subscribing to PID follow-ups:", err);
+      }
+    );
+    unsubs.push(unsubPid);
+  }
+
+  return () => {
+    unsubs.forEach(unsub => unsub());
+  };
 }
 
 // Update follow-up appointment status (Doctor / Patient)
@@ -2660,7 +2994,7 @@ export async function getPatientMedicalFile(doctorId: string, phone: string): Pr
 
 export async function savePatientMedicalFile(
   doctorId: string,
-  fileData: Partial<PatientMedicalFile> & { patientPhone: string; patientName: string }
+  fileData: Partial<PatientMedicalFile> & { patientPhone: string; patientName: string; patientId?: string }
 ): Promise<PatientMedicalFile> {
   const cleanPhone = normalizePhoneNumber(fileData.patientPhone);
   const nowIso = new Date().toISOString();
@@ -2674,6 +3008,7 @@ export async function savePatientMedicalFile(
     updatedFile = {
       ...prev,
       ...fileData,
+      patientId: fileData.patientId || prev.patientId,
       patientPhone: cleanPhone,
       updatedAt: nowIso
     };
@@ -2682,6 +3017,7 @@ export async function savePatientMedicalFile(
     updatedFile = {
       id: cleanPhone,
       doctorId,
+      patientId: fileData.patientId,
       patientName: sanitizeInput(fileData.patientName),
       patientPhone: cleanPhone,
       age: fileData.age || undefined,
@@ -2705,7 +3041,8 @@ export async function addVisitToPatientMedicalFile(
   doctorId: string,
   patientName: string,
   patientPhone: string,
-  visitEntry: PatientVisitEntry
+  visitEntry: PatientVisitEntry,
+  patientId?: string
 ): Promise<void> {
   try {
     const cleanPhone = normalizePhoneNumber(patientPhone);
@@ -2721,6 +3058,7 @@ export async function addVisitToPatientMedicalFile(
         visits.unshift(visitEntry);
       }
       await savePatientMedicalFile(doctorId, {
+        patientId: patientId || existing.patientId,
         patientPhone: cleanPhone,
         patientName: patientName || existing.patientName,
         lastVisitDate: visitEntry.date || getTodayDateString(),
@@ -2729,6 +3067,7 @@ export async function addVisitToPatientMedicalFile(
       });
     } else {
       await savePatientMedicalFile(doctorId, {
+        patientId,
         patientPhone: cleanPhone,
         patientName,
         lastVisitDate: visitEntry.date || getTodayDateString(),

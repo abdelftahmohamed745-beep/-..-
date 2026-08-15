@@ -1,4 +1,4 @@
-import { DoctorProfile } from '../types';
+import { DoctorProfile, LabProfile } from '../types';
 
 const SITE_URL = 'https://nine-vert-34.vercel.app';
 
@@ -13,21 +13,190 @@ export interface SeoData {
 }
 
 export const DEFAULT_HOMEPAGE_SEO: SeoData = {
-  title: 'دوري | نظام إدارة العيادات وحجز المواعيد وتتبع أدوار المرضى',
-  description: 'منصة دوري هي النظام الذكي لإدارة العيادات الطبية وتنظيم أدوار المرضى والمواعيد المباشرة. يتيح للأطباء إدارة عياداتهم بسهولة وللمرضى حجز وتتبع الدور لحظياً.',
+  title: 'دوري | منظومة إدارة العيادات والمختبرات الطبية وحجز المواعيد',
+  description: 'دوري (Dory) منصة ذكية لإدارة العيادات والمختبرات، تنظيم طابور المرضى الحي، حجز المواعيد الفوري بدون تطبيق، وإصدار نتائج التحاليل الموثقة برمز QR.',
   canonicalUrl: `${SITE_URL}/`,
   robots: 'index, follow',
   ogType: 'website',
+  ogImage: `${SITE_URL}/dory-og-image.png`,
   jsonLd: {
     '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    'name': 'دوري',
-    'alternateName': 'Dory',
-    'url': `${SITE_URL}/`,
-    'applicationCategory': 'HealthApplication',
-    'operatingSystem': 'All',
-    'inLanguage': 'ar',
-    'description': 'نظام ذكي لإدارة العيادات الطبية وتنظيم أدوار المرضى وتتبع الدور والحجز المباشر.'
+    '@graph': [
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${SITE_URL}/#software`,
+        'name': 'دوري',
+        'alternateName': 'Dory',
+        'url': `${SITE_URL}/`,
+        'applicationCategory': 'HealthApplication',
+        'operatingSystem': 'Web',
+        'inLanguage': 'ar',
+        'description': 'منظومة دوري الذكية لإدارة العيادات والمعامل الطبية، تنظيم طابور وأدوار المرضى، حجز المواعيد، وإدارة السجلات الطبية والمالية.',
+        'offers': {
+          '@type': 'Offer',
+          'price': '0',
+          'priceCurrency': 'EGP'
+        }
+      },
+      {
+        '@type': 'WebSite',
+        '@id': `${SITE_URL}/#website`,
+        'url': `${SITE_URL}/`,
+        'name': 'دوري — Dory',
+        'alternateName': 'منصة دوري الطبية',
+        'description': 'نظام إدارة العيادات والمعامل الطبية وحجز المواعيد وتتبع أدوار المرضى.',
+        'inLanguage': 'ar'
+      },
+      {
+        '@type': 'Organization',
+        '@id': `${SITE_URL}/#organization`,
+        'name': 'دوري — Dory',
+        'url': `${SITE_URL}/`,
+        'logo': `${SITE_URL}/dory-logo.png`,
+        'image': `${SITE_URL}/dory-og-image.png`,
+        'description': 'نظام لإدارة العيادات والمعامل الطبية والحجوزات وتتبع أدوار المرضى والسجلات الطبية.'
+      }
+    ]
+  }
+};
+
+export const ABOUT_PAGE_SEO: SeoData = {
+  title: 'عن منظومة دوري | حلول رقمنة العيادات والمختبرات الطبية',
+  description: 'تعرف على رؤية منصة دوري (Dory) في القضاء على التكدس في غرف الانتظار وتطوير تجربة الكشف الطبي للمرضى والأطباء والمعامل.',
+  canonicalUrl: `${SITE_URL}/about`,
+  robots: 'index, follow',
+  ogType: 'website',
+  ogImage: `${SITE_URL}/dory-og-image.png`,
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'AboutPage',
+    'name': 'عن منظومة دوري الطبية',
+    'description': 'نظام سحابي متكامل لإدارة العيادات والمراكز الطبية ومختبرات التحاليل ورقمنة تجربة الكشف.',
+    'url': `${SITE_URL}/about`,
+    'inLanguage': 'ar'
+  }
+};
+
+export const FOR_CLINICS_PAGE_SEO: SeoData = {
+  title: 'دوري للأطباء والعيادات | إدارة الطابور الحي والمواعيد والملفات الطبية',
+  description: 'نظام متكامل لإدارة العيادات: نداء المرضى في الطابور، شاشة تلفزيون الانتظار TV View، الروشتات الإلكترونية، متابعات إعادة الكشف، والتقارير المالية.',
+  canonicalUrl: `${SITE_URL}/for-clinics`,
+  robots: 'index, follow',
+  ogType: 'website',
+  ogImage: `${SITE_URL}/dory-og-image.png`,
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'MedicalWebPage',
+    'name': 'دوري للأطباء والعيادات',
+    'description': 'أدوات إدارة الطوابير السريرية والملفات الطبية ومواعيد إعادة الكشف للعيادات.',
+    'url': `${SITE_URL}/for-clinics`,
+    'inLanguage': 'ar'
+  }
+};
+
+export const FOR_LABS_PAGE_SEO: SeoData = {
+  title: 'دوري لمعامل ومختبرات التحاليل | إدارة العينات والنتائج المعتمدة بـ QR',
+  description: 'نظام إدارة مختبرات التحاليل: تنظيم باقات الفحوصات والأسعار، تتبع مسار العينات، إصدار تقارير PDF الموثقة، واستقبال طلبات السحب المنزلي.',
+  canonicalUrl: `${SITE_URL}/for-labs`,
+  robots: 'index, follow',
+  ogType: 'website',
+  ogImage: `${SITE_URL}/dory-og-image.png`,
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'MedicalWebPage',
+    'name': 'دوري لمعامل ومختبرات التحاليل',
+    'description': 'حلول رقمية لإدارة عينات التحاليل ونشر النتائج المعتمدة للمرضى عبر رمز QR.',
+    'url': `${SITE_URL}/for-labs`,
+    'inLanguage': 'ar'
+  }
+};
+
+export const FOR_PATIENTS_PAGE_SEO: SeoData = {
+  title: 'دوري للمرضى والمراجعين | حجز فوري وتتبع الدور واستلام النتائج أونلاين',
+  description: 'احجز كشفك الطبي أو فحص المعمل في ثوانٍ بدون تطبيق، وتابع دورك في الطابور مباشرة من هاتفك، واسترجع تذكرتك برقم الهاتف.',
+  canonicalUrl: `${SITE_URL}/for-patients`,
+  robots: 'index, follow',
+  ogType: 'website',
+  ogImage: `${SITE_URL}/dory-og-image.png`,
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    'name': 'دوري للمرضى والمراجعين',
+    'description': 'تجربة حجز مريحة وتتبع فوري للدور في العيادات واستلام نتائج التحاليل إلكترونياً.',
+    'url': `${SITE_URL}/for-patients`,
+    'inLanguage': 'ar'
+  }
+};
+
+export const FAQ_PAGE_SEO: SeoData = {
+  title: 'الأسئلة الشائعة (FAQ) | منظومة دوري للعيادات والمختبرات',
+  description: 'إجابات واضحة وشاملة حول آلية حجز المرضى، استرجاع التذاكر، تشغيل شاشة التلفزيون، إدارة التحاليل، وخصوصية البيانات في دوري.',
+  canonicalUrl: `${SITE_URL}/faq`,
+  robots: 'index, follow',
+  ogType: 'website',
+  ogImage: `${SITE_URL}/dory-og-image.png`,
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    'mainEntity': [
+      {
+        '@type': 'Question',
+        'name': 'هل يحتاج المريض لتحميل تطبيق لحجز الدور في دوري؟',
+        'acceptedAnswer': {
+          '@type': 'Answer',
+          'text': 'لا، يعمل دوري مباشرة عبر أي متصفح هاتف ذكي (Safari, Chrome) دون الحاجة لتثبيت أي تطبيق أو استهلاك ذاكرة الهاتف.'
+        }
+      },
+      {
+        '@type': 'Question',
+        'name': 'هل يمكن للمريض حجز دوره بدون إنشاء حساب؟',
+        'acceptedAnswer': {
+          '@type': 'Answer',
+          'text': 'نعم، يمكن للمريض الحجز فوراً كـ Guest بمجرد إدخال الاسم ورقم الهاتف واختيار نوع الكشف، دون الحاجة لتسجيل حساب أو تذكر كلمة مرور.'
+        }
+      },
+      {
+        '@type': 'Question',
+        'name': 'كيف يسترجع المريض تذكرته إذا أغلق المتصفح بالخطأ؟',
+        'acceptedAnswer': {
+          '@type': 'Answer',
+          'text': 'يتم حفظ التذكرة محلياً على جهاز المريض، كما يمكنه استرجاعها فوراً بإدخال رقم هاتفه في صفحة العيادة أو المعمل.'
+        }
+      },
+      {
+        '@type': 'Question',
+        'name': 'كيف تدعم دوري شاشات التلفزيون في صالات الانتظار؟',
+        'acceptedAnswer': {
+          '@type': 'Answer',
+          'text': 'يوفر النظام وضع TV View مخصصاً لعرض رقم الكشف الحالي والأدوار القادمة بوضوح على شاشات التلفزيون مع نداء صوتي آلي عند دخول كل دور.'
+        }
+      },
+      {
+        '@type': 'Question',
+        'name': 'كيف يتم توثيق نتائج تحاليل المعامل في دوري؟',
+        'acceptedAnswer': {
+          '@type': 'Answer',
+          'text': 'يصدر المعمل نتائج التحاليل في تقارير PDF رسمية تتضمن رمز QR للتحقق السريع من صحة النتيجة وتاريخ اعتمادها.'
+        }
+      }
+    ]
+  }
+};
+
+export const PRIVACY_PAGE_SEO: SeoData = {
+  title: 'سياسة الخصوصية وأمان البيانات | منصة دوري',
+  description: 'تعرف على سياسة حماية الخصوصية في منصة دوري، وضوابط عزل البيانات الطبية، وسرية معلومات المرضى والعيادات.',
+  canonicalUrl: `${SITE_URL}/privacy`,
+  robots: 'index, follow',
+  ogType: 'website',
+  ogImage: `${SITE_URL}/dory-og-image.png`,
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    'name': 'سياسة الخصوصية وحماية البيانات في دوري',
+    'description': 'إرشادات وضوابط حماية خصوصية المرضى والعيادات والمعامل في منصة دوري.',
+    'url': `${SITE_URL}/privacy`,
+    'inLanguage': 'ar'
   }
 };
 
@@ -92,17 +261,10 @@ export function setPageSeo(data: SeoData) {
   updateMetaTag('meta[name="twitter:title"]', 'content', data.title);
   updateMetaTag('meta[name="twitter:description"]', 'content', data.description);
 
-  if (data.ogImage) {
-    updateMetaTag('meta[property="og:image"]', 'content', data.ogImage);
-    updateMetaTag('meta[name="twitter:image"]', 'content', data.ogImage);
-    updateMetaTag('meta[name="twitter:card"]', 'content', 'summary_large_image');
-  } else {
-    const ogImg = document.querySelector('meta[property="og:image"]');
-    if (ogImg) ogImg.remove();
-    const twImg = document.querySelector('meta[name="twitter:image"]');
-    if (twImg) twImg.remove();
-    updateMetaTag('meta[name="twitter:card"]', 'content', 'summary');
-  }
+  const finalImage = data.ogImage || `${SITE_URL}/dory-og-image.png`;
+  updateMetaTag('meta[property="og:image"]', 'content', finalImage);
+  updateMetaTag('meta[name="twitter:image"]', 'content', finalImage);
+  updateMetaTag('meta[name="twitter:card"]', 'content', 'summary_large_image');
 
   // JSON-LD
   updateJsonLd(data.jsonLd);
@@ -132,7 +294,7 @@ export function getDoctorSeoData(doctor: DoctorProfile): SeoData {
     : descParts.join(' - ');
 
   const canonicalUrl = `${SITE_URL}/clinic/${doctor.uid}`;
-  const photo = doctor.photoUrl || (doctor.clinicPhotos && doctor.clinicPhotos[0]) || undefined;
+  const photo = doctor.photoUrl || (doctor.clinicPhotos && doctor.clinicPhotos[0]) || `${SITE_URL}/dory-og-image.png`;
   const isActive = doctor.isActive !== false;
 
   const jsonLd: Record<string, any> = {
@@ -176,6 +338,86 @@ export function getDoctorSeoData(doctor: DoctorProfile): SeoData {
     canonicalUrl,
     robots: isActive ? 'index, follow' : 'noindex, nofollow',
     ogType: 'profile',
+    ogImage: photo,
+    jsonLd
+  };
+}
+
+export function getDoctorBookingSeoData(doctor: DoctorProfile): SeoData {
+  const docName = doctor.name ? doctor.name.trim() : 'طبيب';
+  const clinicName = doctor.clinicName ? doctor.clinicName.trim() : 'عيادة طبية';
+  const specialty = doctor.specialty ? doctor.specialty.trim() : '';
+
+  const title = `حجز دور - ${docName} | ${clinicName} - دوري`;
+  const description = `احجز دورك الآن أونلاين لدى ${clinicName} للدكتور ${docName}${specialty ? ` (${specialty})` : ''} وتتبع ترتيبك في طابور الانتظار لحظياً عبر منصة دوري.`;
+  const canonicalUrl = `${SITE_URL}/clinic/${doctor.uid}/book`;
+  const photo = doctor.photoUrl || (doctor.clinicPhotos && doctor.clinicPhotos[0]) || `${SITE_URL}/dory-og-image.png`;
+
+  return {
+    title,
+    description,
+    canonicalUrl,
+    robots: doctor.isActive !== false ? 'index, follow' : 'noindex, nofollow',
+    ogType: 'website',
+    ogImage: photo,
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'ReserveAction',
+      'name': `حجز دور في ${clinicName}`,
+      'target': canonicalUrl,
+      'description': description,
+      'agent': {
+        '@type': 'Physician',
+        'name': docName,
+        'alternateName': clinicName
+      }
+    }
+  };
+}
+
+export function getLabSeoData(lab: LabProfile): SeoData {
+  const labName = lab.name ? lab.name.trim() : 'معمل تحاليل';
+  const address = lab.address ? lab.address.trim() : '';
+  const city = (lab as any).city ? (lab as any).city.trim() : '';
+  const locationPart = [address, city].filter(Boolean).join('، ');
+
+  const title = `${labName} - معمل تحاليل طبية | دوري`;
+  const description = `استعراض الفحوصات والتحاليل المخبرية وطلب سحب العينات واستلام النتائج إلكترونياً من ${labName}${locationPart ? ` (${locationPart})` : ''} عبر منظومة دوري (Dory).`;
+  const canonicalUrl = `${SITE_URL}/lab/${lab.uid}`;
+  const photo = lab.logoUrl || `${SITE_URL}/dory-og-image.png`;
+
+  const jsonLd: Record<string, any> = {
+    '@context': 'https://schema.org',
+    '@type': 'MedicalBusiness',
+    'name': labName,
+    'description': description,
+    'url': canonicalUrl,
+    'medicalSpecialty': 'Laboratory Medicine'
+  };
+
+  if (photo) {
+    jsonLd['image'] = photo;
+  }
+
+  if (locationPart) {
+    jsonLd['address'] = {
+      '@type': 'PostalAddress',
+      'streetAddress': address || locationPart,
+      'addressLocality': city || 'مصر',
+      'addressCountry': 'EG'
+    };
+  }
+
+  if (lab.phone) {
+    jsonLd['telephone'] = lab.phone;
+  }
+
+  return {
+    title,
+    description,
+    canonicalUrl,
+    robots: 'index, follow',
+    ogType: 'business.business',
     ogImage: photo,
     jsonLd
   };

@@ -418,6 +418,14 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // Unified Patients Identity & Profiles collection
+    match /patients/{patientId} {
+      allow read: if true;
+      allow create: if request.resource.data.name is string && request.resource.data.phone is string;
+      allow update: if isAuthenticated() || isAdmin() || (resource.data.phone == request.resource.data.phone);
+      allow delete: if isAdmin();
+    }
+
     // Default deny fallback
     match /{document=**} {
       allow read, write: if false;

@@ -2,7 +2,24 @@ import React from 'react';
 import { Stethoscope, QrCode, CreditCard, Settings, LogOut, UserCheck, ExternalLink, Building2, ShieldAlert, Bell, TestTube } from 'lucide-react';
 import { DoctorProfile } from '../types';
 
-export type NavTabType = 'dashboard' | 'directory' | 'clinic' | 'booking' | 'ticket' | 'subscription' | 'auth' | 'admin' | 'lab_dashboard' | 'lab_public' | 'lab_result';
+export type NavTabType =
+  | 'dashboard'
+  | 'directory'
+  | 'clinic'
+  | 'booking'
+  | 'ticket'
+  | 'subscription'
+  | 'auth'
+  | 'admin'
+  | 'lab_dashboard'
+  | 'lab_public'
+  | 'lab_result'
+  | 'about'
+  | 'for-clinics'
+  | 'for-labs'
+  | 'for-patients'
+  | 'faq'
+  | 'privacy';
 
 interface NavbarProps {
   currentDoctor: DoctorProfile | null;

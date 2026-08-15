@@ -43,6 +43,14 @@ import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { MessageSquare, ArrowRight } from 'lucide-react';
 import { setPageSeo, DEFAULT_HOMEPAGE_SEO } from './utils/seo';
 
+// Dedicated SEO & Content Pages
+import { AboutPage } from './components/pages/AboutPage';
+import { ForClinicsPage } from './components/pages/ForClinicsPage';
+import { ForLabsPage } from './components/pages/ForLabsPage';
+import { ForPatientsPage } from './components/pages/ForPatientsPage';
+import { FaqPage } from './components/pages/FaqPage';
+import { PrivacyPage } from './components/pages/PrivacyPage';
+
 interface NavState {
   tab: NavTabType;
   selectedDoctorId: string;
@@ -157,6 +165,30 @@ export default function App() {
         if (window.location.pathname !== cleanPath) {
           window.history.pushState({ tab: 'lab_result', labId: targetLabId, labOrderId: targetLabOrderId }, '', cleanPath);
         }
+      } else if (newTab === 'about') {
+        if (window.location.pathname !== '/about') {
+          window.history.pushState({ tab: 'about' }, '', '/about');
+        }
+      } else if (newTab === 'for-clinics') {
+        if (window.location.pathname !== '/for-clinics') {
+          window.history.pushState({ tab: 'for-clinics' }, '', '/for-clinics');
+        }
+      } else if (newTab === 'for-labs') {
+        if (window.location.pathname !== '/for-labs') {
+          window.history.pushState({ tab: 'for-labs' }, '', '/for-labs');
+        }
+      } else if (newTab === 'for-patients') {
+        if (window.location.pathname !== '/for-patients') {
+          window.history.pushState({ tab: 'for-patients' }, '', '/for-patients');
+        }
+      } else if (newTab === 'faq') {
+        if (window.location.pathname !== '/faq') {
+          window.history.pushState({ tab: 'faq' }, '', '/faq');
+        }
+      } else if (newTab === 'privacy') {
+        if (window.location.pathname !== '/privacy') {
+          window.history.pushState({ tab: 'privacy' }, '', '/privacy');
+        }
       } else if (newTab === 'admin') {
         if (window.location.pathname !== '/admin') {
           window.history.pushState({ tab: 'admin' }, '', '/admin');
@@ -192,6 +224,18 @@ export default function App() {
         window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.selectedDoctorId)}/book`);
       } else if (previousState.tab === 'ticket' && previousState.selectedDoctorId && previousState.selectedPatientId) {
         window.history.replaceState(null, '', `/clinic/${encodeURIComponent(previousState.selectedDoctorId)}?ticket=${encodeURIComponent(previousState.selectedPatientId)}`);
+      } else if (previousState.tab === 'about') {
+        window.history.replaceState(null, '', '/about');
+      } else if (previousState.tab === 'for-clinics') {
+        window.history.replaceState(null, '', '/for-clinics');
+      } else if (previousState.tab === 'for-labs') {
+        window.history.replaceState(null, '', '/for-labs');
+      } else if (previousState.tab === 'for-patients') {
+        window.history.replaceState(null, '', '/for-patients');
+      } else if (previousState.tab === 'faq') {
+        window.history.replaceState(null, '', '/faq');
+      } else if (previousState.tab === 'privacy') {
+        window.history.replaceState(null, '', '/privacy');
       } else if (previousState.tab === 'admin') {
         window.history.replaceState(null, '', '/admin');
       } else if (previousState.tab === 'directory') {
@@ -334,6 +378,48 @@ export default function App() {
     // Check clean route: /admin
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       setActiveTab('admin');
+      return;
+    }
+
+    // Check clean route: /about
+    if (pathname === '/about' || pathname === '/about/') {
+      setActiveTab('about');
+      return;
+    }
+
+    // Check clean route: /for-clinics
+    if (pathname === '/for-clinics' || pathname === '/for-clinics/') {
+      setActiveTab('for-clinics');
+      return;
+    }
+
+    // Check clean route: /for-labs
+    if (pathname === '/for-labs' || pathname === '/for-labs/') {
+      setActiveTab('for-labs');
+      return;
+    }
+
+    // Check clean route: /for-patients
+    if (pathname === '/for-patients' || pathname === '/for-patients/') {
+      setActiveTab('for-patients');
+      return;
+    }
+
+    // Check clean route: /faq
+    if (pathname === '/faq' || pathname === '/faq/') {
+      setActiveTab('faq');
+      return;
+    }
+
+    // Check clean route: /privacy
+    if (pathname === '/privacy' || pathname === '/privacy/') {
+      setActiveTab('privacy');
+      return;
+    }
+
+    // Check clean route: /subscription
+    if (pathname === '/subscription' || pathname === '/subscription/') {
+      setActiveTab('subscription');
       return;
     }
 
@@ -587,7 +673,66 @@ export default function App() {
                   if (type) setAuthInitialAccountType(type);
                   navigateTo('auth');
                 }}
+                onNavigate={navigateTo}
                 onShowToast={addToast}
+              />
+            )}
+
+            {/* Dedicated Page: About Dory */}
+            {activeTab === 'about' && (
+              <AboutPage
+                onNavigate={navigateTo}
+                onNavigateAuth={(type) => {
+                  if (type) setAuthInitialAccountType(type);
+                  navigateTo('auth');
+                }}
+              />
+            )}
+
+            {/* Dedicated Page: For Clinics */}
+            {activeTab === 'for-clinics' && (
+              <ForClinicsPage
+                onNavigate={navigateTo}
+                onNavigateAuth={(type) => {
+                  if (type) setAuthInitialAccountType(type);
+                  navigateTo('auth');
+                }}
+              />
+            )}
+
+            {/* Dedicated Page: For Laboratories */}
+            {activeTab === 'for-labs' && (
+              <ForLabsPage
+                onNavigate={navigateTo}
+                onNavigateAuth={(type) => {
+                  if (type) setAuthInitialAccountType(type);
+                  navigateTo('auth');
+                }}
+              />
+            )}
+
+            {/* Dedicated Page: For Patients */}
+            {activeTab === 'for-patients' && (
+              <ForPatientsPage
+                onNavigate={navigateTo}
+              />
+            )}
+
+            {/* Dedicated Page: FAQ */}
+            {activeTab === 'faq' && (
+              <FaqPage
+                onNavigate={navigateTo}
+                onNavigateAuth={(type) => {
+                  if (type) setAuthInitialAccountType(type);
+                  navigateTo('auth');
+                }}
+              />
+            )}
+
+            {/* Dedicated Page: Privacy & Security */}
+            {activeTab === 'privacy' && (
+              <PrivacyPage
+                onNavigate={navigateTo}
               />
             )}
 
@@ -786,27 +931,72 @@ export default function App() {
       <FloatingWhatsApp />
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200/80 py-6 text-center text-xs text-slate-500 mt-12">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="font-semibold text-slate-700">
-            دوري - نظام حجز وتتبع دور العيادات الطبية الأذكى © {new Date().getFullYear()}
-          </div>
+      <footer className="bg-[#fdfcf9] border-t border-[#e7e3da] py-8 text-xs text-slate-500 mt-12 font-['Tajawal',sans-serif]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
           
-          <a
-            href="https://wa.me/201032120351"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full font-bold transition border border-emerald-200/80"
-          >
-            <MessageSquare className="w-3.5 h-3.5 text-emerald-600 fill-current" />
-            <span>واتساب دعم وإدارة منصة دوري: 01032120351</span>
-          </a>
+          {/* Main Footer Links */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-[#f0ebe1]">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-[#122c4a] flex items-center justify-center text-white font-black text-xs">
+                د
+              </div>
+              <span className="font-extrabold text-sm text-[#122c4a]">
+                منظومة دوري (Dory) للرعاية الصحية
+              </span>
+            </div>
 
-          <div className="flex items-center gap-3 text-slate-500">
-            <span>تحديث مباشر (Real-time)</span>
-            <span>•</span>
-            <span>مدعوم بـ Firebase Firestore</span>
+            <nav aria-label="روابط صفحات المنظومة" className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-600">
+              <button onClick={() => navigateTo('directory')} className="hover:text-[#122c4a] transition cursor-pointer">
+                دليل الأطباء والمعامل
+              </button>
+              <span>•</span>
+              <button onClick={() => navigateTo('about')} className="hover:text-[#122c4a] transition cursor-pointer">
+                عن المنظومة
+              </button>
+              <span>•</span>
+              <button onClick={() => navigateTo('for-clinics')} className="hover:text-[#1c5242] transition cursor-pointer">
+                للأطباء والعيادات
+              </button>
+              <span>•</span>
+              <button onClick={() => navigateTo('for-labs')} className="hover:text-[#122c4a] transition cursor-pointer">
+                للمختبرات والمعامل
+              </button>
+              <span>•</span>
+              <button onClick={() => navigateTo('for-patients')} className="hover:text-[#b45309] transition cursor-pointer">
+                للمرضى والمراجعين
+              </button>
+              <span>•</span>
+              <button onClick={() => navigateTo('faq')} className="hover:text-[#122c4a] transition cursor-pointer">
+                الأسئلة الشائعة
+              </button>
+              <span>•</span>
+              <button onClick={() => navigateTo('privacy')} className="hover:text-[#122c4a] transition cursor-pointer">
+                الخصوصية والأمان
+              </button>
+            </nav>
           </div>
+
+          {/* Bottom Line */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="font-medium text-slate-600">
+              دوري - منصة تنظيم طوابير الكشف وإدارة العيادات والمختبرات الطبية © {new Date().getFullYear()}
+            </div>
+            
+            <a
+              href="https://wa.me/201032120351"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-full font-bold transition border border-emerald-200/80"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-600 fill-current" />
+              <span>دعم وإدارة منصة دوري: 01032120351</span>
+            </a>
+
+            <div className="flex items-center gap-3 text-slate-500 text-[11px]">
+              <span>تحديث سحابي فوري (Real-time)</span>
+            </div>
+          </div>
+
         </div>
       </footer>
 

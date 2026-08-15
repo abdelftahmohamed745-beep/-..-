@@ -243,6 +243,8 @@ export interface DoctorRating {
 
 export interface PatientRecord {
   id: string;
+  patientId?: string; // Unified Patient ID (PID-XXXXXX)
+  bookingReference?: string; // Short Human-Readable Booking Reference (e.g. D-4821)
   doctorId: string;
   clinicId?: string;
   userId?: string;
@@ -268,6 +270,25 @@ export interface PatientRecord {
   notifiedForOneTurn?: boolean;
   notifiedForTenMinutes?: boolean;
   notificationPreference?: NotificationTimingPreference;
+}
+
+export interface PatientProfile {
+  id: string; // Document ID (usually patientId or phone)
+  patientId: string; // Standardized PID (e.g. PID-4821)
+  uid?: string; // Linked Firebase Auth User ID if registered
+  name: string;
+  phone: string;
+  nationalId?: string;
+  birthDate?: string;
+  age?: number;
+  gender?: 'male' | 'female';
+  bloodGroup?: string;
+  allergies?: string;
+  chronicDiseases?: string;
+  emergencyContact?: string;
+  accountType?: 'patient';
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type NotificationTimingPreference = 'two_turns' | 'one_turn' | 'ten_minutes';
@@ -393,6 +414,7 @@ export interface PatientVisitEntry {
 
 export interface PatientMedicalFile {
   id: string; // Document ID (usually phone number or auto-id)
+  patientId?: string; // Standardized PID (e.g. PID-4821)
   doctorId: string;
   patientName: string;
   patientPhone: string;

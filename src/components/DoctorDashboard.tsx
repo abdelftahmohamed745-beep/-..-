@@ -895,6 +895,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           clinicName={doctor.clinicName}
           initialPatientName={quickFollowUpPatient.name}
           initialPatientPhone={quickFollowUpPatient.phone}
+          initialPatientId={quickFollowUpPatient.patientId || quickFollowUpPatient.id}
           onShowToast={onShowToast}
         />
       )}

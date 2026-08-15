@@ -3,6 +3,7 @@ import path from "path";
 import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
 import { renderClinicHtml } from "./src/server/prerenderClinic";
+import { renderLabHtml } from "./src/server/prerenderLab";
 import { generateSitemapXml } from "./src/server/generateSitemap";
 
 async function startServer() {
@@ -286,6 +287,27 @@ async function startServer() {
       res.status(result.status).send(result.html);
     } catch (err) {
       console.error("Express clinic prerender error:", err);
+      res.status(500).send('<!doctype html><html lang="ar" dir="rtl"><head><title>خطأ في الخادم</title></head><body><h1>500 - حدث خطأ غير متوقع</h1></body></html>');
+    }
+  });
+
+  // Laboratory SEO Prerender Route
+  app.get("/lab/:labId", async (req, res) => {
+    try {
+      const labId = req.params.labId;
+      const rootDir = process.cwd();
+      const result = await renderLabHtml(rootDir, labId);
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (result.status === 200) {
+        res.setHeader("Cache-Control", "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400");
+      } else {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
+
+      res.status(result.status).send(result.html);
+    } catch (err) {
+      console.error("Express lab prerender error:", err);
       res.status(500).send('<!doctype html><html lang="ar" dir="rtl"><head><title>خطأ في الخادم</title></head><body><h1>500 - حدث خطأ غير متوقع</h1></body></html>');
     }
   });

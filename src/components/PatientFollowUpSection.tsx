@@ -24,11 +24,13 @@ import {
 
 interface PatientFollowUpSectionProps {
   patientPhone: string;
+  patientId?: string;
   onShowToast?: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
 export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
   patientPhone,
+  patientId,
   onShowToast
 }) => {
   const [appointments, setAppointments] = useState<FollowUpAppointment[]>([]);
@@ -46,19 +48,19 @@ export const PatientFollowUpSection: React.FC<PatientFollowUpSectionProps> = ({
   );
 
   useEffect(() => {
-    if (!patientPhone) {
+    if (!patientPhone && !patientId) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    const unsubscribe = subscribeToPatientFollowUps(patientPhone, (data) => {
+    const unsubscribe = subscribeToPatientFollowUps({ phone: patientPhone, patientId }, (data) => {
       setAppointments(data);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [patientPhone]);
+  }, [patientPhone, patientId]);
 
   // Request browser Web Push notification permission
   const handleEnablePushNotifications = async () => {

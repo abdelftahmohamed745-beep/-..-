@@ -87,9 +87,16 @@ export const PatientFileModal: React.FC<PatientFileModalProps> = ({
                 <User className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-xl font-extrabold text-white">
-                  {medicalFile?.patientName || patientName}
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-extrabold text-white">
+                    {medicalFile?.patientName || patientName}
+                  </h2>
+                  {medicalFile?.patientId && (
+                    <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 text-[10px] font-mono font-bold rounded-md border border-emerald-500/30">
+                      {medicalFile.patientId}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 text-xs text-emerald-200 mt-0.5 dir-ltr">
                   <Phone className="w-3.5 h-3.5" />
                   <span>{patientPhone}</span>

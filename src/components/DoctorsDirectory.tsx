@@ -25,11 +25,13 @@ import { DoctorProfile, MEDICAL_SPECIALTIES } from '../types';
 import { getAllDoctors, formatPhoneNumberForUrl } from '../services/firebaseService';
 import { getAllLabs } from '../services/labService';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
+import { ProductOverviewSection } from './ProductOverviewSection';
 
 interface DoctorsDirectoryProps {
   onSelectDoctorClinic: (doctorId: string) => void;
   onBookTurn: (doctorId: string) => void;
   onNavigateAuth: (accountType?: 'doctor' | 'laboratory') => void;
+  onNavigate: (tab: any, options?: any) => void;
   onShowToast: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
@@ -37,6 +39,7 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
   onSelectDoctorClinic,
   onBookTurn,
   onNavigateAuth,
+  onNavigate,
   onShowToast
 }) => {
   const [profiles, setProfiles] = useState<DoctorProfile[]>([]);
@@ -603,6 +606,12 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
         </section>
 
       </div>
+
+      {/* Concise & High-Conversion Product Overview Section */}
+      <ProductOverviewSection
+        onNavigate={onNavigate}
+        onNavigateAuth={onNavigateAuth}
+      />
 
       {/* Standalone Section: Custom Website Offer */}
       <CustomWebsiteSection />

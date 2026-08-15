@@ -1,8 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Stethoscope, Building, Phone, Clock, Users, ArrowRight, AlertCircle, Ticket, CheckCircle2, Bell, Lock, Tag } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Stethoscope,
+  Building,
+  Phone,
+  Clock,
+  Users,
+  ArrowRight,
+  AlertCircle,
+  Ticket,
+  CheckCircle2,
+  Bell,
+  Lock,
+  Tag,
+  Search,
+  KeyRound,
+  RotateCcw,
+  Sparkles,
+  UserCheck
+} from 'lucide-react';
 import { DoctorProfile, PatientRecord, NotificationTimingPreference, ClinicService } from '../types';
-import { bookPatient, getDoctorProfile, checkActiveBooking, getTodayDateString, getClinicServicesPublic, getPatientMedicalFile } from '../services/firebaseService';
+import {
+  bookPatient,
+  getDoctorProfile,
+  checkActiveBooking,
+  getTodayDateString,
+  getClinicServicesPublic,
+  getPatientMedicalFile,
+  findTicketByReferenceOrPhone,
+  getPatientProfile
+} from '../services/firebaseService';
+import { setPageSeo, getDoctorBookingSeoData, DEFAULT_HOMEPAGE_SEO } from '../utils/seo';
 
 interface PatientBookingProps {
   doctorId: string;
@@ -27,15 +55,35 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingTicket, setExistingTicket] = useState<PatientRecord | null>(null);
 
+  // Quick Ticket Recovery State
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryCodeOrPhone, setRecoveryCodeOrPhone] = useState('');
+  const [isRecovering, setIsRecovering] = useState(false);
+
+  // Initialize auto-fill from previous session storage if available
+  useEffect(() => {
+    try {
+      const savedPhone = localStorage.getItem('dawry_last_patient_phone');
+      const savedName = localStorage.getItem('dawry_last_patient_name');
+      if (savedPhone && !phone) setPhone(savedPhone);
+      if (savedName && !name) setName(savedName);
+    } catch {
+      // Ignored
+    }
+  }, []);
+
   // Fetch doctor details, active services, and check for existing local ticket
   useEffect(() => {
+    let isMounted = true;
     console.log('[QR] PATIENT_BOOKING_MOUNTED', { doctorId });
     async function loadDoctorData() {
       setLoading(true);
       const profile = await getDoctorProfile(doctorId);
+      if (!isMounted) return;
       setDoctor(profile);
 
       if (profile) {
+        setPageSeo(getDoctorBookingSeoData(profile));
         // Fetch active services configured by doctor
         const dbServices = await getClinicServicesPublic(doctorId);
         if (dbServices && dbServices.length > 0) {
@@ -95,6 +143,11 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
       setLoading(false);
     }
     loadDoctorData();
+
+    return () => {
+      isMounted = false;
+      setPageSeo(DEFAULT_HOMEPAGE_SEO);
+    };
   }, [doctorId]);
 
   // Check if phone matches active ticket or medical file when typing (auto-fill patient name)
@@ -112,12 +165,19 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
         }
       }).catch(console.error);
 
+      // Also auto-fill from unified patient profile if available
+      getPatientProfile(phone.trim()).then((profile) => {
+        if (profile && profile.name && !name.trim()) {
+          setName(profile.name);
+        }
+      }).catch(console.error);
+
       getPatientMedicalFile(doctor.uid, phone.trim()).then((file) => {
         if (file && file.patientName && !name.trim()) {
           setName(file.patientName);
         }
       }).catch(console.error);
-    }, 400);
+    }, 350);
 
     return () => clearTimeout(timer);
   }, [phone, doctor]);
@@ -150,19 +210,51 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
       setIsSubmitting(false);
       console.log('[QR] TICKET_CREATED', { patientId: res.patientId, sequenceNumber: res.sequenceNumber, isExisting: res.isExisting });
 
+      // Save for auto-fill in future
+      try {
+        localStorage.setItem('dawry_last_patient_phone', phone.trim());
+        localStorage.setItem('dawry_last_patient_name', name.trim());
+        localStorage.setItem(`dawry_ticket_${doctorId}`, res.patientId);
+      } catch {
+        // Ignored
+      }
+
       if (res.isExisting) {
         onShowToast("لديك حجز نشط بالفعل!", `تم توجيهك لتذكرتك رقم #${res.sequenceNumber}`, "info");
       } else {
-        onShowToast("تم الحجز بنجاح", `دورك في الطابور هو الرقم #${res.sequenceNumber}`, "success");
+        const refText = res.bookingReference ? ` | رمز الحجز: ${res.bookingReference}` : '';
+        onShowToast("تم الحجز بنجاح", `دورك هو الرقم #${res.sequenceNumber}${refText}`, "success");
       }
 
-      // Save to local storage for quick reload
-      localStorage.setItem(`dawry_ticket_${doctorId}`, res.patientId);
       onBookingSuccess(res.patientId);
     } catch (err: unknown) {
       setIsSubmitting(false);
       const errMsg = err instanceof Error ? err.message : "حدث خطأ أثناء الحجز";
       onShowToast("تعذر الحجز", errMsg, "error");
+    }
+  };
+
+  // Quick ticket recovery handler
+  const handleRecoverTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recoveryCodeOrPhone.trim() || !doctor) return;
+
+    setIsRecovering(true);
+    try {
+      const ticket = await findTicketByReferenceOrPhone(doctor.uid, recoveryCodeOrPhone.trim());
+      setIsRecovering(false);
+
+      if (ticket) {
+        onShowToast("تم العثور على التذكرة!", `مرحباً ${ticket.name}، رقم دورك #${ticket.sequenceNumber}`, "success");
+        setShowRecoveryModal(false);
+        onBookingSuccess(ticket.id);
+      } else {
+        onShowToast("لم يتم العثور على حجز", "تأكد من كتابة رمز الحجز أو رقم الموبايل المسجل به اليوم", "warning");
+      }
+    } catch (err) {
+      setIsRecovering(false);
+      console.error("Error recovering ticket:", err);
+      onShowToast("خطأ في البحث", "تعذر التحقق من الحجز حالياً", "error");
     }
   };
 
@@ -257,21 +349,77 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
           transition={{ delay: 0.1 }}
           className="bg-[#fdfcf9] rounded-3xl p-6 sm:p-8 shadow-xl border border-[#e7e3da]"
         >
-          <div className="mb-6">
-            <h2 className="text-xl font-bold text-[#122c4a] font-['Tajawal',sans-serif]">
-              احجز دورك الآن في صالة الانتظار
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              أدخل بياناتك وسيقوم النظام بتوليد تذكرة تفاعلية تتبع دورك مباشرة (Live)
-            </p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-[#122c4a] font-['Tajawal',sans-serif]">
+                احجز دورك الآن في صالة الانتظار
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                تذكرة رقمية فورية برقم دور ثابت ومتابعة حية
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRecoveryModal(!showRecoveryModal)}
+              className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl text-[11px] font-bold border border-sky-200 flex items-center gap-1 transition cursor-pointer shrink-0"
+              title="استرجاع تذكرة اليوم برمز الحجز أو رقم الهاتف"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-sky-600" />
+              <span>استرجاع حجز</span>
+            </button>
           </div>
+
+          {/* Quick Ticket Recovery Search Box */}
+          <AnimatePresence>
+            {showRecoveryModal && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden mb-5"
+              >
+                <div className="p-4 bg-sky-50/80 border border-sky-200 rounded-2xl">
+                  <div className="flex items-center gap-1.5 text-sky-950 font-bold text-xs mb-2">
+                    <Search className="w-4 h-4 text-sky-600" />
+                    <span>البحث عن تذكرتك السريعة (رمز الحجز أو رقم الهاتف)</span>
+                  </div>
+                  <form onSubmit={handleRecoverTicket} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={recoveryCodeOrPhone}
+                      onChange={(e) => setRecoveryCodeOrPhone(e.target.value)}
+                      placeholder="مثال: D-4821 أو 010XXXXXXXX"
+                      className="grow px-3 py-2 bg-white border border-sky-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isRecovering || !recoveryCodeOrPhone.trim()}
+                      className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
+                    >
+                      <span>{isRecovering ? '...' : 'فتح التذكرة'}</span>
+                    </button>
+                  </form>
+                  <p className="text-[10px] text-sky-700 mt-1.5">
+                    استخدم رمز الحجز السريع المكون من 4 خانات (مثل D-4821) لاسترجاع تذكرتك فوراً من أي جهاز.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Active Ticket Alert (if user has an active booking) */}
           {existingTicket && (
             <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                <Ticket className="w-4 h-4 text-amber-600" />
-                <span>لديك حجز نشط بالفعل برقم #{existingTicket.sequenceNumber}!</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                  <Ticket className="w-4 h-4 text-amber-600" />
+                  <span>لديك حجز نشط بالفعل برقم #{existingTicket.sequenceNumber}!</span>
+                </div>
+                {existingTicket.bookingReference && (
+                  <span className="px-2 py-0.5 bg-amber-200 text-amber-900 font-mono text-[10px] font-bold rounded-md">
+                    {existingTicket.bookingReference}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-amber-800">
                 يمكنك الانتقال فوراً لمتابعة تذكرتك الحالية دون الحاجة للحجز مجدداً.
@@ -281,7 +429,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
                 onClick={() => onBookingSuccess(existingTicket.id)}
                 className="mt-1 w-full py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition shadow-2xs cursor-pointer"
               >
-                انتقل إلى تذكرتك الحالية
+                انتقل إلى تذكرتك الحالية (#{existingTicket.sequenceNumber})
               </button>
             </div>
           )}
@@ -346,20 +494,6 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-[#122c4a] mb-1">
-                الاسم بالكامل <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="أدخل اسمك كما في الهوية"
-                required
-                className="w-full px-4 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#122c4a] mb-1">
                 رقم الموبايل <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
@@ -373,6 +507,28 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
                   className="w-full pl-4 pr-10 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition font-mono"
                 />
               </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-[#122c4a]">
+                  الاسم بالكامل <span className="text-rose-500">*</span>
+                </label>
+                {name && (
+                  <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                    <UserCheck className="w-3 h-3" />
+                    <span>ملف مسجل</span>
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="أدخل اسمك كما في الهوية"
+                required
+                className="w-full px-4 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition"
+              />
             </div>
 
             <div>
@@ -400,14 +556,14 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
                 className="w-full py-3.5 bg-[#122c4a] hover:bg-[#0d223a] active:scale-[0.98] text-white font-bold text-sm rounded-xl transition-all shadow-2xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <Ticket className="w-4 h-4" />
-                <span>{isSubmitting ? 'جاري إشعار العيادة وتحديد الدور...' : 'تأكيد الحجز والحصول على التذكرة'}</span>
+                <span>{isSubmitting ? 'جاري إنشاء تذكرتك وتحديد الدور...' : 'تأكيد الحجز والحصول على التذكرة'}</span>
               </button>
             </div>
           </form>
 
           <div className="mt-6 text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
             <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>بياناتك مشفرة ومحفوظة آمنة لربطها برقم دورك في العيادة فقط.</span>
+            <span>بياناتك مؤمنة ومحفوظة برقم هوية موحد ورمز حجز سريع لسهولة المتابعة.</span>
           </div>
         </motion.div>
       )}

@@ -73,8 +73,55 @@ export default async function handler(req: any, res: any) {
           }
         }
       }
+
+      // Also query laboratories
+      const labQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${firestoreDatabaseId}/documents:runQuery?key=${apiKey}`;
+      const labApiRes = await fetch(labQueryUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: 'laboratories' }]
+          }
+        }),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (labApiRes.ok) {
+        const labItems = await labApiRes.json();
+        if (Array.isArray(labItems)) {
+          for (const item of labItems) {
+            if (item && item.document && item.document.name) {
+              const docNamePath = item.document.name;
+              const labId = docNamePath.split('/').pop() || '';
+              const fields = item.document.fields || {};
+
+              const isActiveVal = fields.isActive ? fields.isActive.booleanValue : true;
+              if (labId && isActiveVal !== false) {
+                let lastmod: string | undefined = undefined;
+                const rawDate = fields.updatedAt?.stringValue || fields.createdAt?.stringValue;
+                if (rawDate) {
+                  try {
+                    const parsed = new Date(rawDate);
+                    if (!isNaN(parsed.getTime())) {
+                      lastmod = parsed.toISOString();
+                    }
+                  } catch (e) {
+                    // Ignore
+                  }
+                }
+
+                urls.push({
+                  loc: `${SITE_URL}/lab/${encodeURIComponent(labId)}`,
+                  lastmod
+                });
+              }
+            }
+          }
+        }
+      }
     } catch (err) {
-      console.error('Error fetching doctors for sitemap via REST:', err);
+      console.error('Error fetching doctors or labs for sitemap via REST:', err);
     }
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;

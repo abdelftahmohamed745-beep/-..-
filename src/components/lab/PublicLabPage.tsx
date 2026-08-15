@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LabProfile, LabTestCatalogItem } from '../../types';
 import { getLabProfile, getLabTests } from '../../services/labService';
+import { setPageSeo, getLabSeoData, DEFAULT_HOMEPAGE_SEO } from '../../utils/seo';
 import { LabOrderModal } from './LabOrderModal';
 import { TestTube, Search, ShoppingBag, Clock, Home, Building2, MapPin, Phone, ShieldCheck, CheckCircle2, ChevronDown, ChevronUp, QrCode, ArrowRight } from 'lucide-react';
 
@@ -31,21 +32,43 @@ export const PublicLabPage: React.FC<PublicLabPageProps> = ({
   const [expandedTestId, setExpandedTestId] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
     async function loadData() {
       setLoading(true);
       try {
         const labData = await getLabProfile(labId);
-        setLab(labData);
+        if (isMounted) {
+          setLab(labData);
+          if (labData) {
+            setPageSeo(getLabSeoData(labData));
+          } else {
+            setPageSeo({
+              title: 'المعمل غير موجود | دوري',
+              description: 'لم يتم العثور على معمل التحاليل المطلوب عبر منصة دوري.',
+              canonicalUrl: `https://nine-vert-34.vercel.app/lab/${labId}`,
+              robots: 'noindex, nofollow'
+            });
+          }
+        }
 
         const testList = await getLabTests(labId, true);
-        setTests(testList);
+        if (isMounted) {
+          setTests(testList);
+        }
       } catch (err) {
         console.error("Error loading lab public page:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
     loadData();
+
+    return () => {
+      isMounted = false;
+      setPageSeo(DEFAULT_HOMEPAGE_SEO);
+    };
   }, [labId]);
 
   const categories = Array.from(new Set(tests.map((t) => t.category).filter(Boolean))) as string[];

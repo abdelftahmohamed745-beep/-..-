@@ -22,7 +22,13 @@ function escapeXml(str: string): string {
 export default async function handler(req: any, res: any) {
   try {
     const urls: { loc: string; lastmod?: string }[] = [
-      { loc: `${SITE_URL}/` }
+      { loc: `${SITE_URL}/` },
+      { loc: `${SITE_URL}/about` },
+      { loc: `${SITE_URL}/for-clinics` },
+      { loc: `${SITE_URL}/for-labs` },
+      { loc: `${SITE_URL}/for-patients` },
+      { loc: `${SITE_URL}/faq` },
+      { loc: `${SITE_URL}/privacy` }
     ];
 
     try {

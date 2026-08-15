@@ -22,7 +22,13 @@ function escapeXml(str: string): string {
 export async function generateSitemapXml(): Promise<string> {
   const baseUrl = 'https://nine-vert-34.vercel.app';
   const urls: { loc: string; lastmod?: string }[] = [
-    { loc: `${baseUrl}/` }
+    { loc: `${baseUrl}/` },
+    { loc: `${baseUrl}/about` },
+    { loc: `${baseUrl}/for-clinics` },
+    { loc: `${baseUrl}/for-labs` },
+    { loc: `${baseUrl}/for-patients` },
+    { loc: `${baseUrl}/faq` },
+    { loc: `${baseUrl}/privacy` }
   ];
 
   let fetchedByRest = false;

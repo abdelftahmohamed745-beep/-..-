@@ -162,11 +162,11 @@ export const DoctorsDirectory: React.FC<DoctorsDirectoryProps> = ({
         </div>
 
         <h1 className="text-2xl sm:text-4xl font-extrabold text-[#122c4a] tracking-tight leading-snug font-['Tajawal',sans-serif]">
-          دوري — المنصة الطبية الشاملة للعيادات والمختبرات
+          دوري (Dory) — نظام إدارة العيادات والمراكز الطبية ومختبرات التحاليل
         </h1>
 
         <p className="text-slate-600 text-xs sm:text-sm leading-relaxed max-w-2xl mx-auto font-medium">
-          تساعد المرضى في الوصول للعيادات والمعامل وحجز الدور مباشرة، وتساعد الأطباء وأصحاب المختبرات في إدارة المواعيد والعمليات بكل سهولة.
+          نظام سحابي متكامل لإدارة العيادات والمختبرات وتنظيم طوابير وأدوار المرضى لحظياً، وحجز المواعيد، وإدارة السجلات والتقارير الطبية.
         </p>
 
         {/* Hero 3 Action Buttons */}

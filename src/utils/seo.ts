@@ -13,8 +13,8 @@ export interface SeoData {
 }
 
 export const DEFAULT_HOMEPAGE_SEO: SeoData = {
-  title: 'دوري | منظومة إدارة العيادات والمختبرات الطبية وحجز المواعيد',
-  description: 'دوري (Dory) منصة ذكية لإدارة العيادات والمختبرات، تنظيم طابور المرضى الحي، حجز المواعيد الفوري بدون تطبيق، وإصدار نتائج التحاليل الموثقة برمز QR.',
+  title: 'دوري | Dory - نظام إدارة العيادات والمراكز الطبية ومختبرات التحاليل',
+  description: 'دوري (Dory) هو نظام سحابي لإدارة العيادات والمراكز الطبية ومختبرات التحاليل، وتنظيم طوابير وأدوار المرضى لحظياً، وحجز المواعيد، وإدارة السجلات والتقارير الطبية.',
   canonicalUrl: `${SITE_URL}/`,
   robots: 'index, follow',
   ogType: 'website',
@@ -31,7 +31,7 @@ export const DEFAULT_HOMEPAGE_SEO: SeoData = {
         'applicationCategory': 'HealthApplication',
         'operatingSystem': 'Web',
         'inLanguage': 'ar',
-        'description': 'منظومة دوري الذكية لإدارة العيادات والمعامل الطبية، تنظيم طابور وأدوار المرضى، حجز المواعيد، وإدارة السجلات الطبية والمالية.',
+        'description': 'دوري (Dory) هو نظام سحابي لإدارة العيادات والمراكز الطبية ومختبرات التحاليل، وتنظيم طوابير وأدوار المرضى لحظياً، وحجز المواعيد، وإدارة السجلات والتقارير الطبية.',
         'offers': {
           '@type': 'Offer',
           'price': '0',
@@ -42,19 +42,19 @@ export const DEFAULT_HOMEPAGE_SEO: SeoData = {
         '@type': 'WebSite',
         '@id': `${SITE_URL}/#website`,
         'url': `${SITE_URL}/`,
-        'name': 'دوري — Dory',
+        'name': 'دوري | Dory',
         'alternateName': 'منصة دوري الطبية',
-        'description': 'نظام إدارة العيادات والمعامل الطبية وحجز المواعيد وتتبع أدوار المرضى.',
+        'description': 'نظام إدارة العيادات والمراكز الطبية ومختبرات التحاليل وحجز المواعيد وتتبع أدوار المرضى.',
         'inLanguage': 'ar'
       },
       {
         '@type': 'Organization',
         '@id': `${SITE_URL}/#organization`,
-        'name': 'دوري — Dory',
+        'name': 'دوري | Dory',
         'url': `${SITE_URL}/`,
         'logo': `${SITE_URL}/dory-logo.png`,
         'image': `${SITE_URL}/dory-og-image.png`,
-        'description': 'نظام لإدارة العيادات والمعامل الطبية والحجوزات وتتبع أدوار المرضى والسجلات الطبية.'
+        'description': 'نظام سحابي لإدارة العيادات والمراكز الطبية ومختبرات التحاليل وحجز المواعيد وتتبع أدوار المرضى والسجلات والتقارير الطبية.'
       }
     ]
   }

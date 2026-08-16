@@ -63,6 +63,11 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
       ]);
       if (isMounted) {
         if (profile) {
+          if (rList.length > 0) {
+            const calculatedAvg = parseFloat((rList.reduce((acc, r) => acc + (Number(r.stars) || 0), 0) / rList.length).toFixed(1));
+            profile.ratingAverage = calculatedAvg;
+            profile.ratingCount = rList.length;
+          }
           setDoctor(profile);
           setRatings(rList);
           setLoading(false);
@@ -81,7 +86,7 @@ export const ClinicProfilePage: React.FC<ClinicProfilePageProps> = ({
           setPageSeo({
             title: 'العيادة غير موجودة | منصة دوري',
             description: 'لم نتمكن من العثور على العيادة أو الطبيب المطلوب في منصة دوري.',
-            canonicalUrl: `https://nine-vert-34.vercel.app/clinic/${doctorId}`,
+            canonicalUrl: `https://dory-system.vercel.app/clinic/${doctorId}`,
             robots: 'noindex, nofollow'
           });
         }

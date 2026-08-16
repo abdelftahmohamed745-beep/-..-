@@ -120,7 +120,7 @@ async function generateAssets() {
 
     <!-- Bottom URL Bar -->
     <text x="600" y="595" font-family="'Segoe UI', sans-serif" font-size="16" font-weight="600" fill="#64748b" text-anchor="middle" letter-spacing="1">
-      https://nine-vert-34.vercel.app
+      https://dory-system.vercel.app
     </text>
   </svg>`;
 

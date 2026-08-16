@@ -33,6 +33,7 @@ import {
   updatePatientStatus,
   bookPatient,
   getDoctorRatings,
+  recalculateDoctorRatingStats,
   getUserClinicMember
 } from '../services/firebaseService';
 import { playTurnNotificationSound, speakText } from '../utils/audio';
@@ -109,9 +110,21 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
     async function loadRatings() {
       const rList = await getDoctorRatings(doctor.uid);
       setDoctorRatings(rList);
+      if (rList.length > 0) {
+        const calculatedAvg = parseFloat((rList.reduce((acc, r) => acc + (Number(r.stars) || 0), 0) / rList.length).toFixed(1));
+        if (doctor.ratingAverage !== calculatedAvg || doctor.ratingCount !== rList.length) {
+          recalculateDoctorRatingStats(doctor.uid).catch(console.error);
+        }
+      }
     }
     loadRatings();
   }, [doctor.uid]);
+
+  // Dynamic Rating Average Calculation
+  const activeRatingAvg = doctorRatings.length > 0
+    ? (doctorRatings.reduce((acc, r) => acc + (Number(r.stars) || 0), 0) / doctorRatings.length).toFixed(1)
+    : (doctor.ratingAverage ? Number(doctor.ratingAverage).toFixed(1) : "0.0");
+  const activeRatingCount = doctorRatings.length > 0 ? doctorRatings.length : (doctor.ratingCount || 0);
 
   // Real-time Firestore Queue Subscription
   useEffect(() => {
@@ -376,10 +389,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
             <div className="text-2xl font-black text-[#122c4a] font-['Tajawal',sans-serif] mt-1 flex items-center gap-1 dir-ltr">
               <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
-              <span>{doctor.ratingAverage ? doctor.ratingAverage : "0.0"}</span>
+              <span>{activeRatingAvg}</span>
             </div>
             <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-              {doctorRatings.length} تقييم مريض
+              {activeRatingCount} تقييم مريض
             </div>
           </div>
           <div className="w-11 h-11 rounded-2xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold shadow-2xs border border-[#d1dfed]">
@@ -819,7 +832,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     تقييمات وآراء المرضى
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    التقييم العام: {doctor.ratingAverage || "0.0"} / 5 (إجمالي {doctorRatings.length} تقييم)
+                    التقييم العام: {activeRatingAvg} / 5 (إجمالي {activeRatingCount} تقييم)
                   </p>
                 </div>
               </div>

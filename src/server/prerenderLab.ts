@@ -92,7 +92,7 @@ export function generate404LabHtml(rootDir: string, labId: string): string {
 
   const notFoundTitle = 'المعمل غير موجود | دوري';
   const notFoundDesc = 'عفواً، لم نتمكن من العثور على معمل التحاليل المطلوب في منصة دوري.';
-  const canonicalUrl = `https://nine-vert-34.vercel.app/lab/${encodeURIComponent(labId)}`;
+  const canonicalUrl = `https://dory-system.vercel.app/lab/${encodeURIComponent(labId)}`;
 
   let html = baseTemplate;
   html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(notFoundTitle)}</title>`);

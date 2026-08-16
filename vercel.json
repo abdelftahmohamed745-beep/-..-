@@ -1,4 +1,17 @@
 {
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "nine-vert-34.vercel.app"
+        }
+      ],
+      "destination": "https://dory-system.vercel.app/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/clinic/:docId", "destination": "/api/clinic-render?docId=:docId" },
@@ -6,3 +19,4 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
+

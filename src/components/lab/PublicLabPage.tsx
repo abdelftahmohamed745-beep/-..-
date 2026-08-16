@@ -45,7 +45,7 @@ export const PublicLabPage: React.FC<PublicLabPageProps> = ({
             setPageSeo({
               title: 'المعمل غير موجود | دوري',
               description: 'لم يتم العثور على معمل التحاليل المطلوب عبر منصة دوري.',
-              canonicalUrl: `https://nine-vert-34.vercel.app/lab/${labId}`,
+              canonicalUrl: `https://dory-system.vercel.app/lab/${labId}`,
               robots: 'noindex, nofollow'
             });
           }

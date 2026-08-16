@@ -12,4 +12,4 @@ Disallow: /admin
 Disallow: /dashboard
 Disallow: /lab-dashboard
 
-Sitemap: https://nine-vert-34.vercel.app/sitemap.xml
+Sitemap: https://dory-system.vercel.app/sitemap.xml

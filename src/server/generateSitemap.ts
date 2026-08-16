@@ -20,7 +20,7 @@ function escapeXml(str: string): string {
 }
 
 export async function generateSitemapXml(): Promise<string> {
-  const baseUrl = 'https://nine-vert-34.vercel.app';
+  const baseUrl = 'https://dory-system.vercel.app';
   const urls: { loc: string; lastmod?: string }[] = [
     { loc: `${baseUrl}/` },
     { loc: `${baseUrl}/about` },

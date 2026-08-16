@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const SITE_URL = 'https://nine-vert-34.vercel.app';
+const SITE_URL = 'https://dory-system.vercel.app';
 
 const FIREBASE_CONFIG = {
   projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'prefab-groove-502023-t4',

@@ -1369,7 +1369,9 @@ export async function addDoctorRating(params: {
   const newRating: DoctorRating = { id: docRef.id, ...ratingData };
 
   // 3. Recalculate average rating & total count for the doctor
-  recalculateDoctorRatingStats(doctorId).catch(console.error);
+  await recalculateDoctorRatingStats(doctorId).catch((err) => {
+    console.error("Warning: Failed to update doctor rating stats:", err);
+  });
 
   // Write audit log
   writeAuditLog("ADD_DOCTOR_RATING", "PATIENT_PUBLIC", doctorId, {
@@ -1411,7 +1413,7 @@ export async function recalculateDoctorRatingStats(doctorId: string): Promise<{ 
       return { avg: 0, count: 0 };
     }
 
-    const totalStars = ratings.reduce((acc, r) => acc + r.stars, 0);
+    const totalStars = ratings.reduce((acc, r) => acc + (Number(r.stars) || 0), 0);
     const avg = parseFloat((totalStars / count).toFixed(1));
 
     await updateDoc(doc(db, "doctors", doctorId), { ratingAverage: avg, ratingCount: count });

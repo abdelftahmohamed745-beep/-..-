@@ -100,7 +100,7 @@ export function generate404Html(rootDir: string, docId: string): string {
 
   const notFoundTitle = 'العيادة غير موجودة | منصة دوري';
   const notFoundDesc = 'عفواً، لم نتمكن من العثور على العيادة أو الطبيب المطلوب في منصة دوري.';
-  const canonicalUrl = `https://nine-vert-34.vercel.app/clinic/${encodeURIComponent(docId)}`;
+  const canonicalUrl = `https://dory-system.vercel.app/clinic/${encodeURIComponent(docId)}`;
 
   let html = baseTemplate;
 

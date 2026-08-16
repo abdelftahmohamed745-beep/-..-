@@ -1,6 +1,6 @@
 import { DoctorProfile, LabProfile } from '../types';
 
-const SITE_URL = 'https://nine-vert-34.vercel.app';
+const SITE_URL = 'https://dory-system.vercel.app';
 
 export interface SeoData {
   title: string;

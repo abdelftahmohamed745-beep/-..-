@@ -76,7 +76,7 @@ function DoctorDashboardRedirect({ onRedirect }: { onRedirect: () => void }) {
 
 export default function App() {
   const [currentDoctor, setCurrentDoctor] = useState<DoctorProfile | null>(null);
-  const [activeTab, setActiveTab] = useState<NavTabType>('directory');
+  const [activeTab, setActiveTab] = useState<NavTabType>('dashboard');
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [authInitialAccountType, setAuthInitialAccountType] = useState<'doctor' | 'laboratory'>('doctor');
   
@@ -193,8 +193,16 @@ export default function App() {
         if (window.location.pathname !== '/admin') {
           window.history.pushState({ tab: 'admin' }, '', '/admin');
         }
-      } else if (newTab === 'directory' && window.location.pathname !== '/') {
-        window.history.pushState({ tab: 'directory' }, '', '/');
+      } else if (newTab === 'auth') {
+        if (window.location.pathname !== '/auth') {
+          window.history.pushState({ tab: 'auth' }, '', '/auth');
+        }
+      } else if (newTab === 'directory') {
+        if (window.location.pathname !== '/directory') {
+          window.history.pushState({ tab: 'directory' }, '', '/directory');
+        }
+      } else if (newTab === 'dashboard' && window.location.pathname !== '/') {
+        window.history.pushState({ tab: 'dashboard' }, '', '/');
       }
     }
   };
@@ -238,7 +246,11 @@ export default function App() {
         window.history.replaceState(null, '', '/privacy');
       } else if (previousState.tab === 'admin') {
         window.history.replaceState(null, '', '/admin');
+      } else if (previousState.tab === 'auth') {
+        window.history.replaceState(null, '', '/auth');
       } else if (previousState.tab === 'directory') {
+        window.history.replaceState(null, '', '/directory');
+      } else if (previousState.tab === 'dashboard') {
         window.history.replaceState(null, '', '/');
       }
     }
@@ -375,6 +387,24 @@ export default function App() {
       setPendingInviteToken(inviteParam);
     }
 
+    // Check clean route: /dashboard
+    if (pathname === '/dashboard' || pathname === '/dashboard/') {
+      setActiveTab('dashboard');
+      return;
+    }
+
+    // Check clean route: /auth or /login
+    if (pathname === '/auth' || pathname === '/auth/' || pathname === '/login' || pathname === '/login/') {
+      setActiveTab('auth');
+      return;
+    }
+
+    // Check clean route: /directory (Preserved legacy route)
+    if (pathname === '/directory' || pathname === '/directory/') {
+      setActiveTab('directory');
+      return;
+    }
+
     // Check clean route: /admin
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       setActiveTab('admin');
@@ -493,6 +523,11 @@ export default function App() {
     } else {
       // Clean up test accounts automatically from Firestore
       purgeTestAccounts().catch(console.error);
+
+      // Default landing for root: Clinic OS Dashboard (or Auth workspace if not logged in)
+      if (pathname === '/' || pathname === '') {
+        setActiveTab('dashboard');
+      }
     }
   };
 
@@ -508,7 +543,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'directory') {
+    if (activeTab === 'dashboard' || activeTab === 'directory') {
       setPageSeo(DEFAULT_HOMEPAGE_SEO);
     }
   }, [activeTab]);
@@ -596,7 +631,10 @@ export default function App() {
     await signOut(auth);
     setCurrentDoctor(null);
     setIsPlatformAdmin(false);
-    setActiveTab('directory');
+    setActiveTab('auth');
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ tab: 'auth' }, '', '/auth');
+    }
     addToast("تم تسجيل الخروج بنجاح", "", "info");
   };
 

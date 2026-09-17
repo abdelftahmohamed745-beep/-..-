@@ -1,6 +1,56 @@
-export type PatientStatus = 'waiting' | 'called' | 'done' | 'cancelled';
+export type PatientStatus = 'waiting' | 'called' | 'done' | 'cancelled' | 'no_show';
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled';
 export type SubscriptionPlan = 'monthly' | 'yearly';
+
+export type VisitType =
+  | 'new_consultation' // كشف جديد
+  | 'follow_up' // استشارة
+  | 're_examination' // إعادة كشف
+  | 'continued_treatment' // متابعة علاج
+  | 'urgent'; // كشف طارئ / مستعجل
+
+export interface PaymentSplitItem {
+  method: PaymentMethod;
+  amount: number;
+}
+
+export interface DailySession {
+  id: string; // YYYY-MM-DD
+  doctorId: string;
+  clinicId?: string;
+  date: string; // YYYY-MM-DD
+  dayName?: string; // e.g. "الأربعاء"
+  status: 'active' | 'completed';
+  startedAt: string; // ISO string
+  completedAt?: string; // ISO string
+  completedByUid?: string;
+  completedByName?: string;
+  
+  // Operational counts
+  patientsCount: number;
+  waitingCount: number;
+  inConsultationCount: number;
+  completedCount: number;
+  followUpsCount: number;
+  noShowCount: number;
+  cancelledCount: number;
+
+  // Financial aggregates
+  totalRevenue: number;
+  totalCollected: number;
+  outstandingCollected: number;
+  outstandingBalance: number;
+
+  // Breakdowns
+  paymentBreakdown: {
+    cash: number;
+    card: number;
+    transfer: number;
+    other: number;
+  };
+  serviceBreakdown: Record<string, { count: number; revenue: number }>;
+  summaryNotes?: string;
+}
 
 export type ClinicRole = 'OWNER' | 'DOCTOR' | 'SECRETARY' | 'STAFF';
 
@@ -106,6 +156,9 @@ export interface ClinicTransaction {
   id: string;
   organizationId: string;
   patientId?: string;
+  patientRecordId?: string;
+  visitId?: string;
+  date?: string; // YYYY-MM-DD
   patientName: string;
   patientPhone?: string;
   appointmentId?: string;
@@ -116,6 +169,7 @@ export interface ClinicTransaction {
   remainingAmount: number; // totalAmount - paidAmount
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
+  paymentMethodsBreakdown?: PaymentSplitItem[];
   notes?: string;
   createdBy: string;
   createdByName?: string;
@@ -427,6 +481,9 @@ export interface PatientMedicalFile {
   lastVisitDate?: string;
   visitsCount: number;
   visits: PatientVisitEntry[];
+  totalOutstandingBalance?: number;
+  searchKeywords?: string[];
+  nationalId?: string;
   createdAt: string;
   updatedAt: string;
 }

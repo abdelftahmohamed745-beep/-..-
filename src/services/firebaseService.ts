@@ -12,7 +12,8 @@ import {
   onSnapshot,
   orderBy,
   limit,
-  runTransaction
+  runTransaction,
+  increment
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import {
@@ -29,6 +30,9 @@ import {
   FollowUpReminderSettings,
   PatientMedicalFile,
   PatientVisitEntry,
+  DailySession,
+  VisitType,
+  PaymentSplitItem,
   ClinicMember,
   ClinicRole,
   ClinicPermission,
@@ -3390,5 +3394,629 @@ export async function saveUserReadAnnouncements(userId: string, readIds: string[
     console.warn("Could not sync read announcements to remote cloud:", err);
   }
 }
+
+// ============================================================================
+// DAILY OPERATING SYSTEM & ARCHIVE (SECTIONS 4, 5, 6, 7)
+// ============================================================================
+
+export function normalizeArabicText(text: string): string {
+  if (!text) return "";
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[\u064B-\u065F]/g, "");
+}
+
+/**
+ * Lightweight real-time listener for today's clinic operating session summary
+ */
+export function subscribeToTodayDailySession(
+  doctorId: string,
+  date: string,
+  callback: (session: DailySession | null) => void
+): () => void {
+  if (!doctorId || !date) {
+    callback(null);
+    return () => {};
+  }
+  const sessionRef = doc(db, "doctors", doctorId, "dailySessions", date);
+  return onSnapshot(
+    sessionRef,
+    (snap) => {
+      if (snap.exists()) {
+        callback({ id: snap.id, ...snap.data() } as DailySession);
+      } else {
+        callback(null);
+      }
+    },
+    (err) => {
+      console.warn("Error subscribing to daily session:", err);
+      callback(null);
+    }
+  );
+}
+
+/**
+ * Start a new clinic day session
+ */
+export async function startNewDaySession(doctorId: string, date?: string): Promise<DailySession> {
+  const sessionDate = date || getTodayDateString();
+  const sessionRef = doc(db, "doctors", doctorId, "dailySessions", sessionDate);
+  const existingSnap = await getDoc(sessionRef);
+
+  if (existingSnap.exists() && existingSnap.data()?.status === "active") {
+    return { id: existingSnap.id, ...existingSnap.data() } as DailySession;
+  }
+
+  const daysOfWeekAr = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  const dayName = daysOfWeekAr[new Date().getDay()] || "";
+
+  const newSession: DailySession = {
+    id: sessionDate,
+    doctorId,
+    date: sessionDate,
+    dayName,
+    status: "active",
+    startedAt: new Date().toISOString(),
+    patientsCount: 0,
+    waitingCount: 0,
+    inConsultationCount: 0,
+    completedCount: 0,
+    followUpsCount: 0,
+    noShowCount: 0,
+    cancelledCount: 0,
+    totalRevenue: 0,
+    totalCollected: 0,
+    outstandingCollected: 0,
+    outstandingBalance: 0,
+    paymentBreakdown: {
+      cash: 0,
+      card: 0,
+      transfer: 0,
+      other: 0
+    },
+    serviceBreakdown: {}
+  };
+
+  await setDoc(sessionRef, newSession, { merge: true });
+  return newSession;
+}
+
+/**
+ * Update daily session metrics dynamically
+ */
+export async function updateDailySessionStats(
+  doctorId: string,
+  date: string,
+  updates: Partial<DailySession>
+): Promise<void> {
+  try {
+    const sessionRef = doc(db, "doctors", doctorId, "dailySessions", date);
+    await setDoc(sessionRef, { ...updates, date }, { merge: true });
+  } catch (err) {
+    console.warn("Failed to update daily session stats:", err);
+  }
+}
+
+/**
+ * Complete and archive today's clinic operating day with comprehensive summary
+ */
+export async function completeDaySession(
+  doctorId: string,
+  date: string,
+  summary: Partial<DailySession>,
+  userUid?: string,
+  userName?: string
+): Promise<void> {
+  const sessionRef = doc(db, "doctors", doctorId, "dailySessions", date);
+  const nowIso = new Date().toISOString();
+
+  await setDoc(
+    sessionRef,
+    {
+      ...summary,
+      status: "completed",
+      completedAt: nowIso,
+      completedByUid: userUid || "",
+      completedByName: userName || ""
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Fetch archived days history (one-time fetch, no heavy real-time listeners)
+ */
+export async function getArchivedDays(doctorId: string, limitCount = 30): Promise<DailySession[]> {
+  try {
+    const colRef = collection(db, "doctors", doctorId, "dailySessions");
+    const q = query(
+      colRef,
+      where("status", "==", "completed"),
+      orderBy("date", "desc"),
+      limit(limitCount)
+    );
+    const snap = await getDocs(q);
+    const list: DailySession[] = [];
+    snap.forEach((d) => {
+      list.push({ id: d.id, ...d.data() } as DailySession);
+    });
+    return list;
+  } catch (err) {
+    console.warn("Error fetching archived days, falling back to simple query:", err);
+    try {
+      const colRef = collection(db, "doctors", doctorId, "dailySessions");
+      const snap = await getDocs(query(colRef, limit(limitCount)));
+      const list: DailySession[] = [];
+      snap.forEach((d) => {
+        const data = d.data() as DailySession;
+        if (data.status === "completed") {
+          list.push({ id: d.id, ...data });
+        }
+      });
+      return list.sort((a, b) => b.date.localeCompare(a.date));
+    } catch (fallbackErr) {
+      console.error("Failed to fetch archived days:", fallbackErr);
+      return [];
+    }
+  }
+}
+
+/**
+ * Get one-time archived day full details (patients, summary, transactions)
+ */
+export async function getArchivedDayDetails(
+  doctorId: string,
+  date: string
+): Promise<{
+  session: DailySession | null;
+  patients: PatientRecord[];
+  transactions: ClinicTransaction[];
+}> {
+  try {
+    const sessionSnap = await getDoc(doc(db, "doctors", doctorId, "dailySessions", date));
+    const session = sessionSnap.exists()
+      ? ({ id: sessionSnap.id, ...sessionSnap.data() } as DailySession)
+      : null;
+
+    // Get patients for that date
+    const patientsCol = collection(db, "queues", doctorId, "patients");
+    const pSnap = await getDocs(query(patientsCol, where("date", "==", date), limit(150)));
+    const patients: PatientRecord[] = [];
+    pSnap.forEach((d) => patients.push({ id: d.id, ...d.data() } as PatientRecord));
+
+    // Get transactions for that date
+    const txCol = collection(db, "clinic_transactions");
+    const txSnap = await getDocs(
+      query(txCol, where("organizationId", "==", doctorId), where("date", "==", date), limit(150))
+    );
+    const transactions: ClinicTransaction[] = [];
+    txSnap.forEach((d) => transactions.push({ id: d.id, ...d.data() } as ClinicTransaction));
+
+    return { session, patients, transactions };
+  } catch (err) {
+    console.error("Error fetching archived day details:", err);
+    return { session: null, patients: [], transactions: [] };
+  }
+}
+
+// ============================================================================
+// ENHANCED PATIENT SEARCH & REUSE & DEDUPLICATION (SECTIONS 8, 9, 10, 11)
+// ============================================================================
+
+export interface FastPatientSearchResult {
+  id: string;
+  patientId?: string;
+  patientName: string;
+  patientPhone: string;
+  visitsCount: number;
+  lastVisitDate?: string;
+  totalOutstandingBalance: number;
+  allergies?: string;
+  chronicDiseases?: string;
+  lastVisitDiagnosis?: string;
+}
+
+/**
+ * Fast search for existing clinic patients (debounced, bounded)
+ */
+export async function searchClinicPatientsFast(
+  doctorId: string,
+  searchTerm: string,
+  limitCount = 8
+): Promise<FastPatientSearchResult[]> {
+  try {
+    const rawTerm = searchTerm.trim();
+    if (!rawTerm || rawTerm.length < 2) return [];
+
+    const normTerm = normalizeArabicText(rawTerm);
+    const isPhone = /^[0-9+]+$/.test(rawTerm);
+
+    const colRef = collection(db, "doctors", doctorId, "patientFiles");
+    const snap = await getDocs(query(colRef, limit(80)));
+    const results: FastPatientSearchResult[] = [];
+
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as PatientMedicalFile;
+      const normName = normalizeArabicText(data.patientName || "");
+      const phone = data.patientPhone || "";
+
+      let matched = false;
+      if (isPhone && phone.includes(rawTerm)) {
+        matched = true;
+      } else if (normName.includes(normTerm)) {
+        matched = true;
+      }
+
+      if (matched) {
+        const lastVisit = data.visits && data.visits.length > 0 ? data.visits[0] : undefined;
+        results.push({
+          id: docSnap.id,
+          patientId: data.patientId,
+          patientName: data.patientName,
+          patientPhone: data.patientPhone,
+          visitsCount: data.visitsCount || (data.visits ? data.visits.length : 1),
+          lastVisitDate: data.lastVisitDate || lastVisit?.date,
+          totalOutstandingBalance: data.totalOutstandingBalance || 0,
+          allergies: data.allergies,
+          chronicDiseases: data.chronicDiseases,
+          lastVisitDiagnosis: lastVisit?.diagnosis
+        });
+      }
+    });
+
+    return results.slice(0, limitCount);
+  } catch (err) {
+    console.error("Fast patient search error:", err);
+    return [];
+  }
+}
+
+/**
+ * Get patient's accumulated outstanding balance from transactions
+ */
+export async function getPatientAccumulatedBalance(
+  doctorId: string,
+  patientPhone: string
+): Promise<number> {
+  try {
+    const cleanPhone = normalizePhoneNumber(patientPhone);
+    if (!cleanPhone) return 0;
+
+    const txCol = collection(db, "clinic_transactions");
+    const q = query(
+      txCol,
+      where("organizationId", "==", doctorId),
+      where("patientPhone", "==", cleanPhone),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    let balance = 0;
+    snap.forEach((d) => {
+      const tx = d.data() as ClinicTransaction;
+      if (tx.remainingAmount && tx.remainingAmount > 0) {
+        balance += tx.remainingAmount;
+      }
+    });
+    return balance;
+  } catch (err) {
+    console.warn("Error calculating patient balance:", err);
+    return 0;
+  }
+}
+
+// ============================================================================
+// DOCTOR CONSULTATION COMPLETION & VISIT RECORDING (SECTIONS 13, 14, 15)
+// ============================================================================
+
+export interface CompleteConsultationParams {
+  doctorId: string;
+  patientRecordId: string; // queue patient ID
+  patientName: string;
+  patientPhone: string;
+  visitType: VisitType;
+  diagnosis: string;
+  notes?: string;
+  prescription?: string;
+  followUpDate?: string;
+  followUpTime?: string;
+  followUpReason?: string;
+  followUpFee?: number;
+  doctorName?: string;
+  clinicName?: string;
+  serviceName?: string;
+}
+
+/**
+ * Complete a patient consultation:
+ * 1. Updates queue status to 'done' (notifies secretary in real time)
+ * 2. Saves clinical details to patient's permanent medical file
+ * 3. Auto-schedules follow-up if requested
+ * 4. Updates daily session counters
+ */
+export async function completePatientConsultation(
+  params: CompleteConsultationParams
+): Promise<void> {
+  const {
+    doctorId,
+    patientRecordId,
+    patientName,
+    patientPhone,
+    visitType,
+    diagnosis,
+    notes,
+    prescription,
+    followUpDate,
+    followUpTime,
+    followUpReason,
+    followUpFee = 0,
+    doctorName = "دكتور العيادة",
+    clinicName = "العيادة",
+    serviceName
+  } = params;
+
+  const today = getTodayDateString();
+  const nowIso = new Date().toISOString();
+  const cleanPhone = normalizePhoneNumber(patientPhone);
+
+  // 1. Update queue ticket
+  const ticketRef = doc(db, "queues", doctorId, "patients", patientRecordId);
+  await updateDoc(ticketRef, {
+    status: "done" as PatientStatus,
+    doneAt: nowIso,
+    visitType,
+    diagnosisSummary: diagnosis || ""
+  });
+
+  // 2. Build Visit Entry
+  const visitEntry: PatientVisitEntry = {
+    id: `visit_${Date.now()}`,
+    date: today,
+    visitType,
+    serviceName: serviceName || (visitType === "follow_up" ? "استشارة" : "كشف"),
+    diagnosis: diagnosis || "",
+    notes: notes || "",
+    prescription: prescription || "",
+    status: "done",
+    createdAt: nowIso
+  };
+
+  // 3. Save to patient file
+  if (cleanPhone) {
+    await addVisitToPatientMedicalFile(
+      doctorId,
+      patientName,
+      cleanPhone,
+      visitEntry
+    );
+  }
+
+  // 4. Auto-schedule follow-up if date is provided
+  if (followUpDate && followUpTime && cleanPhone) {
+    await createFollowUpAppointment({
+      doctorId,
+      doctorName,
+      clinicId: doctorId,
+      clinicName,
+      patientName,
+      patientPhone: cleanPhone,
+      appointmentDate: followUpDate,
+      appointmentTime: followUpTime,
+      reason: followUpReason || `متابعة ${visitType === "follow_up" ? "استشارة" : "كشف"}`,
+      notes: `تم تحديد الموعد تلقائيًا أثناء الكشف. الرسوم المتوقعة: ${followUpFee} ج.م`,
+      reminderSettings: {
+        oneDayBefore: true,
+        twoHoursBefore: true
+      }
+    });
+  }
+
+  // 5. Update daily session counts
+  try {
+    const sessionRef = doc(db, "doctors", doctorId, "dailySessions", today);
+    await updateDoc(sessionRef, {
+      completedCount: increment(1),
+      inConsultationCount: increment(-1),
+      followUpsCount: followUpDate ? increment(1) : increment(0)
+    });
+  } catch (err) {
+    // Session might not be initialized yet; non-blocking
+  }
+}
+
+// ============================================================================
+// NO-SHOW & 2-STEP FOLLOW-UP REMOVAL (SECTIONS 16, 17, 18, 19)
+// ============================================================================
+
+/**
+ * Mark a queue patient as No-show.
+ * Patient is removed from active queue, but historical record and patient file are preserved!
+ */
+export async function markQueuePatientNoShow(
+  doctorId: string,
+  patientRecordId: string
+): Promise<void> {
+  const today = getTodayDateString();
+  const ticketRef = doc(db, "queues", doctorId, "patients", patientRecordId);
+  await updateDoc(ticketRef, {
+    status: "no_show" as PatientStatus,
+    noShowAt: new Date().toISOString()
+  });
+
+  try {
+    const sessionRef = doc(db, "doctors", doctorId, "dailySessions", today);
+    await updateDoc(sessionRef, {
+      noShowCount: increment(1),
+      waitingCount: increment(-1)
+    });
+  } catch (err) {
+    // Non-blocking
+  }
+}
+
+/**
+ * 2-Step cancellation of follow-up appointment:
+ * Marks status as 'cancelled'. Preserves patient, past visits, and billing records!
+ */
+export async function cancelFollowUpAppointment(
+  appointmentId: string,
+  doctorId: string,
+  cancellationReason?: string
+): Promise<void> {
+  const appRef = doc(db, "followUpAppointments", appointmentId);
+  await updateDoc(appRef, {
+    appointmentStatus: "cancelled" as FollowUpAppointmentStatus,
+    cancelledAt: new Date().toISOString(),
+    cancellationReason: cancellationReason || "تم إلغاء الموعد بناءً على طلب العيادة"
+  });
+}
+
+/**
+ * Mark follow-up appointment as 'no_show'.
+ * Preserves patient record, but removes from active follow-up agenda.
+ */
+export async function markFollowUpNoShow(
+  appointmentId: string,
+  doctorId: string
+): Promise<void> {
+  const appRef = doc(db, "followUpAppointments", appointmentId);
+  await updateDoc(appRef, {
+    appointmentStatus: "no_show" as FollowUpAppointmentStatus,
+    noShowAt: new Date().toISOString()
+  });
+}
+
+// ============================================================================
+// SPLIT PAYMENTS & FINANCIAL RECORDING (SECTIONS 20, 21, 22, 23, 24, 25)
+// ============================================================================
+
+export interface RecordSplitPaymentParams {
+  organizationId: string;
+  patientName: string;
+  patientPhone: string;
+  patientRecordId?: string;
+  serviceId?: string;
+  serviceName: string;
+  totalAmount: number;
+  payments: PaymentSplitItem[];
+  notes?: string;
+  createdBy: string;
+  createdByName?: string;
+}
+
+/**
+ * Record a transaction supporting multiple payment methods in one receipt
+ * and updating patient's outstanding balance
+ */
+export async function recordSplitPayment(
+  params: RecordSplitPaymentParams
+): Promise<ClinicTransaction> {
+  const {
+    organizationId,
+    patientName,
+    patientPhone,
+    patientRecordId,
+    serviceId,
+    serviceName,
+    totalAmount,
+    payments,
+    notes,
+    createdBy,
+    createdByName
+  } = params;
+
+  const today = getTodayDateString();
+  const nowIso = new Date().toISOString();
+  const cleanPhone = normalizePhoneNumber(patientPhone);
+
+  const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const remaining = Math.max(0, totalAmount - totalPaid);
+
+  let paymentStatus: PaymentStatus = "UNPAID";
+  if (remaining === 0 && totalPaid > 0) {
+    paymentStatus = "PAID";
+  } else if (totalPaid > 0) {
+    paymentStatus = "PARTIAL";
+  }
+
+  // Primary method for backward compatibility
+  const primaryMethod = payments.length > 0 ? payments[0].method : "CASH";
+
+  const txData: Omit<ClinicTransaction, "id"> = {
+    organizationId,
+    patientName: sanitizeInput(patientName),
+    patientPhone: cleanPhone,
+    patientRecordId,
+    date: today,
+    serviceId,
+    serviceName: sanitizeInput(serviceName),
+    totalAmount,
+    paidAmount: totalPaid,
+    remainingAmount: remaining,
+    paymentStatus,
+    paymentMethod: primaryMethod,
+    paymentMethodsBreakdown: payments,
+    notes: notes ? sanitizeInput(notes) : undefined,
+    createdBy,
+    createdByName,
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+
+  const txCol = collection(db, "clinic_transactions");
+  const docRef = await addDoc(txCol, txData);
+  const newTx: ClinicTransaction = { id: docRef.id, ...txData };
+
+  // Update patient's outstanding balance in patient file
+  if (cleanPhone) {
+    try {
+      const newAccBalance = await getPatientAccumulatedBalance(organizationId, cleanPhone);
+      const fileRef = doc(db, "doctors", organizationId, "patientFiles", cleanPhone);
+      await setDoc(fileRef, { totalOutstandingBalance: newAccBalance }, { merge: true });
+    } catch (err) {
+      console.warn("Could not sync balance to patient file:", err);
+    }
+  }
+
+  // Update daily session revenue & breakdown
+  try {
+    const sessionRef = doc(db, "doctors", organizationId, "dailySessions", today);
+    const snap = await getDoc(sessionRef);
+    if (snap.exists()) {
+      const data = snap.data() as DailySession;
+      const pb = data.paymentBreakdown || { cash: 0, card: 0, transfer: 0, other: 0 };
+
+      payments.forEach((p) => {
+        const amt = Number(p.amount) || 0;
+        if (p.method === "CASH") pb.cash = (pb.cash || 0) + amt;
+        else if (p.method === "CARD") pb.card = (pb.card || 0) + amt;
+        else if (p.method === "BANK_TRANSFER") pb.transfer = (pb.transfer || 0) + amt;
+        else pb.other = (pb.other || 0) + amt;
+      });
+
+      const sb = data.serviceBreakdown || {};
+      const sKey = serviceName || "كشف";
+      if (!sb[sKey]) sb[sKey] = { count: 0, revenue: 0 };
+      sb[sKey].count += 1;
+      sb[sKey].revenue += totalPaid;
+
+      await updateDoc(sessionRef, {
+        totalRevenue: (data.totalRevenue || 0) + totalAmount,
+        totalCollected: (data.totalCollected || 0) + totalPaid,
+        outstandingBalance: (data.outstandingBalance || 0) + remaining,
+        paymentBreakdown: pb,
+        serviceBreakdown: sb
+      });
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+
+  return newTx;
+}
+
 
 

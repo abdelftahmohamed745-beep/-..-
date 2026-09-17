@@ -125,6 +125,11 @@ service cloud.firestore {
       match /patientFiles/{patientId} {
         allow read, write: if isOrgMember(doctorId) || isAdmin();
       }
+
+      // Daily Clinic Operating Sessions & Archives (Doctor / Org Member or Admin ONLY)
+      match /dailySessions/{sessionId} {
+        allow read, write: if isOrgMember(doctorId) || isAdmin();
+      }
     }
 
     // Queues and Patients subcollection

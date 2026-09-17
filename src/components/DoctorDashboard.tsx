@@ -22,7 +22,9 @@ import {
   Star,
   MessageSquare,
   DollarSign,
-  Monitor
+  Monitor,
+  Stethoscope,
+  UserX
 } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 import { TVQueueDisplay } from './TVQueueDisplay';
@@ -34,13 +36,17 @@ import {
   bookPatient,
   getDoctorRatings,
   recalculateDoctorRatingStats,
-  getUserClinicMember
+  getUserClinicMember,
+  markQueuePatientNoShow
 } from '../services/firebaseService';
 import { playTurnNotificationSound, speakText } from '../utils/audio';
 import { DoctorFollowUpManager } from './DoctorFollowUpManager';
 import { CreateFollowUpModal } from './CreateFollowUpModal';
 import { ClinicTeamManager } from './ClinicTeamManager';
 import { ClinicFinanceManager } from './ClinicFinanceManager';
+import { DoctorConsultationModal } from './DoctorConsultationModal';
+import { DailySessionManager } from './DailySessionManager';
+import { FastPatientRegistrationModal } from './FastPatientRegistrationModal';
 import { hasPermission } from '../utils/permissions';
 import { auth } from '../firebase/config';
 
@@ -94,6 +100,12 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
   // Quick follow-up modal for queue patient
   const [quickFollowUpPatient, setQuickFollowUpPatient] = useState<{ name: string; phone: string } | null>(null);
+
+  // Doctor Consultation Modal state
+  const [selectedPatientForConsultation, setSelectedPatientForConsultation] = useState<PatientRecord | null>(null);
+
+  // Fast Patient Registration & Split Payment Modal state
+  const [isFastRegistrationOpen, setIsFastRegistrationOpen] = useState(false);
 
   // Manual Walk-In Registration Modal state
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
@@ -482,109 +494,121 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         />
       ) : (
         /* Main Queue Management Section */
-        <div className="bg-[#fdfcf9] rounded-3xl border border-[#e7e3da] shadow-2xs overflow-hidden">
-        
-        {/* Controls Toolbar */}
-        <div className="p-4 sm:p-6 border-b border-[#f0ebe1] bg-[#faf8f5] flex flex-col md:flex-row items-center justify-between gap-4">
-          
-          {/* Status Filter Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
-            <button
-              onClick={() => setFilterStatus('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                filterStatus === 'all'
-                  ? 'bg-[#122c4a] text-white shadow-2xs'
-                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
-              }`}
-            >
-              الكل ({patients.length})
-            </button>
-            <button
-              onClick={() => setFilterStatus('waiting')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                filterStatus === 'waiting'
-                  ? 'bg-[#122c4a] text-white shadow-2xs'
-                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
-              }`}
-            >
-              في الانتظار ({waitingPatients.length})
-            </button>
-            <button
-              onClick={() => setFilterStatus('called')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                filterStatus === 'called'
-                  ? 'bg-amber-600 text-white shadow-2xs'
-                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
-              }`}
-            >
-              في الكشف ({calledPatient ? 1 : 0})
-            </button>
-            <button
-              onClick={() => setFilterStatus('done')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                filterStatus === 'done'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
-              }`}
-            >
-              مكتمل ({donePatients.length})
-            </button>
-            <button
-              onClick={() => setFilterStatus('cancelled')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
-                filterStatus === 'cancelled'
-                  ? 'bg-rose-600 text-white shadow-2xs'
-                  : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
-              }`}
-            >
-              ملغي ({cancelledPatients.length})
-            </button>
-          </div>
+        <div className="space-y-6">
+          {/* Section 4, 5, 6, 7: Daily Operating System & Past Days Archive */}
+          <DailySessionManager
+            doctorId={doctor.uid}
+            doctorName={doctor.name}
+            clinicName={doctor.clinicName}
+            currentUserId={currentMember?.uid || doctor.uid}
+            currentUserName={currentMember?.name || doctor.name}
+            todayPatients={patients}
+            onShowToast={onShowToast}
+          />
 
-          {/* Action Tools & Search */}
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            {/* Search Input */}
-            <div className="relative flex-1 md:w-64">
-              <Search className="w-4 h-4 text-[#1b3a5c] absolute right-3 top-2.5" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="بحث بالموبايل أو الاسم أو الدور..."
-                className="w-full pl-3 pr-9 py-2 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
-              />
+          <div className="bg-[#fdfcf9] rounded-3xl border border-[#e7e3da] shadow-2xs overflow-hidden">
+          
+          {/* Controls Toolbar */}
+          <div className="p-4 sm:p-6 border-b border-[#f0ebe1] bg-[#faf8f5] flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            {/* Status Filter Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
+              <button
+                onClick={() => setFilterStatus('all')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                  filterStatus === 'all'
+                    ? 'bg-[#122c4a] text-white shadow-2xs'
+                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                }`}
+              >
+                الكل ({patients.length})
+              </button>
+              <button
+                onClick={() => setFilterStatus('waiting')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                  filterStatus === 'waiting'
+                    ? 'bg-[#122c4a] text-white shadow-2xs'
+                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                }`}
+              >
+                في الانتظار ({waitingPatients.length})
+              </button>
+              <button
+                onClick={() => setFilterStatus('called')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                  filterStatus === 'called'
+                    ? 'bg-amber-600 text-white shadow-2xs'
+                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                }`}
+              >
+                في الكشف ({calledPatient ? 1 : 0})
+              </button>
+              <button
+                onClick={() => setFilterStatus('done')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                  filterStatus === 'done'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                }`}
+              >
+                مكتمل ({donePatients.length})
+              </button>
+              <button
+                onClick={() => setFilterStatus('cancelled')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                  filterStatus === 'cancelled'
+                    ? 'bg-rose-600 text-white shadow-2xs'
+                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                }`}
+              >
+                ملغي ({cancelledPatients.length})
+              </button>
             </div>
 
-            {/* TV Queue Display */}
-            <button
-              onClick={() => setShowTVQueue(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
-              title="شاشة الانتظار للتلفزيون (TV Queue Display)"
-            >
-              <Monitor className="w-4 h-4 text-teal-400" />
-              <span className="hidden sm:inline">شاشة TV</span>
-            </button>
+            {/* Action Tools & Search */}
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              {/* Search Input */}
+              <div className="relative flex-1 md:w-64">
+                <Search className="w-4 h-4 text-[#1b3a5c] absolute right-3 top-2.5" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="بحث بالموبايل أو الاسم أو الدور..."
+                  className="w-full pl-3 pr-9 py-2 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
+                />
+              </div>
 
-            {/* Quick Scanner */}
-            <button
-              onClick={onOpenScannerModal}
-              className="p-2 bg-[#fdfcf9] hover:bg-[#f4efe6] text-slate-700 border border-[#e7e3da] rounded-xl transition shadow-2xs cursor-pointer"
-              title="ماسح الكاميرا للتذاكر"
-            >
-              <QrCode className="w-4 h-4 text-[#122c4a]" />
-            </button>
+              {/* TV Queue Display */}
+              <button
+                onClick={() => setShowTVQueue(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
+                title="شاشة الانتظار للتلفزيون (TV Queue Display)"
+              >
+                <Monitor className="w-4 h-4 text-teal-400" />
+                <span className="hidden sm:inline">شاشة TV</span>
+              </button>
 
-            {/* Add Walk-In Patient */}
-            <button
-              onClick={() => setIsManualAddOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>إضافة مريض</span>
-            </button>
+              {/* Quick Scanner */}
+              <button
+                onClick={onOpenScannerModal}
+                className="p-2 bg-[#fdfcf9] hover:bg-[#f4efe6] text-slate-700 border border-[#e7e3da] rounded-xl transition shadow-2xs cursor-pointer"
+                title="ماسح الكاميرا للتذاكر"
+              >
+                <QrCode className="w-4 h-4 text-[#122c4a]" />
+              </button>
+
+              {/* Add Walk-In Patient with fast search & multi-payment */}
+              <button
+                onClick={() => setIsFastRegistrationOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة مريض</span>
+              </button>
+            </div>
+
           </div>
-
-        </div>
 
         {/* Patients Queue List */}
         <div className="p-4 sm:p-6">
@@ -720,6 +744,16 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                           </button>
                         )}
 
+                        {/* Doctor Consultation Workspace Modal (Section 12, 13, 14, 15) */}
+                        <button
+                          onClick={() => setSelectedPatientForConsultation(patient)}
+                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                          title="بدء الكشف وحفظ السجل الطبي"
+                        >
+                          <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>كشف واستشارة</span>
+                        </button>
+
                         {/* Quick Follow Up Appointment Registration */}
                         <button
                           onClick={() => setQuickFollowUpPatient({ name: patient.name, phone: patient.phone })}
@@ -744,6 +778,24 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                             <span>الدفع</span>
                           </button>
                         )}
+
+                        {/* No-show 1-click action (Section 19) */}
+                        {(isWaiting || isCalled) && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await markQueuePatientNoShow(patient.id, doctor.uid);
+                                onShowToast('تم تسجيل تغيب المريض (No-show)', `تم تحويل حالة ${patient.name}`, 'info');
+                              } catch (err: any) {
+                                onShowToast('فشل التحديث', err?.message, 'error');
+                              }
+                            }}
+                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                            title="لم يحضر (No-show)"
+                          >
+                            <UserX className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
 
                     </motion.div>
@@ -754,6 +806,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           )}
         </div>
 
+      </div>
       </div>
       )}
 
@@ -923,6 +976,29 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           onClose={() => setShowTVQueue(false)}
         />
       )}
+
+      {/* Doctor Consultation Workspace Modal (Section 12, 13, 14, 15) */}
+      <DoctorConsultationModal
+        isOpen={!!selectedPatientForConsultation}
+        onClose={() => setSelectedPatientForConsultation(null)}
+        patient={selectedPatientForConsultation}
+        doctorId={doctor.uid}
+        doctorName={doctor.name}
+        clinicName={doctor.clinicName}
+        onShowToast={onShowToast}
+      />
+
+      {/* Fast Patient Registration with Deduplication & Split Payment (Section 8, 9, 10, 11, 20, 21, 22) */}
+      <FastPatientRegistrationModal
+        isOpen={isFastRegistrationOpen}
+        onClose={() => setIsFastRegistrationOpen(false)}
+        doctorId={doctor.uid}
+        doctorName={doctor.name}
+        defaultConsultationPrice={doctor.consultationFee || 300}
+        currentUserId={currentMember?.uid || doctor.uid}
+        currentUserName={currentMember?.name || doctor.name}
+        onShowToast={onShowToast}
+      />
 
     </div>
   );

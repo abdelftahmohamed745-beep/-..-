@@ -121,6 +121,44 @@
       },
       "required": ["patientName", "patientPhone", "doctorId", "appointmentDate", "appointmentTime", "appointmentStatus"]
     },
+    "dailySessions": {
+      "title": "dailySessions",
+      "description": "Daily clinic operating session, tracking current day state and archives",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "completedAt": { "type": "string" },
+        "patientsCount": { "type": "number" },
+        "waitingCount": { "type": "number" },
+        "inConsultationCount": { "type": "number" },
+        "completedCount": { "type": "number" },
+        "followUpsCount": { "type": "number" },
+        "noShowCount": { "type": "number" },
+        "totalRevenue": { "type": "number" },
+        "totalCollected": { "type": "number" },
+        "outstandingCollected": { "type": "number" },
+        "outstandingBalance": { "type": "number" }
+      },
+      "required": ["doctorId", "date", "status"]
+    },
+    "patientFiles": {
+      "title": "patientFiles",
+      "description": "Patient medical record file for clinic doctor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "visitsCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["doctorId", "patientName", "patientPhone"]
+    },
     "labs": {
       "title": "labs",
       "description": "Medical laboratory profiles",
@@ -196,6 +234,14 @@
     "doctors/{doctorId}": {
       "schema": "doctors",
       "description": "Doctors collection"
+    },
+    "doctors/{doctorId}/patientFiles/{fileId}": {
+      "schema": "patientFiles",
+      "description": "Doctor patient medical records"
+    },
+    "doctors/{doctorId}/dailySessions/{sessionId}": {
+      "schema": "dailySessions",
+      "description": "Daily clinic operating sessions and archives"
     },
     "queues/{doctorId}/dailyCounters/{dateId}": {
       "schema": "dailyCounters",

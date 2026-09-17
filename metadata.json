@@ -1,6 +1,6 @@
 {
   "name": "دوري",
-  "description": "منظومة دوري الطبية - نظام حجز وتتبع العيادات وإدارة معامل التحاليل الطبية (Dory Labs)",
+  "description": "دوري - نظام تشغيل وإدارة العيادات الطبية المستقلة (Clinic OS) للأطباء وفريق العمل",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

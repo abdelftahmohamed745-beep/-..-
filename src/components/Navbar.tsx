@@ -4,22 +4,23 @@ import { DoctorProfile } from '../types';
 
 export type NavTabType =
   | 'dashboard'
-  | 'directory'
   | 'clinic'
   | 'booking'
   | 'ticket'
   | 'subscription'
   | 'auth'
   | 'admin'
-  | 'lab_dashboard'
-  | 'lab_public'
-  | 'lab_result'
   | 'about'
   | 'for-clinics'
   | 'for-labs'
   | 'for-patients'
   | 'faq'
-  | 'privacy';
+  | 'privacy'
+  // Deprecated legacy tabs preserved for routing backward compatibility
+  | 'directory'
+  | 'lab_dashboard'
+  | 'lab_public'
+  | 'lab_result';
 
 interface NavbarProps {
   currentDoctor: DoctorProfile | null;
@@ -54,7 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Brand Logo & Main Nav Tabs */}
           <div className="flex items-center gap-4 sm:gap-6">
             <button
-              onClick={() => onNavigate('directory')}
+              onClick={() => onNavigate(currentDoctor ? 'dashboard' : 'auth')}
               className="flex items-center gap-2.5 text-right group focus:outline-hidden cursor-pointer"
             >
               <div className="w-10 h-10 rounded-xl bg-[#122c4a] flex items-center justify-center text-white shadow-md shadow-[#122c4a]/15 group-hover:bg-[#0d223a] transition-all">
@@ -71,38 +72,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 </div>
                 <span className="text-[10px] text-slate-500 font-medium block -mt-1">
-                  المنظومة الطبية الذكية للعيادات والمختبرات
+                  نظام تشغيل وإدارة العيادات الطبية
                 </span>
               </div>
             </button>
 
             {/* Nav Tabs */}
             <nav className="hidden md:flex items-center gap-1">
-              <button
-                onClick={() => onNavigate('directory')}
-                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === 'directory'
-                    ? 'bg-[#edf3fa] text-[#122c4a] font-black border border-[#d1dfed]'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-[#f4efe6]'
-                }`}
-              >
-                <Building2 className="w-4 h-4 text-[#1b3a5c]" />
-                <span>أطباء وعيادات</span>
-              </button>
-
               {currentDoctor && (
                 <button
                   onClick={() => onNavigate(isLabAccount ? 'lab_dashboard' : 'dashboard')}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer ${
                     activeTab === 'dashboard' || activeTab === 'lab_dashboard'
                       ? isLabAccount
                         ? 'bg-[#122c4a] text-white shadow-2xs'
-                        : 'bg-[#1c5242] text-white shadow-2xs'
+                        : 'bg-[#122c4a] text-white shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-[#f4efe6]'
                   }`}
                 >
-                  {isLabAccount ? <TestTube className="w-4 h-4 text-sky-300" /> : <Stethoscope className="w-4 h-4 text-emerald-200" />}
-                  <span>{isLabAccount ? 'لوحة تحكم معملي' : 'لوحة تحكم عيادتي'}</span>
+                  {isLabAccount ? <TestTube className="w-4 h-4 text-sky-300" /> : <Stethoscope className="w-4 h-4 text-emerald-300" />}
+                  <span>{isLabAccount ? 'لوحة تحكم معملي' : 'لوحة تشغيل العيادة'}</span>
                 </button>
               )}
 
@@ -245,18 +234,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onNavigate('directory')}
-                  className={`md:hidden px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                    activeTab === 'directory'
-                      ? 'bg-[#122c4a] text-white'
-                      : 'bg-[#edf3fa] text-[#122c4a]'
-                  }`}
-                >
-                  أطباء وعيادات
-                </button>
-
-                {/* Doctor/Lab Login Button */}
+                {/* Clinic Login & Access Button */}
                 <button
                   onClick={() => onNavigate('auth')}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition shadow-2xs cursor-pointer ${
@@ -266,7 +244,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                 >
                   <UserCheck className="w-4 h-4 text-sky-300" />
-                  <span>دخول العيادات والمختبرات</span>
+                  <span>دخول العيادة</span>
                 </button>
               </div>
             )}

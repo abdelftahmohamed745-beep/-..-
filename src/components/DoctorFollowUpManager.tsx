@@ -13,13 +13,19 @@ import {
   Search,
   Filter,
   FileText,
-  Check
+  Check,
+  UserX,
+  Trash2,
+  DollarSign
 } from 'lucide-react';
 import { FollowUpAppointment, FollowUpAppointmentStatus } from '../types';
 import {
   subscribeToDoctorFollowUps,
   updateFollowUpAppointmentStatus,
-  updateFollowUpAppointment
+  updateFollowUpAppointment,
+  cancelFollowUpAppointment,
+  markFollowUpNoShow,
+  getTodayDateString
 } from '../services/firebaseService';
 import { CreateFollowUpModal } from './CreateFollowUpModal';
 
@@ -38,6 +44,7 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
   clinicName = "العيادة الطبية",
   onShowToast
 }) => {
+  const today = getTodayDateString();
   const [appointments, setAppointments] = useState<FollowUpAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -46,6 +53,10 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<FollowUpAppointment | null>(null);
+
+  // 2-Step Removal Confirmation Dialog State (Section 18)
+  const [appointmentToCancel, setAppointmentToCancel] = useState<FollowUpAppointment | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -66,6 +77,43 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
       }
     } catch (err: any) {
       if (onShowToast) onShowToast("فشل تحديث الحالة", err?.message, "error");
+    }
+  };
+
+  // Section 18: Confirm follow-up cancellation (preserves patient & medical file)
+  const handleConfirmCancellation = async () => {
+    if (!appointmentToCancel) return;
+    setIsCancelling(true);
+    try {
+      await cancelFollowUpAppointment(appointmentToCancel.id, doctorId);
+      if (onShowToast) {
+        onShowToast(
+          "تم إلغاء الموعد وإخراجه من القائمة النشطة",
+          `تم الحفاظ على السجل الطبي للمريض ${appointmentToCancel.patientName} وبياناته بالكامل`,
+          "info"
+        );
+      }
+      setAppointmentToCancel(null);
+    } catch (err: any) {
+      if (onShowToast) onShowToast("فشل إلغاء الموعد", err?.message, "error");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  // Section 19: Mark No-show
+  const handleMarkNoShow = async (app: FollowUpAppointment) => {
+    try {
+      await markFollowUpNoShow(app.id, doctorId);
+      if (onShowToast) {
+        onShowToast(
+          "تم تسجيل تغيّب المريض (No-show)",
+          `تم إخراج الموعد من القائمة النشطة مع الاحتفاظ بسجل المريض`,
+          "warning"
+        );
+      }
+    } catch (err: any) {
+      if (onShowToast) onShowToast("فشل تسجيل الحالة", err?.message, "error");
     }
   };
 
@@ -91,19 +139,30 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
     }
   };
 
-  // Filtered Appointments
+  // Section 17: Today's Follow-ups Summary
+  const todayFollowUps = appointments.filter(
+    (app) => app.appointmentDate === today && app.appointmentStatus !== 'cancelled' && app.appointmentStatus !== 'no_show'
+  );
+  const expectedTodayRevenue = todayFollowUps.length * 200; // Default expected consultation fee
+
+  // Filtered Appointments (hide cancelled unless explicitly chosen)
   const filteredList = appointments.filter((app) => {
-    const matchesStatus = filterStatus === 'all' || app.appointmentStatus === filterStatus;
+    if (filterStatus === 'all') {
+      if (app.appointmentStatus === 'cancelled') return false;
+    } else if (app.appointmentStatus !== filterStatus) {
+      return false;
+    }
+
     const matchesSearch =
       !searchTerm ||
       app.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.patientPhone.includes(searchTerm);
 
-    return matchesStatus && matchesSearch;
+    return matchesSearch;
   });
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xl space-y-6 text-right">
+    <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xl space-y-6 text-right" dir="rtl">
       
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -121,7 +180,6 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* New Appointment Button */}
           <button
             type="button"
             onClick={() => {
@@ -133,6 +191,31 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
             <Plus className="w-4 h-4" />
             <span>إنشاء موعد إعادة كشف</span>
           </button>
+        </div>
+      </div>
+
+      {/* Section 17: Today's Follow-up Summary Banner */}
+      <div className="bg-gradient-to-r from-sky-50 to-indigo-50 border border-sky-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-sky-800 block">إحصائية متابعات اليوم ({today}):</span>
+            <div className="flex items-baseline gap-4 mt-0.5">
+              <span className="text-sm font-extrabold text-slate-900">
+                متابعات اليوم: <strong className="font-mono text-base text-sky-700">{todayFollowUps.length}</strong> مرضى
+              </span>
+              <span className="text-sm font-extrabold text-slate-900">
+                الإيراد المتوقع: <strong className="font-mono text-base text-emerald-700">{expectedTodayRevenue}</strong> ج.م
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-slate-600">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+          <span>تحديث فوري للمواعيد النشطة</span>
         </div>
       </div>
 
@@ -157,12 +240,12 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
             onChange={(e) => setFilterStatus(e.target.value)}
             className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
           >
-            <option value="all">جميع الحالات ({appointments.length})</option>
+            <option value="all">المواعيد النشطة ({appointments.filter(a => a.appointmentStatus !== 'cancelled').length})</option>
             <option value="upcoming">قادم (Upcoming)</option>
             <option value="confirmed">تم التأكيد (Confirmed)</option>
             <option value="attended">تم الحضور (Attended)</option>
             <option value="no_show">لم يحضر (No Show)</option>
-            <option value="cancelled">تم الإلغاء (Cancelled)</option>
+            <option value="cancelled">الملغاة فقط (Cancelled)</option>
           </select>
         </div>
       </div>
@@ -178,7 +261,7 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
           <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
           <h4 className="font-bold text-slate-700 text-sm">لا توجد مواعيد إعادة كشف مطابقة</h4>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            اضغط على "إنشاء موعد إعادة كشف" أو "إضافة مواعيد تجريبية" لتسجيل أول موعد لمريض.
+            اضغط على "إنشاء موعد إعادة كشف" لتسجيل موعد لمريض.
           </p>
         </div>
       ) : (
@@ -205,7 +288,7 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {/* Status Dropdown */}
                   <select
                     value={app.appointmentStatus}
@@ -219,6 +302,19 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
                     <option value="cancelled">تم الإلغاء (Cancelled)</option>
                   </select>
 
+                  {/* Section 19: No-show 1-click action */}
+                  {app.appointmentStatus !== 'no_show' && app.appointmentStatus !== 'attended' && (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkNoShow(app)}
+                      className="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="تسجيل عدم الحضور"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">لم يحضر</span>
+                    </button>
+                  )}
+
                   {/* Edit button */}
                   <button
                     onClick={() => {
@@ -229,6 +325,15 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
                     title="تعديل الموعد"
                   >
                     <Edit2 className="w-4 h-4" />
+                  </button>
+
+                  {/* Section 18: 2-Step Removal / Cancellation Trigger */}
+                  <button
+                    onClick={() => setAppointmentToCancel(app)}
+                    className="p-2 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-400 hover:text-rose-600 rounded-xl transition cursor-pointer"
+                    title="إلغاء الموعد"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -283,6 +388,54 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
         </div>
       )}
 
+      {/* Section 18: Two-Step Removal Confirmation Dialog */}
+      {appointmentToCancel && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 text-right">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center border border-rose-200">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 font-['Tajawal',sans-serif]">
+                تأكيد إلغاء موعد المتابعة
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              هل أنت متأكد من رغبتك في إلغاء موعد إعادة الكشف للمريض{' '}
+              <strong className="text-slate-900">{appointmentToCancel.patientName}</strong>؟
+            </p>
+
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+              <div>
+                <strong>تاريخ الموعد:</strong> {appointmentToCancel.appointmentDate} الساعة {appointmentToCancel.appointmentTime}
+              </div>
+              <div className="text-[11px] text-emerald-700 pt-1 border-t border-slate-200 font-bold">
+                ✓ لن يتم حذف المريض أو ملفه الطبي أو كشوفاته السابقة. يتم فقط تحويل حالة هذا الموعد إلى "ملغي" وإخراجه من القائمة النشطة.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setAppointmentToCancel(null)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                تراجع
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancellation}
+                disabled={isCancelling}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition cursor-pointer disabled:opacity-50"
+              >
+                {isCancelling ? 'جاري الإلغاء...' : 'تأكيد الإلغاء'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Form */}
       <CreateFollowUpModal
         isOpen={isModalOpen}
@@ -301,3 +454,4 @@ export const DoctorFollowUpManager: React.FC<DoctorFollowUpManagerProps> = ({
     </div>
   );
 };
+

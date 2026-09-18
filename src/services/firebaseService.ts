@@ -983,9 +983,20 @@ export async function bookPatient(
     };
   });
 
-  // Record rate limiting timestamp ONLY on successful transaction completion
+    // Record rate limiting timestamp ONLY on successful transaction completion
   if (!transactionResult.isExisting) {
     recordBookingSuccess(normalizedPhone);
+
+    // Update active daily session metrics at write time
+    try {
+      const sessionRef = doc(db, "doctors", doctorId, "dailySessions", today);
+      await updateDoc(sessionRef, {
+        patientsCount: increment(1),
+        waitingCount: increment(1)
+      });
+    } catch {
+      // Non-blocking if session doc not yet created
+    }
 
     // Link visit to Patient Medical File
     try {
@@ -1024,28 +1035,49 @@ export async function bookPatient(
   };
 }
 
-// Live Queue Listener for Doctor Dashboard
+// Live Queue Listener for Doctor Dashboard (strictly scoped to active session date)
 export function subscribeToDoctorQueue(
   doctorId: string,
-  callback: (patients: PatientRecord[]) => void
-) {
-  const today = getTodayDateString();
+  sessionDateOrCallback: string | ((patients: PatientRecord[]) => void),
+  optionalCallback?: (patients: PatientRecord[]) => void
+): () => void {
+  let sessionDate: string;
+  let callback: (patients: PatientRecord[]) => void;
+
+  if (typeof sessionDateOrCallback === 'function') {
+    sessionDate = getTodayDateString();
+    callback = sessionDateOrCallback;
+  } else {
+    sessionDate = sessionDateOrCallback || getTodayDateString();
+    callback = optionalCallback || (() => {});
+  }
+
+  if (!doctorId) {
+    callback([]);
+    return () => {};
+  }
+
   const q = query(
     collection(db, "queues", doctorId, "patients"),
-    where("date", "==", today)
+    where("date", "==", sessionDate)
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const list: PatientRecord[] = [];
-    snapshot.forEach((d) => {
-      list.push({ id: d.id, ...d.data() } as PatientRecord);
-    });
-    // Sort by sequence number ascending
-    list.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
-    callback(list);
-  }, (err) => {
-    console.error("Queue listener error:", err);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: PatientRecord[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() } as PatientRecord);
+      });
+      // Sort by sequence number ascending
+      list.sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+      callback(list);
+    },
+    (err) => {
+      console.error("Queue listener error:", err);
+      callback([]);
+    }
+  );
 }
 
 // Live Single Patient Ticket Listener with Dual Snapshot Sync Guard
@@ -1156,6 +1188,21 @@ export async function callNextPatient(doctorId: string): Promise<{ calledPatient
     }
   });
 
+  // Update active daily session metrics at write-time
+  try {
+    const sessionRef = doc(db, "doctors", doctorId, "dailySessions", today);
+    const sessionUpdates: Record<string, any> = {};
+    if (nextCalledPatient) {
+      sessionUpdates.inConsultationCount = increment(1);
+      sessionUpdates.waitingCount = increment(-1);
+    }
+    if (Object.keys(sessionUpdates).length > 0) {
+      await updateDoc(sessionRef, sessionUpdates);
+    }
+  } catch {
+    // Non-blocking
+  }
+
   // 3. Recalculate average consultation time in background
   recalculateDoctorAvgConsultTime(doctorId).catch(console.error);
 
@@ -1176,6 +1223,30 @@ export async function updatePatientStatus(
   if (newStatus === 'cancelled') updates.cancelledAt = nowIso;
 
   await updateDoc(doc(db, "queues", doctorId, "patients", patientId), updates);
+
+  // Write-time session aggregation for status change
+  try {
+    const today = getTodayDateString();
+    const sessionRef = doc(db, "doctors", doctorId, "dailySessions", today);
+    if (newStatus === 'cancelled') {
+      await updateDoc(sessionRef, {
+        cancelledCount: increment(1),
+        waitingCount: increment(-1)
+      });
+    } else if (newStatus === 'done') {
+      await updateDoc(sessionRef, {
+        completedCount: increment(1),
+        inConsultationCount: increment(-1)
+      });
+    } else if (newStatus === 'called') {
+      await updateDoc(sessionRef, {
+        inConsultationCount: increment(1),
+        waitingCount: increment(-1)
+      });
+    }
+  } catch {
+    // Non-blocking
+  }
 
   if (newStatus === 'done') {
     recalculateDoctorAvgConsultTime(doctorId).catch(console.error);
@@ -2698,6 +2769,37 @@ export async function createClinicTransaction(
 
   await setDoc(doc(db, `organizations/${orgId}/transactions`, txId), newTx);
 
+  // Write-time aggregation: update active daily session financial metrics
+  try {
+    const today = getTodayDateString();
+    const sessionRef = doc(db, "doctors", orgId, "dailySessions", today);
+    const snap = await getDoc(sessionRef);
+    if (snap.exists()) {
+      const sData = snap.data() as DailySession;
+      const pb = sData.paymentBreakdown || { cash: 0, card: 0, transfer: 0, other: 0 };
+      if (data.paymentMethod === 'CASH') pb.cash = (pb.cash || 0) + paidAmount;
+      else if (data.paymentMethod === 'CARD') pb.card = (pb.card || 0) + paidAmount;
+      else if (data.paymentMethod === 'BANK_TRANSFER') pb.transfer = (pb.transfer || 0) + paidAmount;
+      else pb.other = (pb.other || 0) + paidAmount;
+
+      const sb = sData.serviceBreakdown || {};
+      const sKey = newTx.serviceName || "خدمة";
+      if (!sb[sKey]) sb[sKey] = { count: 0, revenue: 0 };
+      sb[sKey].count += 1;
+      sb[sKey].revenue += paidAmount;
+
+      await updateDoc(sessionRef, {
+        totalRevenue: (sData.totalRevenue || 0) + totalAmount,
+        totalCollected: (sData.totalCollected || 0) + paidAmount,
+        outstandingBalance: (sData.outstandingBalance || 0) + remainingAmount,
+        paymentBreakdown: pb,
+        serviceBreakdown: sb
+      });
+    }
+  } catch (err) {
+    console.warn("Could not update daily session for transaction:", err);
+  }
+
   await logClinicAction({
     organizationId: orgId,
     actorUid,
@@ -2759,6 +2861,19 @@ export async function recordAdditionalPayment(
   };
 
   await updateDoc(txRef, updates);
+
+  // Write-time aggregation: update active daily session for additional collected balance
+  try {
+    const today = getTodayDateString();
+    const sessionRef = doc(db, "doctors", organizationId, "dailySessions", today);
+    await updateDoc(sessionRef, {
+      outstandingCollected: increment(additionalAmount),
+      totalCollected: increment(additionalAmount),
+      outstandingBalance: increment(-additionalAmount)
+    });
+  } catch {
+    // Non-blocking
+  }
 
   await logClinicAction({
     organizationId,

@@ -35,6 +35,7 @@ interface DailySessionManagerProps {
   currentUserId?: string;
   currentUserName?: string;
   todayPatients?: PatientRecord[];
+  onSessionChange?: (session: DailySession | null) => void;
   onShowToast?: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
@@ -45,6 +46,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
   currentUserId,
   currentUserName,
   todayPatients = [],
+  onSessionChange,
   onShowToast
 }) => {
   const today = getTodayDateString();
@@ -73,6 +75,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
     const unsubscribe = subscribeToTodayDailySession(doctorId, today, (sess) => {
       setSession(sess);
       setLoading(false);
+      onSessionChange?.(sess);
     });
     return () => unsubscribe();
   }, [doctorId, today]);
@@ -82,6 +85,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
     try {
       const newSess = await startNewDaySession(doctorId, today);
       setSession(newSess);
+      onSessionChange?.(newSess);
       if (onShowToast) {
         onShowToast('تم بدء يوم عمل جديد بنجاح', `تاريخ الجلسة: ${today}`, 'success');
       }
@@ -215,7 +219,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
             <button
               type="button"
               onClick={handleOpenArchive}
-              className="px-3.5 py-2 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 min-h-[40px] rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <Archive className="w-4 h-4 text-slate-500" />
               <span>أرشيف الأيام السابقة</span>
@@ -226,7 +230,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
               <button
                 type="button"
                 onClick={handleStartDay}
-                className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl text-xs sm:text-sm font-extrabold transition shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer"
+                className="px-4 sm:px-5 py-2 sm:py-2.5 min-h-[40px] bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl text-xs sm:text-sm font-extrabold transition shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer active:scale-95"
               >
                 <Play className="w-4 h-4" />
                 <span>بدء يوم عمل جديد</span>
@@ -238,82 +242,83 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
               <button
                 type="button"
                 onClick={() => setShowCompleteModal(true)}
-                className="px-4 py-2.5 bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-white rounded-2xl text-xs sm:text-sm font-extrabold transition shadow-md shadow-slate-900/20 flex items-center gap-2 cursor-pointer"
+                className="px-3.5 sm:px-4 py-2 sm:py-2.5 min-h-[40px] bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-white rounded-2xl text-xs sm:text-sm font-extrabold transition shadow-md shadow-slate-900/20 flex items-center gap-2 cursor-pointer active:scale-95"
               >
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>إنهاء اليوم وحفظ التقرير (Complete Day)</span>
+                <span className="hidden sm:inline">إنهاء اليوم وحفظ التقرير (Complete Day)</span>
+                <span className="sm:hidden">إنهاء اليوم</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Real-time KPI Counters Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 sm:gap-3 mt-5 pt-4 border-t border-slate-100">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-2.5 lg:gap-3 mt-4 sm:mt-5 pt-4 border-t border-slate-100">
           
-          {/* Total Patients */}
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
+          {/* Total Patients (Indigo #6366F1: patients, visits, primary operational statistics) */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
             <span className="text-[11px] text-slate-500 font-bold block mb-1">إجمالي الحالات</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-black text-slate-900 font-mono">{totalPatientsCount}</span>
-              <span className="text-[10px] text-slate-400">حالة</span>
+              <span className="text-lg sm:text-xl font-black text-[#6366F1] font-mono">{totalPatientsCount}</span>
+              <span className="text-[10px] text-indigo-400">حالة</span>
             </div>
           </div>
 
-          {/* In Waiting */}
-          <div className="bg-amber-50/60 p-3 rounded-2xl border border-amber-200/60">
-            <span className="text-[11px] text-amber-700 font-bold block mb-1">في الانتظار</span>
+          {/* In Waiting (Orange #F59E0B: pending actions, attention-required states) */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span className="text-[11px] text-slate-500 font-bold block mb-1">في الانتظار</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-black text-amber-900 font-mono">{waitingCount}</span>
-              <span className="text-[10px] text-amber-600">ينتظر</span>
+              <span className="text-lg sm:text-xl font-black text-[#F59E0B] font-mono">{waitingCount}</span>
+              <span className="text-[10px] text-amber-500">ينتظر</span>
             </div>
           </div>
 
-          {/* In Consultation */}
-          <div className="bg-sky-50/60 p-3 rounded-2xl border border-sky-200/60">
-            <span className="text-[11px] text-sky-700 font-bold block mb-1">في الكشف</span>
+          {/* In Consultation (Violet #8B5CF6: consultations, medical services, clinical activity) */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span className="text-[11px] text-slate-500 font-bold block mb-1">في الكشف</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-black text-sky-900 font-mono">{inConsultCount}</span>
-              <span className="text-[10px] text-sky-600">حالة</span>
+              <span className="text-lg sm:text-xl font-black text-[#8B5CF6] font-mono">{inConsultCount}</span>
+              <span className="text-[10px] text-violet-400">حالة</span>
             </div>
           </div>
 
-          {/* Completed */}
-          <div className="bg-emerald-50/60 p-3 rounded-2xl border border-emerald-200/60">
-            <span className="text-[11px] text-emerald-700 font-bold block mb-1">تم الكشف</span>
+          {/* Completed (Violet #8B5CF6: consultations, medical services, clinical activity) */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span className="text-[11px] text-slate-500 font-bold block mb-1">تم الكشف</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-black text-emerald-900 font-mono">{completedCount}</span>
-              <span className="text-[10px] text-emerald-600">كشف</span>
+              <span className="text-lg sm:text-xl font-black text-[#8B5CF6] font-mono">{completedCount}</span>
+              <span className="text-[10px] text-violet-400">كشف</span>
             </div>
           </div>
 
-          {/* No Show */}
-          <div className="bg-rose-50/60 p-3 rounded-2xl border border-rose-200/60">
-            <span className="text-[11px] text-rose-700 font-bold block mb-1">لم يحضر (No-show)</span>
+          {/* No Show (Red #EF4444: negative results, critical alerts, missed visits) */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
+            <span className="text-[11px] text-slate-500 font-bold block mb-1">لم يحضر (No-show)</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-black text-rose-900 font-mono">{noShowCount}</span>
-              <span className="text-[10px] text-rose-600">تغيّب</span>
+              <span className="text-lg sm:text-xl font-black text-[#EF4444] font-mono">{noShowCount}</span>
+              <span className="text-[10px] text-rose-400">تغيّب</span>
             </div>
           </div>
 
-          {/* Total Revenue */}
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
+          {/* Total Revenue (Green #10B981: revenue, payments, collected money) */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
             <span className="text-[11px] text-slate-500 font-bold block mb-1">إيراد اليوم</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-black text-slate-900 font-mono">
+              <span className="text-lg sm:text-xl font-black text-[#10B981] font-mono">
                 {session?.totalCollected || 0}
               </span>
-              <span className="text-[10px] text-slate-400">ج.م</span>
+              <span className="text-[10px] text-emerald-500">ج.م</span>
             </div>
           </div>
 
-          {/* Outstanding */}
-          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
+          {/* Outstanding (Red #EF4444: expenses, outgoing money, negative financial results) */}
+          <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
             <span className="text-[11px] text-slate-500 font-bold block mb-1">المتبقي المطلوب</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-black text-rose-600 font-mono">
+              <span className="text-lg sm:text-xl font-black text-[#EF4444] font-mono">
                 {session?.outstandingBalance || 0}
               </span>
-              <span className="text-[10px] text-slate-400">ج.م</span>
+              <span className="text-[10px] text-rose-400">ج.م</span>
             </div>
           </div>
 
@@ -347,33 +352,33 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
 
             {/* Summary Breakdown Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                 <span className="text-slate-500 block mb-0.5">إجمالي الحالات</span>
-                <strong className="text-lg font-black text-slate-900 font-mono">{totalPatientsCount}</strong>
+                <strong className="text-lg font-black text-[#6366F1] font-mono">{totalPatientsCount}</strong>
               </div>
-              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                <span className="text-emerald-700 block mb-0.5">الكشوفات المكتملة</span>
-                <strong className="text-lg font-black text-emerald-900 font-mono">{completedCount}</strong>
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-slate-500 block mb-0.5">الكشوفات المكتملة</span>
+                <strong className="text-lg font-black text-[#8B5CF6] font-mono">{completedCount}</strong>
               </div>
-              <div className="bg-rose-50 p-3 rounded-xl border border-rose-200">
-                <span className="text-rose-700 block mb-0.5">المرضى المتغيبين</span>
-                <strong className="text-lg font-black text-rose-900 font-mono">{noShowCount}</strong>
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-slate-500 block mb-0.5">المرضى المتغيبين</span>
+                <strong className="text-lg font-black text-[#EF4444] font-mono">{noShowCount}</strong>
               </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                 <span className="text-slate-500 block mb-0.5">إجمالي الإيرادات</span>
-                <strong className="text-lg font-black text-slate-900 font-mono">
+                <strong className="text-lg font-black text-[#10B981] font-mono">
                   {session?.totalRevenue || 0} ج.م
                 </strong>
               </div>
-              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                <span className="text-emerald-700 block mb-0.5">المحصل نقدًا وبطاقات</span>
-                <strong className="text-lg font-black text-emerald-900 font-mono">
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-slate-500 block mb-0.5">المحصل نقدًا وبطاقات</span>
+                <strong className="text-lg font-black text-[#10B981] font-mono">
                   {session?.totalCollected || 0} ج.م
                 </strong>
               </div>
-              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
-                <span className="text-amber-700 block mb-0.5">المتبقي على الحسابات</span>
-                <strong className="text-lg font-black text-amber-900 font-mono">
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-slate-500 block mb-0.5">المتبقي على الحسابات</span>
+                <strong className="text-lg font-black text-[#EF4444] font-mono">
                   {session?.outstandingBalance || 0} ج.م
                 </strong>
               </div>
@@ -469,27 +474,27 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center font-mono pt-2 border-t border-slate-200">
-                      <div className="bg-white p-2 rounded-xl border border-slate-200">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
                         <span className="text-slate-500 block text-[10px]">إجمالي الحالات</span>
-                        <strong className="text-slate-900 text-sm">
+                        <strong className="text-[#6366F1] text-sm">
                           {selectedArchivedDay.session?.patientsCount || selectedArchivedDay.patients.length}
                         </strong>
                       </div>
-                      <div className="bg-white p-2 rounded-xl border border-slate-200">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
                         <span className="text-slate-500 block text-[10px]">الكشوفات المكتملة</span>
-                        <strong className="text-emerald-700 text-sm">
+                        <strong className="text-[#8B5CF6] text-sm">
                           {selectedArchivedDay.session?.completedCount || 0}
                         </strong>
                       </div>
-                      <div className="bg-white p-2 rounded-xl border border-slate-200">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
                         <span className="text-slate-500 block text-[10px]">الإيراد المحصل</span>
-                        <strong className="text-slate-900 text-sm">
+                        <strong className="text-[#10B981] text-sm">
                           {selectedArchivedDay.session?.totalCollected || 0} ج.م
                         </strong>
                       </div>
-                      <div className="bg-white p-2 rounded-xl border border-slate-200">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
                         <span className="text-slate-500 block text-[10px]">المتبقي المطلوب</span>
-                        <strong className="text-rose-600 text-sm">
+                        <strong className="text-[#EF4444] text-sm">
                           {selectedArchivedDay.session?.outstandingBalance || 0} ج.م
                         </strong>
                       </div>
@@ -515,10 +520,10 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                           <span
                             className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
                               p.status === 'done'
-                                ? 'bg-emerald-50 text-emerald-700'
+                                ? 'bg-violet-50 text-violet-700 border border-violet-200'
                                 : p.status === 'no_show'
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-slate-100 text-slate-600'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
                             }`}
                           >
                             {p.status === 'done' ? 'تم الكشف' : p.status === 'no_show' ? 'لم يحضر' : p.status}

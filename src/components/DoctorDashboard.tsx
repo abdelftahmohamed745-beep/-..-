@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 import { TVQueueDisplay } from './TVQueueDisplay';
-import { DoctorProfile, PatientRecord, PatientStatus, DoctorRating, FollowUpAppointment, ClinicMember } from '../types';
+import { DoctorProfile, PatientRecord, PatientStatus, DoctorRating, FollowUpAppointment, ClinicMember, DailySession } from '../types';
 import {
   subscribeToDoctorQueue,
   callNextPatient,
@@ -37,7 +37,8 @@ import {
   getDoctorRatings,
   recalculateDoctorRatingStats,
   getUserClinicMember,
-  markQueuePatientNoShow
+  markQueuePatientNoShow,
+  getTodayDateString
 } from '../services/firebaseService';
 import { playTurnNotificationSound, speakText } from '../utils/audio';
 import { DoctorFollowUpManager } from './DoctorFollowUpManager';
@@ -138,16 +139,20 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
     : (doctor.ratingAverage ? Number(doctor.ratingAverage).toFixed(1) : "0.0");
   const activeRatingCount = doctorRatings.length > 0 ? doctorRatings.length : (doctor.ratingCount || 0);
 
-  // Real-time Firestore Queue Subscription
+  // Active Daily Session Context
+  const [activeDailySession, setActiveDailySession] = useState<DailySession | null>(null);
+
+  // Real-time Firestore Queue Subscription (strictly scoped to active session date)
   useEffect(() => {
     setLoading(true);
-    const unsubscribe = subscribeToDoctorQueue(doctor.uid, (data) => {
+    const sessionDate = activeDailySession?.date || getTodayDateString();
+    const unsubscribe = subscribeToDoctorQueue(doctor.uid, sessionDate, (data) => {
       setPatients(data);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [doctor.uid]);
+  }, [doctor.uid, activeDailySession?.date]);
 
   // Derived Statistics
   const waitingPatients = patients.filter(p => p.status === 'waiting');
@@ -171,6 +176,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
   // Call Next Patient
   const handleCallNext = async () => {
+    if (activeDailySession?.status === 'completed') {
+      onShowToast("يوم العمل مكتمل", "تم إنهاء وتوثيق هذا اليوم، لبدء طابور جديد يرجى بدء يوم عمل جديد.", "warning");
+      return;
+    }
+
     if (waitingPatients.length === 0 && !calledPatient) {
       onShowToast("لا يوجد مرضى في الانتظار", "الطابور فارغ حالياً", "info");
       return;
@@ -246,7 +256,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
       {/* Expired / Trial Warning Banner */}
       {doctor.subscriptionStatus === 'expired' && (
@@ -266,7 +276,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           </div>
           <button
             onClick={onNavigateSubscription}
-            className="shrink-0 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-xs"
+            className="shrink-0 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer"
           >
             تجديد الاشتراك الآن
           </button>
@@ -274,14 +284,14 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
       )}
 
       {/* Header Info & Hero Controls */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs relative overflow-hidden">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 border border-slate-200/80 shadow-xs relative overflow-hidden">
         <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-sky-400/10 via-teal-400/5 to-transparent rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6 relative z-10">
           
           {/* Clinic & Doctor Details */}
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <span className="text-xs font-bold text-sky-600 bg-sky-50 px-3 py-1 rounded-full border border-sky-200/50">
                 {doctor.specialty}
               </span>
@@ -289,10 +299,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 • {doctor.clinicName}
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 font-['Tajawal',sans-serif] tracking-tight">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 font-['Tajawal',sans-serif] tracking-tight">
               {doctor.name}
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1 flex items-center gap-3">
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 flex items-center gap-2 sm:gap-3 flex-wrap">
               <span>ساعات العمل: {doctor.workHours.open} - {doctor.workHours.close}</span>
               <span>•</span>
               <span>الحد اليومي: {doctor.workHours.maxPatientsPerDay} مريض</span>
@@ -300,27 +310,27 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           </div>
 
           {/* Call Next Patient Big Action Box */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 bg-gradient-to-b from-slate-900 to-slate-800 p-4 sm:p-5 rounded-2xl text-white shadow-lg border border-slate-700 w-full md:w-auto">
-            <div className="text-center sm:text-right flex-1 min-w-[160px]">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-900 p-3.5 sm:p-5 rounded-2xl text-white shadow-md border border-slate-800 w-full lg:w-auto">
+            <div className="text-right flex-1 min-w-[150px]">
               <div className="text-[11px] text-slate-400 font-semibold">المريض الحالي داخل العيادة:</div>
-              <div className="text-lg font-black text-amber-400 font-['Tajawal',sans-serif] truncate max-w-[200px]">
+              <div className="text-base sm:text-lg font-black text-violet-300 font-['Tajawal',sans-serif] truncate max-w-[220px]">
                 {calledPatient ? `#${calledPatient.sequenceNumber} - ${calledPatient.name}` : 'لا يوجد مريض حالياً'}
               </div>
-              <div className="text-[10px] text-slate-400">
-                المتبقي في الانتظار: {waitingPatients.length} مريض
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                المتبقي في الانتظار: <span className="text-[#F59E0B] font-bold">{waitingPatients.length}</span> مريض
               </div>
             </div>
 
             <button
               onClick={handleCallNext}
               disabled={isCallingNext || (waitingPatients.length === 0 && !calledPatient)}
-              className={`w-full sm:w-auto px-6 py-3.5 rounded-xl font-black text-sm transition shadow-md flex items-center justify-center gap-2 shrink-0 ${
+              className={`w-full sm:w-auto px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm transition shadow-sm flex items-center justify-center gap-2 shrink-0 min-h-[44px] cursor-pointer ${
                 waitingPatients.length > 0 || calledPatient
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-600 hover:to-teal-500 text-slate-950 scale-100 hover:scale-105 active:scale-95'
-                  : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
               }`}
             >
-              <Zap className="w-5 h-5 fill-current" />
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
               <span>{isCallingNext ? 'جاري الاستدعاء...' : 'استدعاء التالي'}</span>
             </button>
           </div>
@@ -328,140 +338,154 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         </div>
       </div>
 
-      {/* Stats Grid Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+      {/* Semantic Stats Grid Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5">
         
-        {/* Waiting */}
-        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
+        {/* Total Registered Patients (Indigo #6366F1: patients, visits, primary operational statistics) */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-500 font-bold">في الانتظار</div>
-            <div className="text-2xl font-black text-[#122c4a] font-['Tajawal',sans-serif] mt-1">
+            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">إجمالي الحالات اليوم</div>
+            <div className="text-xl sm:text-2xl font-black text-[#6366F1] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
+              {patients.length}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">حالة مسجلة</div>
+          </div>
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-[#6366F1] border border-indigo-100 flex items-center justify-center font-bold shrink-0">
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-[#6366F1]" />
+          </div>
+        </div>
+
+        {/* Waiting (Orange #F59E0B: pending actions, attention-required states) */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+          <div>
+            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">في الانتظار</div>
+            <div className="text-xl sm:text-2xl font-black text-[#F59E0B] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
               {waitingPatients.length}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">جاهزون للدخول</div>
+            <div className="text-[10px] text-amber-600 mt-0.5 font-medium">جاهزون للدخول</div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold">
-            <Users className="w-5 h-5 text-[#1b3a5c]" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-[#F59E0B] border border-amber-100 flex items-center justify-center font-bold shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#F59E0B]" />
           </div>
         </div>
 
-        {/* Called */}
-        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
+        {/* In Consultation (Violet #8B5CF6: consultations, medical services, clinical activity) */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-500 font-bold">في الكشف الآن</div>
-            <div className="text-2xl font-black text-amber-600 font-['Tajawal',sans-serif] mt-1">
-              {calledPatient ? `#${calledPatient.sequenceNumber}` : '0'}
+            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">في الكشف الآن</div>
+            <div className="text-xl sm:text-2xl font-black text-[#8B5CF6] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
+              {calledPatient ? `#${calledPatient.sequenceNumber}` : '—'}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">داخل الغرفة</div>
+            <div className="text-[10px] text-violet-600 mt-0.5 font-medium">داخل الغرفة</div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-            <UserCheck className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-50 text-[#8B5CF6] border border-violet-100 flex items-center justify-center font-bold shrink-0">
+            <UserCheck className="w-4 h-4 sm:w-5 sm:h-5 text-[#8B5CF6]" />
           </div>
         </div>
 
-        {/* Done */}
-        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
+        {/* Done / Completed (Violet #8B5CF6: consultations, medical services, clinical activity) */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-500 font-bold">تم الكشف اليوم</div>
-            <div className="text-2xl font-black text-emerald-600 font-['Tajawal',sans-serif] mt-1">
+            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">تم الكشف اليوم</div>
+            <div className="text-xl sm:text-2xl font-black text-[#8B5CF6] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
               {donePatients.length}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">حالات مكتملة</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">كشوفات مكتملة</div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-            <CheckCircle2 className="w-5 h-5" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-50 text-[#8B5CF6] border border-violet-100 flex items-center justify-center font-bold shrink-0">
+            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-[#8B5CF6]" />
           </div>
         </div>
 
-        {/* Avg Consult Time (Live Auto Calculated) */}
-        <div className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between">
+        {/* Avg Consult Time (Blue #0EA5E9: informational and secondary statistics) */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-500 font-bold">متوسط وقت الكشف</div>
-            <div className="text-2xl font-black text-slate-900 font-['Tajawal',sans-serif] mt-1">
+            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">متوسط وقت الكشف</div>
+            <div className="text-xl sm:text-2xl font-black text-[#0EA5E9] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
               {doctor.avgConsultTime} دقيقة
             </div>
-            <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
-              محسوبة تلقائياً من الكشوفات
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              محسوب تلقائياً
             </div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-[#f4efe6] text-[#122c4a] flex items-center justify-center font-bold">
-            <Clock className="w-5 h-5 text-[#1b3a5c]" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-[#0EA5E9] border border-sky-100 flex items-center justify-center font-bold shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#0EA5E9]" />
           </div>
         </div>
 
-        {/* Doctor Rating Card */}
+        {/* Doctor Rating Card (Blue #0EA5E9: informational and secondary statistics) */}
         <button
           onClick={() => setShowReviewsModal(true)}
-          className="bg-[#fdfcf9] p-5 rounded-2xl border border-[#e7e3da] shadow-2xs flex items-center justify-between hover:border-[#122c4a]/40 transition text-right group cursor-pointer"
+          className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between hover:border-sky-300 transition text-right group cursor-pointer col-span-2 sm:col-span-1"
         >
           <div>
-            <div className="text-xs text-[#122c4a] font-bold flex items-center gap-1">
+            <div className="text-[11px] sm:text-xs text-slate-600 font-bold flex items-center gap-1">
               <span>تقييم العيادة</span>
-              <span className="text-[10px] text-[#1b3a5c] underline group-hover:text-[#122c4a]">(عرض)</span>
+              <span className="text-[10px] text-sky-600 underline group-hover:text-sky-800">(عرض)</span>
             </div>
-            <div className="text-2xl font-black text-[#122c4a] font-['Tajawal',sans-serif] mt-1 flex items-center gap-1 dir-ltr">
-              <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+            <div className="text-xl sm:text-2xl font-black text-[#0EA5E9] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1 flex items-center gap-1 dir-ltr">
+              <Star className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 fill-amber-500" />
               <span>{activeRatingAvg}</span>
             </div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-              {activeRatingCount} تقييم مريض
+            <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+              {activeRatingCount} تقييم
             </div>
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold shadow-2xs border border-[#d1dfed]">
-            <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-[#0EA5E9] border border-sky-100 flex items-center justify-center font-bold shadow-2xs shrink-0">
+            <Star className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 fill-amber-500" />
           </div>
         </button>
 
       </div>
 
       {/* Section Navigation Tabs */}
-      <div className="flex items-center gap-2 bg-[#f4efe6] p-1.5 rounded-2xl max-w-2xl overflow-x-auto">
+      <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-100/90 p-1.5 rounded-2xl w-full sm:max-w-2xl overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveSection('queue')}
-          className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-w-[95px] sm:min-w-[110px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[40px] whitespace-nowrap ${
             activeSection === 'queue'
               ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-4 h-4 text-sky-300" />
+          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-300" />
           <span>طابور اليوم ({patients.length})</span>
         </button>
 
         <button
           onClick={() => setActiveSection('followups')}
-          className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-w-[95px] sm:min-w-[110px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[40px] whitespace-nowrap ${
             activeSection === 'followups'
               ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Calendar className="w-4 h-4 text-sky-300" />
+          <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-300" />
           <span>إعادة الكشف</span>
         </button>
 
         <button
           onClick={() => setActiveSection('team')}
-          className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-w-[95px] sm:min-w-[110px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[40px] whitespace-nowrap ${
             activeSection === 'team'
               ? 'bg-[#122c4a] text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-4 h-4 text-sky-300" />
+          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-300" />
           <span>فريق العمل</span>
         </button>
 
         {hasPermission(currentMember, 'VIEW_FINANCE', isDoctorOwnerFallback) && (
           <button
             onClick={() => setActiveSection('finance')}
-            className={`flex-1 min-w-[110px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 min-w-[95px] sm:min-w-[110px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer min-h-[40px] whitespace-nowrap ${
               activeSection === 'finance'
                 ? 'bg-[#122c4a] text-white shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <DollarSign className="w-4 h-4 text-emerald-400" />
+            <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
             <span>المالية</span>
           </button>
         )}
@@ -503,62 +527,63 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             currentUserId={currentMember?.uid || doctor.uid}
             currentUserName={currentMember?.name || doctor.name}
             todayPatients={patients}
+            onSessionChange={setActiveDailySession}
             onShowToast={onShowToast}
           />
 
-          <div className="bg-[#fdfcf9] rounded-3xl border border-[#e7e3da] shadow-2xs overflow-hidden">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           
           {/* Controls Toolbar */}
-          <div className="p-4 sm:p-6 border-b border-[#f0ebe1] bg-[#faf8f5] flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="p-3.5 sm:p-5 border-b border-slate-100 bg-slate-50/60 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 sm:gap-4">
             
             {/* Status Filter Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full xl:w-auto pb-1 xl:pb-0 scrollbar-none">
               <button
                 onClick={() => setFilterStatus('all')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer min-h-[36px] ${
                   filterStatus === 'all'
-                    ? 'bg-[#122c4a] text-white shadow-2xs'
-                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
                 }`}
               >
                 الكل ({patients.length})
               </button>
               <button
                 onClick={() => setFilterStatus('waiting')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer min-h-[36px] ${
                   filterStatus === 'waiting'
-                    ? 'bg-[#122c4a] text-white shadow-2xs'
-                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                    ? 'bg-[#F59E0B] text-white shadow-2xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
                 }`}
               >
                 في الانتظار ({waitingPatients.length})
               </button>
               <button
                 onClick={() => setFilterStatus('called')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer min-h-[36px] ${
                   filterStatus === 'called'
-                    ? 'bg-amber-600 text-white shadow-2xs'
-                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                    ? 'bg-[#8B5CF6] text-white shadow-2xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
                 }`}
               >
                 في الكشف ({calledPatient ? 1 : 0})
               </button>
               <button
                 onClick={() => setFilterStatus('done')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer min-h-[36px] ${
                   filterStatus === 'done'
-                    ? 'bg-emerald-600 text-white shadow-2xs'
-                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                    ? 'bg-violet-700 text-white shadow-2xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
                 }`}
               >
                 مكتمل ({donePatients.length})
               </button>
               <button
                 onClick={() => setFilterStatus('cancelled')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition shrink-0 cursor-pointer min-h-[36px] ${
                   filterStatus === 'cancelled'
-                    ? 'bg-rose-600 text-white shadow-2xs'
-                    : 'bg-[#fdfcf9] text-slate-600 hover:bg-[#f4efe6] border border-[#e7e3da]'
+                    ? 'bg-slate-600 text-white shadow-2xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
                 }`}
               >
                 ملغي ({cancelledPatients.length})
@@ -566,33 +591,33 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
 
             {/* Action Tools & Search */}
-            <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto">
               {/* Search Input */}
-              <div className="relative flex-1 md:w-64">
-                <Search className="w-4 h-4 text-[#1b3a5c] absolute right-3 top-2.5" />
+              <div className="relative flex-1 sm:w-64 min-w-[140px]">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="بحث بالموبايل أو الاسم أو الدور..."
-                  className="w-full pl-3 pr-9 py-2 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
+                  className="w-full pl-3 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500 min-h-[38px]"
                 />
               </div>
 
               {/* TV Queue Display */}
               <button
                 onClick={() => setShowTVQueue(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer min-h-[38px]"
                 title="شاشة الانتظار للتلفزيون (TV Queue Display)"
               >
-                <Monitor className="w-4 h-4 text-teal-400" />
+                <Monitor className="w-4 h-4 text-sky-400" />
                 <span className="hidden sm:inline">شاشة TV</span>
               </button>
 
               {/* Quick Scanner */}
               <button
                 onClick={onOpenScannerModal}
-                className="p-2 bg-[#fdfcf9] hover:bg-[#f4efe6] text-slate-700 border border-[#e7e3da] rounded-xl transition shadow-2xs cursor-pointer"
+                className="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl transition shadow-2xs cursor-pointer min-h-[38px] flex items-center justify-center shrink-0"
                 title="ماسح الكاميرا للتذاكر"
               >
                 <QrCode className="w-4 h-4 text-[#122c4a]" />
@@ -601,7 +626,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               {/* Add Walk-In Patient with fast search & multi-payment */}
               <button
                 onClick={() => setIsFastRegistrationOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer min-h-[38px]"
               >
                 <Plus className="w-4 h-4" />
                 <span>إضافة مريض</span>
@@ -611,16 +636,16 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           </div>
 
         {/* Patients Queue List */}
-        <div className="p-4 sm:p-6">
+        <div className="p-3 sm:p-5 md:p-6">
           {loading ? (
             <div className="space-y-3 py-6">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 bg-[#f4efe6] rounded-2xl animate-pulse" />
+                <div key={i} className="h-16 bg-slate-100 rounded-2xl animate-pulse" />
               ))}
             </div>
           ) : displayedPatients.length === 0 ? (
-            <div className="text-center py-12 bg-[#faf8f5] rounded-2xl border border-dashed border-[#e7e3da]">
-              <Users className="w-12 h-12 text-[#1b3a5c]/40 mx-auto mb-3" />
+            <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4">
+              <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <h3 className="font-bold text-slate-700 text-base font-['Tajawal',sans-serif]">
                 لا يوجد مرضي في القائمة حالياً
               </h3>
@@ -629,7 +654,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               </p>
               <button
                 onClick={onOpenQRModal}
-                className="mt-4 px-4 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-semibold text-xs rounded-xl transition cursor-pointer"
+                className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition cursor-pointer min-h-[40px]"
               >
                 عرض رمز QR للطباعة
               </button>
@@ -649,39 +674,39 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 ${
                         isCalled
-                          ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/20 shadow-xs'
+                          ? 'bg-violet-50/40 border-violet-200 ring-2 ring-violet-300/30 shadow-xs'
                           : isWaiting
-                          ? 'bg-[#fdfcf9] border-[#e7e3da] hover:border-[#122c4a]/50 shadow-2xs'
+                          ? 'bg-white border-slate-200/80 hover:border-amber-300 shadow-2xs'
                           : isDone
-                          ? 'bg-[#f8f6f0] border-[#e7e3da] opacity-80'
-                          : 'bg-rose-50/30 border-rose-200/60 opacity-60'
+                          ? 'bg-white border-slate-200/60 opacity-85'
+                          : 'bg-slate-50/80 border-slate-200 opacity-60'
                       }`}
                     >
                       {/* Left side info */}
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 w-full lg:w-auto">
                         
                         {/* Sequence Badge */}
-                        <div className={`w-12 h-12 rounded-2xl font-black text-lg flex items-center justify-center shrink-0 shadow-2xs font-['Tajawal',sans-serif] ${
-                          isCalled ? 'bg-amber-500 text-slate-950 animate-pulse' :
-                          isWaiting ? 'bg-[#122c4a] text-white' :
-                          isDone ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-600'
+                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl font-black text-base sm:text-lg flex items-center justify-center shrink-0 shadow-2xs font-['Tajawal',sans-serif] ${
+                          isCalled ? 'bg-[#8B5CF6] text-white animate-pulse' :
+                          isWaiting ? 'bg-[#F59E0B] text-white' :
+                          isDone ? 'bg-[#8B5CF6]/90 text-white' : 'bg-slate-400 text-white'
                         }`}>
                           #{patient.sequenceNumber}
                         </div>
 
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-slate-900 text-sm sm:text-base font-['Tajawal',sans-serif]">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-slate-900 text-sm sm:text-base font-['Tajawal',sans-serif] truncate max-w-[200px] sm:max-w-none">
                               {patient.name}
                             </h4>
 
                             {/* Status Badge */}
                             <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
-                              isCalled ? 'bg-amber-100 text-amber-900 border border-amber-300' :
-                              isWaiting ? 'bg-sky-100 text-sky-800' :
-                              isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                              isCalled ? 'bg-violet-100 text-violet-800 border border-violet-200' :
+                              isWaiting ? 'bg-amber-100 text-amber-900 border border-amber-200' :
+                              isDone ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
                             }`}>
                               {isCalled ? 'داخل الكشف الآن' :
                                isWaiting ? 'في الانتظار' :
@@ -689,7 +714,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                          <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500 mt-1 flex-wrap">
                             <span className="flex items-center gap-1 font-mono dir-ltr">
                               <Phone className="w-3 h-3 text-slate-400" />
                               {patient.phone}
@@ -704,11 +729,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                       </div>
 
                       {/* Right side actions */}
-                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-0 pt-2 sm:pt-0 border-slate-100">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto justify-start lg:justify-end border-t lg:border-0 pt-2.5 lg:pt-0 border-slate-100">
                         {isWaiting && (
                           <button
                             onClick={() => handleStatusChange(patient, 'called')}
-                            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shadow-2xs flex items-center gap-1"
+                            className="px-3 sm:px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shadow-2xs flex items-center gap-1 min-h-[36px] active:scale-95 cursor-pointer"
                           >
                             <Volume2 className="w-3.5 h-3.5" />
                             <span>استدعاء</span>
@@ -718,7 +743,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                         {(isWaiting || isCalled) && (
                           <button
                             onClick={() => handleStatusChange(patient, 'done')}
-                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow-2xs flex items-center gap-1"
+                            className="px-3 sm:px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow-2xs flex items-center gap-1 min-h-[36px] active:scale-95 cursor-pointer"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>تم الكشف</span>
@@ -728,7 +753,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                         {(isWaiting || isCalled) && (
                           <button
                             onClick={() => handleStatusChange(patient, 'cancelled')}
-                            className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                            className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center cursor-pointer"
                             title="إلغاء حجز المريض"
                           >
                             <XCircle className="w-4 h-4" />
@@ -738,7 +763,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                         {(isDone || isCancelled) && (
                           <button
                             onClick={() => handleStatusChange(patient, 'waiting')}
-                            className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition min-h-[36px] cursor-pointer"
                           >
                             إعادة للطابور
                           </button>
@@ -747,7 +772,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                         {/* Doctor Consultation Workspace Modal (Section 12, 13, 14, 15) */}
                         <button
                           onClick={() => setSelectedPatientForConsultation(patient)}
-                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer min-h-[36px] active:scale-95"
                           title="بدء الكشف وحفظ السجل الطبي"
                         >
                           <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
@@ -757,7 +782,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                         {/* Quick Follow Up Appointment Registration */}
                         <button
                           onClick={() => setQuickFollowUpPatient({ name: patient.name, phone: patient.phone })}
-                          className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer min-h-[36px] active:scale-95"
                           title="حجز موعد إعادة كشف للمريض"
                         >
                           <Calendar className="w-3.5 h-3.5 text-sky-600" />
@@ -771,7 +796,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                               setSelectedPatientForPayment(patient);
                               setActiveSection('finance');
                             }}
-                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer min-h-[36px] active:scale-95"
                             title="تسجيل دفع رسوم الكشف"
                           >
                             <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
@@ -790,7 +815,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                                 onShowToast('فشل التحديث', err?.message, 'error');
                               }
                             }}
-                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
                             title="لم يحضر (No-show)"
                           >
                             <UserX className="w-4 h-4" />

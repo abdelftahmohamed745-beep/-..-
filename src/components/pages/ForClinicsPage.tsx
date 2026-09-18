@@ -17,7 +17,7 @@ import { setPageSeo, FOR_CLINICS_PAGE_SEO } from '../../utils/seo';
 
 interface ForClinicsPageProps {
   onNavigate: (tab: any, options?: any) => void;
-  onNavigateAuth: (accountType?: 'doctor' | 'laboratory') => void;
+  onNavigateAuth: () => void;
 }
 
 export const ForClinicsPage: React.FC<ForClinicsPageProps> = ({ onNavigate, onNavigateAuth }) => {
@@ -46,7 +46,7 @@ export const ForClinicsPage: React.FC<ForClinicsPageProps> = ({ onNavigate, onNa
 
         <div className="pt-2 flex items-center justify-center gap-3">
           <button
-            onClick={() => onNavigateAuth('doctor')}
+            onClick={() => onNavigateAuth()}
             className="px-6 py-3 bg-[#1c5242] hover:bg-[#143d30] text-white rounded-xl text-xs sm:text-sm font-bold shadow-2xs cursor-pointer transition flex items-center gap-2"
           >
             <Stethoscope className="w-4 h-4 text-emerald-200" />
@@ -170,13 +170,13 @@ export const ForClinicsPage: React.FC<ForClinicsPageProps> = ({ onNavigate, onNa
         <div className="flex items-center gap-4 text-xs text-slate-600">
           <button onClick={() => onNavigate('faq')} className="hover:underline font-bold">الأسئلة الشائعة</button>
           <span>•</span>
-          <button onClick={() => onNavigate('for-labs')} className="hover:underline font-bold">حلول المعامل والمختبرات</button>
+          <button onClick={() => onNavigate('about')} className="hover:underline font-bold">عن النظام</button>
           <span>•</span>
           <button onClick={() => onNavigate('privacy')} className="hover:underline font-bold">الخصوصية والأمان</button>
         </div>
 
         <button
-          onClick={() => onNavigateAuth('doctor')}
+          onClick={() => onNavigateAuth()}
           className="px-6 py-3 bg-[#1c5242] hover:bg-[#143d30] text-white rounded-xl text-xs sm:text-sm font-bold shadow-2xs cursor-pointer transition flex items-center gap-2"
         >
           <span>تسجيل حساب طبيب مجاناً</span>

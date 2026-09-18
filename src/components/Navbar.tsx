@@ -1,5 +1,5 @@
 import React from 'react';
-import { Stethoscope, QrCode, CreditCard, Settings, LogOut, UserCheck, ExternalLink, Building2, ShieldAlert, Bell, TestTube } from 'lucide-react';
+import { Stethoscope, QrCode, CreditCard, Settings, LogOut, UserCheck, ExternalLink, Building2, ShieldAlert, Bell } from 'lucide-react';
 import { DoctorProfile } from '../types';
 
 export type NavTabType =
@@ -12,15 +12,11 @@ export type NavTabType =
   | 'admin'
   | 'about'
   | 'for-clinics'
-  | 'for-labs'
   | 'for-patients'
   | 'faq'
   | 'privacy'
   // Deprecated legacy tabs preserved for routing backward compatibility
-  | 'directory'
-  | 'lab_dashboard'
-  | 'lab_public'
-  | 'lab_result';
+  | 'directory';
 
 interface NavbarProps {
   currentDoctor: DoctorProfile | null;
@@ -45,8 +41,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNotificationModal,
   onSignOut
 }) => {
-  const isLabAccount = currentDoctor?.accountType === 'laboratory';
-
   return (
     <header className="sticky top-0 z-40 bg-[#fdfcf9]/95 backdrop-blur-md border-b border-[#e7e3da] shadow-2xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -81,17 +75,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <nav className="hidden md:flex items-center gap-1">
               {currentDoctor && (
                 <button
-                  onClick={() => onNavigate(isLabAccount ? 'lab_dashboard' : 'dashboard')}
+                  onClick={() => onNavigate('dashboard')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                    activeTab === 'dashboard' || activeTab === 'lab_dashboard'
-                      ? isLabAccount
-                        ? 'bg-[#122c4a] text-white shadow-2xs'
-                        : 'bg-[#122c4a] text-white shadow-2xs'
+                    activeTab === 'dashboard'
+                      ? 'bg-[#122c4a] text-white shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-[#f4efe6]'
                   }`}
                 >
-                  {isLabAccount ? <TestTube className="w-4 h-4 text-sky-300" /> : <Stethoscope className="w-4 h-4 text-emerald-300" />}
-                  <span>{isLabAccount ? 'لوحة تحكم معملي' : 'لوحة تشغيل العيادة'}</span>
+                  <Stethoscope className="w-4 h-4 text-emerald-300" />
+                  <span>لوحة تشغيل العيادة</span>
                 </button>
               )}
 
@@ -170,39 +162,23 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 {/* Patient View Preview Button */}
                 <button
-                  onClick={() => {
-                    if (currentDoctor?.accountType === 'laboratory') {
-                      onNavigate('lab_public');
-                    } else {
-                      onNavigate('booking');
-                    }
-                  }}
+                  onClick={() => onNavigate('booking')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-                    activeTab === 'booking' || activeTab === 'lab_public'
+                    activeTab === 'booking'
                       ? 'bg-[#122c4a] text-white'
                       : 'bg-[#edf3fa] text-[#1b3a5c] hover:bg-[#dce7f3]'
                   }`}
-                  title={
-                    currentDoctor?.accountType === 'laboratory'
-                      ? "معاينة صفحة المعمل العامة كأنك قمت بمسح QR Code"
-                      : "معاينة صفحة حجز المريض كأنك قمت بمسح QR Code"
-                  }
+                  title="معاينة صفحة حجز المريض كأنك قمت بمسح QR Code"
                 >
                   <ExternalLink className="w-4 h-4 text-sky-600" />
-                  <span className="hidden sm:inline">
-                    {currentDoctor?.accountType === 'laboratory' ? "معاينة صفحة المعمل" : "معاينة صفحة الحجز"}
-                  </span>
+                  <span className="hidden sm:inline">معاينة صفحة الحجز</span>
                 </button>
 
                 {/* QR Code Action */}
                 <button
                   onClick={onOpenQRModal}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[#122c4a] hover:bg-[#0d223a] text-white rounded-xl text-xs sm:text-sm font-bold shadow-2xs transition cursor-pointer"
-                  title={
-                    currentDoctor?.accountType === 'laboratory'
-                      ? "عرض وطباعة QR Code المعمل"
-                      : "عرض وطباعة QR Code العيادة"
-                  }
+                  title="عرض وطباعة QR Code العيادة"
                 >
                   <QrCode className="w-4 h-4 text-sky-300" />
                   <span className="hidden sm:inline">رمز QR</span>

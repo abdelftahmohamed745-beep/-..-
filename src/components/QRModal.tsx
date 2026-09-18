@@ -21,10 +21,7 @@ export const QRModal: React.FC<QRModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isLab = doctor.accountType === 'laboratory';
-  const bookingUrl = isLab
-    ? `${window.location.origin}/lab/${doctor.uid}`
-    : `${window.location.origin}/clinic/${doctor.uid}/book`;
+  const bookingUrl = `${window.location.origin}/clinic/${doctor.uid}/book`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(bookingUrl);
@@ -57,9 +54,7 @@ export const QRModal: React.FC<QRModalProps> = ({
         const pngUrl = canvas.toDataURL('image/png');
         const downloadLink = document.createElement('a');
         downloadLink.href = pngUrl;
-        downloadLink.download = isLab
-          ? `QR-Dawry-Lab-${doctor.clinicName.replace(/\s+/g, '-')}.png`
-          : `QR-Dawry-${doctor.name.replace(/\s+/g, '-')}.png`;
+        downloadLink.download = `QR-Dawry-${doctor.name.replace(/\s+/g, '-')}.png`;
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
@@ -71,54 +66,44 @@ export const QRModal: React.FC<QRModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-      <div className="relative bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative bg-[#fdfcf9] rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-[#e7e3da] text-center animate-in fade-in zoom-in-95 duration-200">
         
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 left-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
+          className="absolute top-4 left-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
         <div className="flex justify-center mb-3">
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
-            isLab ? 'bg-teal-50 text-teal-700' : 'bg-sky-50 text-sky-600'
-          }`}>
-            <QrCode className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#eef7f4] text-[#143d30] border border-[#c4e5db]">
+            <QrCode className="w-6 h-6 text-[#1c5242]" />
           </div>
         </div>
 
         <h3 className="text-xl font-bold text-slate-900 font-['Tajawal',sans-serif]">
-          {isLab ? 'رمز QR الخاص بالمختبر' : 'رمز QR الخاص بالعيادة'}
+          رمز QR الخاص بالعيادة
         </h3>
         <p className="text-xs text-slate-500 mt-1">
-          {isLab
-            ? 'اطبع هذا الرمز وضعه في المعمل ليتمكن المرضى من مسحه واستعراض دليل الفحوصات والطلب فورًا'
-            : 'اطبع هذا الرمز وضعه في صالة الانتظار ليتمكن المرضى من مسحه وحجز دورهم فورًا'}
+          اطبع هذا الرمز وضعه في صالة الانتظار ليتمكن المرضى من مسحه وحجز دورهم فورًا
         </p>
 
         {/* Printable Poster Container */}
-        <div className={`mt-6 p-6 rounded-2xl border shadow-xs flex flex-col items-center ${
-          isLab
-            ? 'bg-gradient-to-b from-slate-50 to-teal-50/50 border-teal-200/80'
-            : 'bg-gradient-to-b from-slate-50 to-sky-50/50 border-slate-200/80'
-        }`} id="printable-qr-poster">
+        <div className="mt-6 p-6 rounded-2xl border border-[#c4e5db] shadow-xs flex flex-col items-center bg-[#faf8f5]" id="printable-qr-poster">
           
-          <div className={`text-xs font-bold uppercase tracking-widest mb-1 ${
-            isLab ? 'text-teal-700' : 'text-sky-600'
-          }`}>
-            {isLab ? 'نظام دوري للمختبرات الطبية' : 'نظام دوري لحجز الأدوار'}
+          <div className="text-xs font-bold uppercase tracking-widest mb-1 text-[#1c5242]">
+            نظام تشغيل العيادات — دوري
           </div>
           <div className="font-extrabold text-lg text-slate-900 font-['Tajawal',sans-serif]">
             {doctor.clinicName}
           </div>
           <div className="text-xs font-semibold text-slate-600 mb-4">
-            {isLab ? `${doctor.name} - معمل تحاليل طبية` : `${doctor.name} - ${doctor.specialty}`}
+            {doctor.name} - {doctor.specialty}
           </div>
 
           {/* QR Code Graphic */}
-          <div ref={qrRef} className="p-4 bg-white rounded-2xl shadow-md border border-slate-100">
+          <div ref={qrRef} className="p-4 bg-white rounded-2xl shadow-md border border-[#e7e3da]">
             <QRCodeSVG
               value={bookingUrl}
               size={220}
@@ -127,9 +112,9 @@ export const QRModal: React.FC<QRModalProps> = ({
             />
           </div>
 
-          <div className="mt-4 text-xs font-bold text-slate-800 bg-white px-4 py-1.5 rounded-full border border-slate-200 shadow-2xs flex items-center gap-1.5 justify-center">
-            <Smartphone className={`w-4 h-4 ${isLab ? 'text-teal-700' : 'text-sky-600'}`} />
-            <span>{isLab ? 'امسح الرمز بموبايلك للاطلاع على الفحوصات والطلب' : 'امسح الرمز بموبايلك لحجز دورك مباشرة'}</span>
+          <div className="mt-4 text-xs font-bold text-slate-800 bg-white px-4 py-1.5 rounded-full border border-[#e7e3da] shadow-2xs flex items-center gap-1.5 justify-center">
+            <Smartphone className="w-4 h-4 text-[#1c5242]" />
+            <span>امسح الرمز بموبايلك لحجز دورك مباشرة</span>
           </div>
         </div>
 
@@ -138,7 +123,7 @@ export const QRModal: React.FC<QRModalProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={handlePrint}
-              className="flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm rounded-xl transition shadow-xs"
+              className="flex items-center justify-center gap-2 py-2.5 px-4 bg-[#122c4a] hover:bg-[#0d223a] text-white font-semibold text-xs sm:text-sm rounded-xl transition shadow-xs cursor-pointer"
             >
               <Printer className="w-4 h-4 text-sky-400" />
               <span>طباعة الرمز</span>
@@ -146,7 +131,7 @@ export const QRModal: React.FC<QRModalProps> = ({
 
             <button
               onClick={handleDownloadPNG}
-              className="flex items-center justify-center gap-2 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs sm:text-sm rounded-xl transition shadow-xs"
+              className="flex items-center justify-center gap-2 py-2.5 px-4 bg-[#1c5242] hover:bg-[#143d30] text-white font-semibold text-xs sm:text-sm rounded-xl transition shadow-xs cursor-pointer"
             >
               <Download className="w-4 h-4" />
               <span>تحميل صورة PNG</span>
@@ -156,12 +141,12 @@ export const QRModal: React.FC<QRModalProps> = ({
           {/* Copy Direct Link */}
           <button
             onClick={handleCopy}
-            className="w-full flex items-center justify-between py-2.5 px-4 bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-medium text-xs rounded-xl transition"
+            className="w-full flex items-center justify-between py-2.5 px-4 bg-[#faf8f5] hover:bg-[#f4efe6] text-slate-700 font-medium text-xs rounded-xl transition border border-[#e7e3da] cursor-pointer"
           >
             <span className="truncate max-w-[240px] dir-ltr text-slate-500 font-mono text-[11px]">
               {bookingUrl}
             </span>
-            <div className="flex items-center gap-1.5 shrink-0 text-sky-700 font-semibold">
+            <div className="flex items-center gap-1.5 shrink-0 text-[#143d30] font-semibold">
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
               <span>{copied ? 'تم النسخ' : 'نسخ الرابط'}</span>
             </div>

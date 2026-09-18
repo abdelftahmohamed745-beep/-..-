@@ -1,4 +1,4 @@
-import { DoctorProfile, LabProfile } from '../types';
+import { DoctorProfile } from '../types';
 
 const SITE_URL = 'https://dory-system.vercel.app';
 
@@ -90,23 +90,6 @@ export const FOR_CLINICS_PAGE_SEO: SeoData = {
     'name': 'دوري للأطباء والعيادات',
     'description': 'أدوات إدارة الطوابير السريرية والملفات الطبية ومواعيد إعادة الكشف للعيادات.',
     'url': `${SITE_URL}/for-clinics`,
-    'inLanguage': 'ar'
-  }
-};
-
-export const FOR_LABS_PAGE_SEO: SeoData = {
-  title: 'دوري لمعامل ومختبرات التحاليل | إدارة العينات والنتائج المعتمدة بـ QR',
-  description: 'نظام إدارة مختبرات التحاليل: تنظيم باقات الفحوصات والأسعار، تتبع مسار العينات، إصدار تقارير PDF الموثقة، واستقبال طلبات السحب المنزلي.',
-  canonicalUrl: `${SITE_URL}/for-labs`,
-  robots: 'index, follow',
-  ogType: 'website',
-  ogImage: `${SITE_URL}/dory-og-image.png`,
-  jsonLd: {
-    '@context': 'https://schema.org',
-    '@type': 'MedicalWebPage',
-    'name': 'دوري لمعامل ومختبرات التحاليل',
-    'description': 'حلول رقمية لإدارة عينات التحاليل ونشر النتائج المعتمدة للمرضى عبر رمز QR.',
-    'url': `${SITE_URL}/for-labs`,
     'inLanguage': 'ar'
   }
 };
@@ -372,53 +355,5 @@ export function getDoctorBookingSeoData(doctor: DoctorProfile): SeoData {
         'alternateName': clinicName
       }
     }
-  };
-}
-
-export function getLabSeoData(lab: LabProfile): SeoData {
-  const labName = lab.name ? lab.name.trim() : 'معمل تحاليل';
-  const address = lab.address ? lab.address.trim() : '';
-  const city = (lab as any).city ? (lab as any).city.trim() : '';
-  const locationPart = [address, city].filter(Boolean).join('، ');
-
-  const title = `${labName} - معمل تحاليل طبية | دوري`;
-  const description = `استعراض الفحوصات والتحاليل المخبرية وطلب سحب العينات واستلام النتائج إلكترونياً من ${labName}${locationPart ? ` (${locationPart})` : ''} عبر منظومة دوري (Dory).`;
-  const canonicalUrl = `${SITE_URL}/lab/${lab.uid}`;
-  const photo = lab.logoUrl || `${SITE_URL}/dory-og-image.png`;
-
-  const jsonLd: Record<string, any> = {
-    '@context': 'https://schema.org',
-    '@type': 'MedicalBusiness',
-    'name': labName,
-    'description': description,
-    'url': canonicalUrl,
-    'medicalSpecialty': 'Laboratory Medicine'
-  };
-
-  if (photo) {
-    jsonLd['image'] = photo;
-  }
-
-  if (locationPart) {
-    jsonLd['address'] = {
-      '@type': 'PostalAddress',
-      'streetAddress': address || locationPart,
-      'addressLocality': city || 'مصر',
-      'addressCountry': 'EG'
-    };
-  }
-
-  if (lab.phone) {
-    jsonLd['telephone'] = lab.phone;
-  }
-
-  return {
-    title,
-    description,
-    canonicalUrl,
-    robots: 'index, follow',
-    ogType: 'business.business',
-    ogImage: photo,
-    jsonLd
   };
 }

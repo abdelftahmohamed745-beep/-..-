@@ -10,43 +10,29 @@ import {
   createDoctorProfile,
   getDoctorProfile
 } from '../services/firebaseService';
-import { createLabProfile, getLabProfile } from '../services/labService';
-import { DoctorProfile, AccountType, MEDICAL_SPECIALTIES } from '../types';
-import { Stethoscope, Mail, Lock, User, Building, ArrowLeft, ShieldCheck, TestTube, RotateCcw, CheckCircle2, LogOut, KeyRound } from 'lucide-react';
+import { DoctorProfile, MEDICAL_SPECIALTIES } from '../types';
+import { Stethoscope, Mail, Lock, User, Building, ArrowLeft, RotateCcw, CheckCircle2, LogOut, KeyRound } from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 
 interface AuthPageProps {
-  initialAccountType?: AccountType;
+  initialAccountType?: string;
   onDoctorLoggedIn: (doctor: DoctorProfile) => void;
   onShowToast: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
   onSelectPatientBookingView: () => void;
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({
-  initialAccountType = 'doctor',
   onDoctorLoggedIn,
   onShowToast,
   onSelectPatientBookingView
 }) => {
   const [isRegister, setIsRegister] = useState(false);
-  const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
-
-  useEffect(() => {
-    if (initialAccountType) {
-      setAccountType(initialAccountType);
-    }
-  }, [initialAccountType]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [doctorName, setDoctorName] = useState('');
   const [specialty, setSpecialty] = useState('طب أطفال وباطنة');
   const [clinicName, setClinicName] = useState('');
-  
-  // Lab fields
-  const [labName, setLabName] = useState('');
-  const [responsibleName, setResponsibleName] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
 
   const [loading, setLoading] = useState(false);
 
@@ -102,15 +88,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes expiry
       attempts: 0,
       verified: false,
-      accountType,
+      accountType: 'doctor',
       pendingPayload: {
         doctorName: doctorName.trim() || "دكتور جديد",
         specialty: specialty.trim() || "طبيب عام",
         clinicName: clinicName.trim() || "العيادة الطبية",
-        labName: labName.trim() || "معمل التحاليل الطبية",
-        responsibleName: responsibleName.trim() || "مدير المعمل",
-        phone: phone.trim() || "01000000000",
-        address: address.trim() || "القاهرة، مصر"
+        phone: phone.trim() || "01000000000"
       }
     }, { merge: true });
 
@@ -184,54 +167,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       // Success!
       await updateDoc(vRef, { verified: true });
 
-      const targetType = vData.accountType || accountType;
       const payload = vData.pendingPayload || {};
 
-      if (targetType === 'laboratory') {
-        let labProf = await getLabProfile(user.uid);
-        if (!labProf) {
-          labProf = await createLabProfile(
-            user.uid,
-            payload.labName || labName.trim() || "معمل التحاليل الطبية",
-            payload.responsibleName || responsibleName.trim() || "مدير المعمل",
-            payload.phone || phone.trim() || "01000000000",
-            payload.address || address.trim() || "القاهرة، مصر",
-            user.email || verificationEmail || email.trim()
-          );
-        }
-        setVerifyingLoading(false);
-        setIsVerifyingEmail(false);
-        onShowToast("تم تأكيد الحساب بنجاح", `مرحباً بك في لوحة تحكم ${labProf.name}`, "success");
-        onDoctorLoggedIn({
-          uid: user.uid,
-          accountType: 'laboratory',
-          name: labProf.responsibleName,
-          specialty: "معمل تحاليل",
-          clinicName: labProf.name,
-          qrCodeId: user.uid,
-          address: labProf.address,
-          phone: labProf.phone,
-          subscriptionStatus: 'active',
-          trialEndDate: new Date().toISOString(),
-          avgConsultTime: 15,
-          workHours: { open: "08:00", close: "23:00", maxPatientsPerDay: 100, daysOfWeek: [] },
-          createdAt: labProf.createdAt
-        });
-      } else {
-        let docProf = await getDoctorProfile(user.uid);
-        if (!docProf) {
-          docProf = await createDoctorProfile(
-            user.uid,
-            payload.doctorName || doctorName.trim() || "دكتور جديد",
-            payload.specialty || specialty.trim() || "طبيب عام",
-            payload.clinicName || clinicName.trim() || "العيادة الطبية"
-          );
-        }
-        setVerifyingLoading(false);
-        setIsVerifyingEmail(false);
-        onShowToast("تم تأكيد الحساب بنجاح", `مرحباً بك في لوحة تحكم ${docProf.clinicName}`, "success");
-        onDoctorLoggedIn(docProf);
+      let docProf = await getDoctorProfile(user.uid);
+      if (!docProf) {
+        docProf = await createDoctorProfile(
+          user.uid,
+          payload.doctorName || doctorName.trim() || "دكتور جديد",
+          payload.specialty || specialty.trim() || "طبيب عام",
+          payload.clinicName || clinicName.trim() || "العيادة الطبية"
+        );
       }
+      setVerifyingLoading(false);
+      setIsVerifyingEmail(false);
+      onShowToast("تم تأكيد الحساب بنجاح", `مرحباً بك في لوحة تحكم ${docProf.clinicName}`, "success");
+      onDoctorLoggedIn(docProf);
     } catch (err: any) {
       console.error("[OTP Verification Error]", err);
       setVerifyingLoading(false);
@@ -349,30 +299,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
 
-        // 1. Check if Lab profile exists
-        const labProf = await getLabProfile(user.uid);
-        if (labProf) {
-          setLoading(false);
-          onShowToast("أهلاً بعودتك!", `تم تسجيل الدخول في ${labProf.name}`, "success");
-          onDoctorLoggedIn({
-            uid: user.uid,
-            accountType: 'laboratory',
-            name: labProf.responsibleName,
-            specialty: "معمل تحاليل",
-            clinicName: labProf.name,
-            qrCodeId: user.uid,
-            address: labProf.address,
-            phone: labProf.phone,
-            subscriptionStatus: 'active',
-            trialEndDate: new Date().toISOString(),
-            avgConsultTime: 15,
-            workHours: { open: "08:00", close: "23:00", maxPatientsPerDay: 100, daysOfWeek: [] },
-            createdAt: labProf.createdAt
-          });
-          return;
-        }
-
-        // 2. Check if Doctor profile exists
+        // Check if Doctor profile exists
         let doctor = await getDoctorProfile(user.uid);
         if (doctor) {
           setLoading(false);
@@ -381,39 +308,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
 
-        // 3. Fallback profile creation
-        if (accountType === 'laboratory') {
-          const newLab = await createLabProfile(
-            user.uid,
-            labName.trim() || "معمل التحاليل الطبية",
-            responsibleName.trim() || "مدير المعمل",
-            phone.trim() || "01000000000",
-            address.trim() || "القاهرة، مصر",
-            user.email || email.trim()
-          );
-          setLoading(false);
-          onShowToast("أهلاً بعودتك!", `تم تفعيل حساب المعمل ${newLab.name}`, "success");
-          onDoctorLoggedIn({
-            uid: user.uid,
-            accountType: 'laboratory',
-            name: newLab.responsibleName,
-            specialty: "معمل تحاليل",
-            clinicName: newLab.name,
-            qrCodeId: user.uid,
-            address: newLab.address,
-            phone: newLab.phone,
-            subscriptionStatus: 'active',
-            trialEndDate: new Date().toISOString(),
-            avgConsultTime: 15,
-            workHours: { open: "08:00", close: "23:00", maxPatientsPerDay: 100, daysOfWeek: [] },
-            createdAt: newLab.createdAt
-          });
-        } else {
-          doctor = await createDoctorProfile(user.uid, "دكتور", "طبيب عام", "العيادة الطبية");
-          setLoading(false);
-          onShowToast("أهلاً بعودتك!", `تم تسجيل الدخول في ${doctor.clinicName}`, "success");
-          onDoctorLoggedIn(doctor);
-        }
+        // Fallback profile creation if needed
+        doctor = await createDoctorProfile(user.uid, "دكتور", "طبيب عام", "العيادة الطبية");
+        setLoading(false);
+        onShowToast("أهلاً بك!", `تم تفعيل حساب ${doctor.clinicName}`, "success");
+        onDoctorLoggedIn(doctor);
       }
     } catch (err: unknown) {
       console.error("Auth error:", err);
@@ -424,11 +323,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
+    <div className="max-w-xl mx-auto px-4 py-8">
       
       {/* Nodemailer Gmail OTP Verification Pending Screen */}
       {isVerifyingEmail ? (
-        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-sky-100 mb-8">
+        <div className="bg-[#fdfcf9] rounded-3xl p-6 sm:p-8 shadow-xl border border-sky-100 mb-8">
           <div className="text-center mb-6">
             <div className="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-sky-100">
               <KeyRound className="w-8 h-8 text-sky-600" />
@@ -469,7 +368,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               ) : (
                 <>
                   <CheckCircle2 className="w-5 h-5" />
-                  <span>تأكيد رمز التحقق والدخول للوحة التحكم</span>
+                  <span>تأكيد رمز التحقق والدخول لنظام العيادة</span>
                 </>
               )}
             </button>
@@ -504,72 +403,44 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         /* Main Login / Signup Card */
         <div className="bg-[#fdfcf9] rounded-3xl p-6 sm:p-8 shadow-xl border border-[#e7e3da] mb-8">
           
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 bg-[#122c4a] rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md">
+              <Stethoscope className="w-7 h-7 text-white" />
+            </div>
+            <h1 className="text-2xl font-black text-[#122c4a] font-['Tajawal',sans-serif] mb-1">
+              نظام تشغيل وإدارة العيادات الطبية
+            </h1>
+            <p className="text-xs text-slate-600">
+              {isRegister ? 'أنشئ حساب عيادتك الطبية وابدأ تشغيل الطابور الذكي والجلسات اليومية' : 'تسجيل الدخول للوصول إلى لوحة تحكم العيادة والطابور النشط'}
+            </p>
+          </div>
+
           {/* Toggle Tabs */}
           <div className="flex bg-[#f4efe6] p-1 rounded-2xl mb-6">
             <button
               onClick={() => setIsRegister(false)}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 !isRegister ? 'bg-[#122c4a] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              تسجيل دخول
+              تسجيل دخول العيادة
             </button>
             <button
               onClick={() => setIsRegister(true)}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 isRegister ? 'bg-[#122c4a] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              حساب جديد (عيادة / معمل)
+              حساب عيادة جديدة
             </button>
           </div>
 
-          {/* Account Type Selector for Registration */}
-          {isRegister && (
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-slate-700 mb-2">نوع الحساب الطبي:</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setAccountType('doctor')}
-                  className={`p-3.5 rounded-2xl border text-right transition flex items-center gap-3 cursor-pointer ${
-                    accountType === 'doctor'
-                      ? 'bg-[#122c4a] text-white border-[#122c4a] shadow-md'
-                      : 'bg-[#faf8f5] text-slate-700 border-[#e7e3da] hover:bg-[#f4efe6]'
-                  }`}
-                >
-                  <Stethoscope className="w-5 h-5 shrink-0 text-sky-300" />
-                  <div>
-                    <span className="block font-bold text-xs">👨‍⚕️ طبيب / عيادة</span>
-                    <span className="text-[10px] opacity-80 block">نظام الحجز والإنذار المبكر</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAccountType('laboratory')}
-                  className={`p-3.5 rounded-2xl border text-right transition flex items-center gap-3 cursor-pointer ${
-                    accountType === 'laboratory'
-                      ? 'bg-[#122c4a] text-white border-[#122c4a] shadow-md'
-                      : 'bg-[#faf8f5] text-slate-700 border-[#e7e3da] hover:bg-[#f4efe6]'
-                  }`}
-                >
-                  <TestTube className="w-5 h-5 shrink-0 text-teal-300" />
-                  <div>
-                    <span className="block font-bold text-xs">🧪 معمل تحاليل</span>
-                    <span className="text-[10px] opacity-80 block">إدارة الفحوصات والنتائج (Dory Labs)</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-4">
             
-            {isRegister && accountType === 'doctor' && (
+            {isRegister && (
               <>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطبيب بالكامل</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطبيب أو مدير العيادة</label>
                   <div className="relative">
                     <User className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                     <input
@@ -600,7 +471,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم العيادة / المركز الطبي</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم العيادة أو المركز الطبي</label>
                   <div className="relative">
                     <Building className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                     <input
@@ -616,66 +487,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </>
             )}
 
-            {isRegister && accountType === 'laboratory' && (
-              <>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم معمل التحاليل الطبية *</label>
-                  <div className="relative">
-                    <TestTube className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
-                    <input
-                      type="text"
-                      value={labName}
-                      onChange={(e) => setLabName(e.target.value)}
-                      placeholder="معمل النيل للتحاليل الطبية"
-                      required
-                      className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطبيب / المدير المسؤول *</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
-                    <input
-                      type="text"
-                      value={responsibleName}
-                      onChange={(e) => setResponsibleName(e.target.value)}
-                      placeholder="د. أحمد مصطفى"
-                      required
-                      className="w-full pl-3 pr-10 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">رقم هاتف المعمل *</label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="01012345678"
-                    required
-                    className="w-full px-3 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] dir-ltr text-left"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">عنوان المعمل التفصيلي *</label>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="القاهرة - مدينة نصر - شارع الطيران"
-                    required
-                    className="w-full px-3 py-2.5 bg-[#faf8f5] border border-[#e7e3da] rounded-xl text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#122c4a]"
-                  />
-                </div>
-              </>
-            )}
-
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">البريد الإلكتروني</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">البريد الإلكتروني للعيادة</label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                 <input
@@ -709,7 +522,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               disabled={loading}
               className="w-full py-3 bg-[#122c4a] hover:bg-[#0d223a] text-white font-extrabold text-sm rounded-2xl transition shadow-md cursor-pointer"
             >
-              {loading ? 'جاري التحقق...' : isRegister ? 'تسجيل وبدء التجربة المجانية' : 'تسجيل الدخول'}
+              {loading ? 'جاري التحقق...' : isRegister ? 'إنشاء حساب عيادة وبدء العمل' : 'تسجيل الدخول'}
             </button>
           </form>
 
@@ -733,3 +546,4 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     </div>
   );
 };
+

@@ -721,80 +721,84 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
       {/* 1. Header Overview Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         
-        {/* Today's Total Charged Revenue */}
+        {/* Today's Total Charged Revenue (Green #10B981: revenue, payments, collected money) */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">إيرادات اليوم (المسجلة)</span>
-            <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#10B981] border border-emerald-100 flex items-center justify-center font-bold">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900">
+            <div className="text-2xl font-black text-[#10B981]">
               {todaySummary.totalChargedToday} <span className="text-xs text-slate-400 font-normal">جنيه</span>
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">مجموع قيمة الكشوفات اليوم</div>
           </div>
         </div>
 
-        {/* Total Paid Today */}
+        {/* Total Paid Today (Green #10B981: revenue, payments, collected money, positive financial results) */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">المدفوع الكاش والفيزا</span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#10B981] border border-emerald-100 flex items-center justify-center font-bold">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-black text-emerald-600">
+            <div className="text-2xl font-black text-[#10B981]">
               {todaySummary.totalPaidToday} <span className="text-xs text-slate-400 font-normal">جنيه</span>
             </div>
-            <div className="text-[10px] text-emerald-700 font-medium mt-0.5">داخل الصندوق فعلياً</div>
+            <div className="text-[10px] text-emerald-600 font-medium mt-0.5">داخل الصندوق فعلياً</div>
           </div>
         </div>
 
-        {/* Outstanding Balances */}
+        {/* Outstanding Balances (Red #EF4444: negative financial results, outgoing/uncollected money) */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">المستحقات المتبقية</span>
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#EF4444] border border-rose-100 flex items-center justify-center font-bold">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-black text-amber-600">
+            <div className="text-2xl font-black text-[#EF4444]">
               {todaySummary.totalOutstandingToday} <span className="text-xs text-slate-400 font-normal">جنيه</span>
             </div>
-            <div className="text-[10px] text-amber-700 font-medium mt-0.5">آجل / غير مسدد اليوم</div>
+            <div className="text-[10px] text-rose-600 font-medium mt-0.5">آجل / غير مسدد اليوم</div>
           </div>
         </div>
 
-        {/* Today's Expenses */}
+        {/* Today's Expenses (Red #EF4444: expenses, outgoing money, negative financial results) */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">مصروفات العيادة</span>
-            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#EF4444] border border-rose-100 flex items-center justify-center font-bold">
               <TrendingDown className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-2xl font-black text-rose-600">
+            <div className="text-2xl font-black text-[#EF4444]">
               {todaySummary.totalExpensesToday} <span className="text-xs text-slate-400 font-normal">جنيه</span>
             </div>
-            <div className="text-[10px] text-rose-700 font-medium mt-0.5">إيجار، مرافق، مستلزمات</div>
+            <div className="text-[10px] text-rose-600 font-medium mt-0.5">إيجار، مرافق، مستلزمات</div>
           </div>
         </div>
 
-        {/* Net Revenue Today */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-5 rounded-2xl border border-slate-700 shadow-md text-white flex flex-col justify-between col-span-2 sm:col-span-1">
+        {/* Net Revenue Today (Green #10B981 if >= 0, Red #EF4444 if < 0) */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-300 font-bold">صافي الأرباح اليوم</span>
-            <div className="w-9 h-9 rounded-xl bg-slate-700 text-teal-400 flex items-center justify-center font-bold">
+            <span className="text-xs text-slate-500 font-bold">صافي الأرباح اليوم</span>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold border ${
+              todaySummary.netRevenueToday >= 0 
+                ? 'bg-emerald-50 text-[#10B981] border-emerald-100' 
+                : 'bg-rose-50 text-[#EF4444] border-rose-100'
+            }`}>
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
-            <div className={`text-2xl font-black ${todaySummary.netRevenueToday >= 0 ? 'text-teal-400' : 'text-rose-400'}`}>
+            <div className={`text-2xl font-black ${todaySummary.netRevenueToday >= 0 ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
               {todaySummary.netRevenueToday} <span className="text-xs text-slate-400 font-normal">جنيه</span>
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5">(المدفوع اليوم - المصروفات)</div>
@@ -1353,29 +1357,29 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                         {tx.patientPhone && <div className="text-[10px] text-slate-400 dir-ltr">{tx.patientPhone}</div>}
                       </td>
 
-                      <td className="p-3 font-bold text-sky-700">{tx.serviceName}</td>
+                      <td className="p-3 font-bold text-[#8B5CF6]">{tx.serviceName}</td>
 
                       <td className="p-3 font-bold text-slate-800">{tx.totalAmount} ج</td>
 
-                      <td className="p-3 font-bold text-emerald-600">{tx.paidAmount} ج</td>
+                      <td className="p-3 font-bold text-[#10B981]">{tx.paidAmount} ج</td>
 
-                      <td className="p-3 font-bold text-amber-600">{tx.remainingAmount} ج</td>
+                      <td className="p-3 font-bold text-[#EF4444]">{tx.remainingAmount} ج</td>
 
                       <td className="p-3">
                         {tx.paymentStatus === 'PAID' ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                          <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-[#10B981] border border-emerald-200">
                             مدفوع
                           </span>
                         ) : tx.paymentStatus === 'PARTIAL' ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">
+                          <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-[#F59E0B] border border-amber-200">
                             جزئي
                           </span>
                         ) : tx.paymentStatus === 'REFUNDED' ? (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800">
+                          <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-[#64748B] border border-slate-200">
                             مسترد
                           </span>
                         ) : (
-                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800">
+                          <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-50 text-[#EF4444] border border-rose-200">
                             غير مدفوع
                           </span>
                         )}
@@ -1531,7 +1535,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               disabled={!canEditPrices}
               className={`px-4 py-2.5 rounded-xl font-black text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer ${
                 canEditPrices
-                  ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                  ? 'bg-[#8B5CF6] hover:bg-violet-700 text-white'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >
@@ -1559,7 +1563,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                       <h3 className="font-extrabold text-slate-900 text-sm">{srv.name}</h3>
                       {srv.description && <p className="text-xs text-slate-500 mt-0.5">{srv.description}</p>}
                     </div>
-                    <span className="text-xs font-black text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200 shrink-0">
+                    <span className="text-xs font-black text-[#8B5CF6] bg-violet-50 px-2.5 py-1 rounded-lg border border-violet-200 shrink-0">
                       {srv.price} جنيه
                     </span>
                   </div>

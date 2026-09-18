@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Stethoscope,
-  TestTube,
   Users,
   Clock,
   ShieldCheck,
@@ -13,7 +12,6 @@ import {
   DollarSign,
   Bell,
   Smartphone,
-  FileCheck,
   HelpCircle,
   ArrowLeft,
   ChevronLeft
@@ -21,7 +19,7 @@ import {
 
 interface ProductOverviewSectionProps {
   onNavigate: (tab: any, options?: any) => void;
-  onNavigateAuth: (accountType?: 'doctor' | 'laboratory') => void;
+  onNavigateAuth: () => void;
 }
 
 export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
@@ -36,52 +34,45 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
         <div className="max-w-3xl space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#edf3fa] border border-[#d1dfed] text-[#122c4a] font-bold text-xs">
             <Clock className="w-3.5 h-3.5 text-[#1b3a5c]" />
-            <span>نظرة سريعة على المنظومة</span>
+            <span>نظرة سريعة على نظام التشغيل</span>
           </div>
           <h2 id="quick-overview-title" className="text-xl sm:text-2xl font-bold text-[#122c4a]">
-            ما هو دوري؟ وما المشكلة التي يحلها؟
+            ما هو دوري (Dory)؟ وما المشكلة التي يحلها؟
           </h2>
           <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
-            منظومة سحابية ذكية تنهي عشوائية الانتظار الورقي وتربط الطبيب والمعمل والمريض في بيئة رقمية فورية وسلسة.
+            نظام تشغيل سحابي متكامل ينهي عشوائية الانتظار الورقي وينظم جلسات العيادة اليومية ويوفر للمرضى تذاكر حضور رقمية حية.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div className="bg-[#faf8f5] p-4 rounded-xl border border-[#c4e5db] space-y-1.5">
-            <span className="font-bold text-[#143d30] text-xs sm:text-sm block">🩺 للطبيب والعيادة</span>
+            <span className="font-bold text-[#143d30] text-xs sm:text-sm block">🩺 للطبيب والعيادة الطبية</span>
             <p className="text-slate-600 text-xs leading-relaxed">
-              تنظيم تدفق الكشوفات، تقليل الضغط على الاستقبال، وأرشفة ملفات المرضى ومواعيد الإعادة.
-            </p>
-          </div>
-
-          <div className="bg-[#faf8f5] p-4 rounded-xl border border-[#d1dfed] space-y-1.5">
-            <span className="font-bold text-[#122c4a] text-xs sm:text-sm block">🧪 للمختبر والمعمل</span>
-            <p className="text-slate-600 text-xs leading-relaxed">
-              تتبع العينات بالباركود، نشر نتائج PDF المعتمدة بـ QR، وتلقي طلبات السحب المنزلي.
+              تنظيم تدفق الكشوفات، تقليل الضغط على الاستقبال، أرشفة ملفات المرضى، إدارة جلسات العمل اليومية والأرشيف.
             </p>
           </div>
 
           <div className="bg-[#faf8f5] p-4 rounded-xl border border-[#e7e3da] space-y-1.5">
             <span className="font-bold text-[#b45309] text-xs sm:text-sm block">👥 للمريض والمراجع</span>
             <p className="text-slate-600 text-xs leading-relaxed">
-              حجز فوري بدون تطبيق، تذكرة رقمية حية لمتابعة الدور، واسترجاع سهل برقم الهاتف.
+              حجز فوري بدون تطبيق، تذكرة رقمية حية لمتابعة الدور والوقت المتوقع، واسترجاع سهل برقم الهاتف.
             </p>
           </div>
         </div>
 
         <div className="pt-2 flex items-center justify-between text-xs border-t border-[#f0ebe1]">
-          <span className="text-slate-500">تريد معرفة المزيد عن فلسفة ورؤية المنظومة؟</span>
+          <span className="text-slate-500">تريد معرفة المزيد عن فلسفة ورؤية النظام؟</span>
           <button
             onClick={() => onNavigate('about')}
             className="text-[#122c4a] font-bold hover:underline flex items-center gap-1 cursor-pointer"
           >
-            <span>عن منظومة دوري</span>
+            <span>عن نظام دوري</span>
             <ArrowLeft className="w-3 h-3" />
           </button>
         </div>
       </section>
 
-      {/* 2. Target Audiences (3 Clear Tracks) */}
+      {/* 2. Target Audiences */}
       <section aria-labelledby="tracks-title" className="space-y-4">
         <div className="text-center max-w-xl mx-auto space-y-1">
           <h2 id="tracks-title" className="text-xl sm:text-2xl font-bold text-[#122c4a]">
@@ -90,7 +81,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
           <p className="text-slate-600 text-xs sm:text-sm">اختر المسار المناسب لاستكشاف الميزات المخصصة لك:</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-5">
+        <div className="grid md:grid-cols-2 gap-5">
           
           {/* Track 1: Clinics */}
           <div className="bg-[#fdfcf9] rounded-2xl p-5 border border-[#c4e5db] shadow-2xs space-y-4 flex flex-col justify-between">
@@ -101,17 +92,21 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
               <div>
                 <h3 className="font-bold text-slate-900 text-sm sm:text-base">العيادات والأطباء</h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  إدارة المواعيد، نداء المرضى في الطابور، شاشة TV View، والروشتات الإلكترونية.
+                  إدارة المواعيد، نداء المرضى في الطابور، شاشة TV View، جلسات العمل اليومية، والأرشيف المحفوظ.
                 </p>
               </div>
               <ul className="text-xs text-slate-600 space-y-1">
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#1c5242]" />
-                  <span>طابور حي وشاشة انتظار ذكية</span>
+                  <span>طابور حي وشاشة انتظار ذكية مع نداء صوتي</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#1c5242]" />
-                  <span>سجلات المرضى ومواعيد الإعادة</span>
+                  <span>جلسة يومية نشطة وإقفال اليوم بأرشيف مفصل</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#1c5242]" />
+                  <span>سجلات المرضى ومواعيد الإعادة والإيرادات</span>
                 </li>
               </ul>
             </div>
@@ -124,7 +119,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={() => onNavigateAuth('doctor')}
+                onClick={() => onNavigateAuth()}
                 className="px-3 py-1.5 bg-[#1c5242] hover:bg-[#143d30] text-white rounded-lg text-xs font-bold transition cursor-pointer"
               >
                 تسجيل عيادة
@@ -132,47 +127,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
             </div>
           </div>
 
-          {/* Track 2: Labs */}
-          <div className="bg-[#fdfcf9] rounded-2xl p-5 border border-[#d1dfed] shadow-2xs space-y-4 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="w-9 h-9 rounded-xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold">
-                <TestTube className="w-4 h-4 text-[#1b3a5c]" />
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm sm:text-base">المعامل والمختبرات</h3>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  دليل الفحوصات والأسعار، مسار العينات بالباركود، وتقارير PDF موثقة برمز QR.
-                </p>
-              </div>
-              <ul className="text-xs text-slate-600 space-y-1">
-                <li className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#1b3a5c]" />
-                  <span>إصدار نتائج PDF معتمدة إلكترونياً</span>
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#1b3a5c]" />
-                  <span>تلقي طلبات السحب المنزلي</span>
-                </li>
-              </ul>
-            </div>
-            <div className="pt-3 border-t border-[#f0ebe1] flex items-center justify-between">
-              <button
-                onClick={() => onNavigate('for-labs')}
-                className="text-xs font-bold text-[#1b3a5c] hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <span>ميزات المعامل</span>
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => onNavigateAuth('laboratory')}
-                className="px-3 py-1.5 bg-[#122c4a] hover:bg-[#0d223a] text-white rounded-lg text-xs font-bold transition cursor-pointer"
-              >
-                تسجيل معمل
-              </button>
-            </div>
-          </div>
-
-          {/* Track 3: Patients */}
+          {/* Track 2: Patients */}
           <div className="bg-[#fdfcf9] rounded-2xl p-5 border border-[#e7e3da] shadow-2xs space-y-4 flex flex-col justify-between">
             <div className="space-y-3">
               <div className="w-9 h-9 rounded-xl bg-[#faf8f5] text-[#b45309] flex items-center justify-center font-bold">
@@ -181,17 +136,21 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
               <div>
                 <h3 className="font-bold text-slate-900 text-sm sm:text-base">المرضى والمراجعون</h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  حجز فوري كـ Guest بدون حساب، متابعة الوقت المتبقي، واستلام نتائج التحاليل.
+                  حجز فوري كـ Guest بدون حساب، متابعة الوقت المتبقي، والتنبيه التلقائي مع اقتراب الدور.
                 </p>
               </div>
               <ul className="text-xs text-slate-600 space-y-1">
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#b45309]" />
-                  <span>تذكرة رقمية حية على هاتفك</span>
+                  <span>تذكرة رقمية حية على هاتفك مباشرة</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#b45309]" />
                   <span>استرجاع التذكرة بسهولة برقم هاتفك</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#b45309]" />
+                  <span>حساب الوقت المتبقي وعدد الكشوفات أمامك</span>
                 </li>
               </ul>
             </div>
@@ -218,16 +177,16 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
         </div>
       </section>
 
-      {/* 3. Top Features (Concise Visual Grid) */}
+      {/* 3. Top Features */}
       <section aria-labelledby="features-grid-title" className="space-y-4">
         <div className="text-center max-w-xl mx-auto space-y-1">
           <h2 id="features-grid-title" className="text-xl sm:text-2xl font-bold text-[#122c4a]">
-            أهم ميزات ووظائف دوري
+            أهم ميزات ووظائف دوري للعيادات
           </h2>
-          <p className="text-slate-600 text-xs sm:text-sm">أدوات متكاملة لإدارة منظومة العمل الصحي باحترافية وبساطة:</p>
+          <p className="text-slate-600 text-xs sm:text-sm">أدوات متكاملة لإدارة جلسات العمل والانتظار باحترافية وبساطة:</p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           
           <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
             <Smartphone className="w-5 h-5 text-[#122c4a] mx-auto" />
@@ -237,7 +196,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
 
           <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
             <Users className="w-5 h-5 text-[#1c5242] mx-auto" />
-            <h3 className="font-bold text-slate-900 text-xs">إدارة الطوابير</h3>
+            <h3 className="font-bold text-slate-900 text-xs">إدارة الطوابير الحية</h3>
             <p className="text-[11px] text-slate-500 leading-snug">تنظيم وترتيب الأدوار لحظياً</p>
           </div>
 
@@ -248,43 +207,31 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
           </div>
 
           <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
-            <FileText className="w-5 h-5 text-[#1c5242] mx-auto" />
+            <CalendarCheck className="w-5 h-5 text-[#1c5242] mx-auto" />
+            <h3 className="font-bold text-slate-900 text-xs">الجلسات والأرشيف</h3>
+            <p className="text-[11px] text-slate-500 leading-snug">جلسات يومية وأرشفة متكاملة</p>
+          </div>
+
+          <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
+            <FileText className="w-5 h-5 text-[#122c4a] mx-auto" />
             <h3 className="font-bold text-slate-900 text-xs">الملفات والروشتات</h3>
             <p className="text-[11px] text-slate-500 leading-snug">حفظ التشخيص وتاريخ الزيارات</p>
           </div>
 
           <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
-            <CalendarCheck className="w-5 h-5 text-[#122c4a] mx-auto" />
-            <h3 className="font-bold text-slate-900 text-xs">إعادة الكشف</h3>
-            <p className="text-[11px] text-slate-500 leading-snug">جدولة الاستشارات والمتابعات</p>
-          </div>
-
-          <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
-            <TestTube className="w-5 h-5 text-[#1b3a5c] mx-auto" />
-            <h3 className="font-bold text-slate-900 text-xs">إدارة العينات</h3>
-            <p className="text-[11px] text-slate-500 leading-snug">تتبع مراحل فحص المختبر</p>
-          </div>
-
-          <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
-            <FileCheck className="w-5 h-5 text-[#1b3a5c] mx-auto" />
-            <h3 className="font-bold text-slate-900 text-xs">النتائج والتقارير</h3>
-            <p className="text-[11px] text-slate-500 leading-snug">تقارير PDF موثقة برمز QR</p>
-          </div>
-
-          <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
-            <QrCode className="w-5 h-5 text-[#122c4a] mx-auto" />
+            <QrCode className="w-5 h-5 text-[#1c5242] mx-auto" />
             <h3 className="font-bold text-slate-900 text-xs">باركود الاستقبال</h3>
             <p className="text-[11px] text-slate-500 leading-snug">تسجيل سريع بمسح الكود</p>
           </div>
 
           <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
-            <DollarSign className="w-5 h-5 text-[#1c5242] mx-auto" />
+            <DollarSign className="w-5 h-5 text-[#122c4a] mx-auto" />
             <h3 className="font-bold text-slate-900 text-xs">الإدارة المالية</h3>
             <p className="text-[11px] text-slate-500 leading-snug">حساب الإيرادات اليومية والخزينة</p>
           </div>
 
           <div className="bg-[#fdfcf9] p-3.5 rounded-xl border border-[#e7e3da] shadow-2xs space-y-1.5 text-center">
-            <Bell className="w-5 h-5 text-[#122c4a] mx-auto" />
+            <Bell className="w-5 h-5 text-[#1c5242] mx-auto" />
             <h3 className="font-bold text-slate-900 text-xs">التنبيهات الفورية</h3>
             <p className="text-[11px] text-slate-500 leading-snug">إشعار عند اقتراب موعد الدور</p>
           </div>
@@ -292,7 +239,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
         </div>
       </section>
 
-      {/* 4. Trust & Security (Factual & Honest) */}
+      {/* 4. Trust & Security */}
       <section aria-labelledby="privacy-trust-title" className="bg-[#fdfcf9] rounded-2xl p-6 sm:p-8 border border-[#e7e3da] shadow-2xs space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-[#edf3fa] text-[#122c4a] flex items-center justify-center font-bold">
@@ -310,7 +257,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
           <div className="p-3.5 bg-[#faf8f5] rounded-xl border border-[#e7e3da] space-y-1">
             <span className="font-bold text-slate-800 block">عزل بيانات العيادات</span>
             <p className="text-slate-600 leading-relaxed">
-              تخزين محمي بقواعد أمان Firestore يمنع وصول أي جهة غير مصرح لها لسجلات العيادة أو المعمل.
+              تخزين محمي بقواعد أمان Firestore يمنع وصول أي جهة غير مصرح لها لسجلات العيادة أو المرضى.
             </p>
           </div>
 
@@ -340,7 +287,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
         </div>
       </section>
 
-      {/* 5. Compact FAQ Snippet (5 Questions) */}
+      {/* 5. Compact FAQ Snippet */}
       <section aria-labelledby="faq-snippet-title" className="bg-[#fdfcf9] rounded-2xl p-6 sm:p-8 border border-[#e7e3da] shadow-2xs space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -376,7 +323,7 @@ export const ProductOverviewSection: React.FC<ProductOverviewSectionProps> = ({
           <div className="bg-[#faf8f5] p-4 rounded-xl border border-[#e7e3da] space-y-1">
             <h3 className="font-bold text-[#122c4a]">كيف يسترجع المريض تذكرته إذا أغلق المتصفح؟</h3>
             <p className="text-slate-600 leading-relaxed text-xs">
-              يتم حفظ التذكرة محلياً، ويمكن استرجاعها فوراً بإدخال رقم الهاتف في صفحة العيادة أو المعمل.
+              يتم حفظ التذكرة محلياً، ويمكن استرجاعها فوراً بإدخال رقم الهاتف في صفحة العيادة.
             </p>
           </div>
 

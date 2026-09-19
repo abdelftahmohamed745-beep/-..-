@@ -1,23 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Calendar,
-  Clock,
-  CheckCircle2,
-  Users,
-  CreditCard,
-  Archive,
-  ArrowRight,
-  TrendingUp,
-  AlertTriangle,
-  FileCheck,
-  ChevronRight,
-  ChevronLeft,
-  X,
-  DollarSign,
-  UserCheck,
-  UserX,
-  Play
-} from 'lucide-react';
 import { DailySession, PatientRecord, ClinicTransaction } from '../types';
 import {
   getTodayDateString,
@@ -36,6 +17,7 @@ interface DailySessionManagerProps {
   currentUserName?: string;
   todayPatients?: PatientRecord[];
   onSessionChange?: (session: DailySession | null) => void;
+  onDayCompleted?: () => void;
   onShowToast?: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
@@ -47,6 +29,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
   currentUserName,
   todayPatients = [],
   onSessionChange,
+  onDayCompleted,
   onShowToast
 }) => {
   const today = getTodayDateString();
@@ -57,10 +40,13 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
 
-  // Archive View State
+  // Archive View State with pagination
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archivedDays, setArchivedDays] = useState<DailySession[]>([]);
+  const [archiveLimit, setArchiveLimit] = useState(15);
+  const [hasMoreArchive, setHasMoreArchive] = useState(true);
   const [loadingArchive, setLoadingArchive] = useState(false);
+  const [loadingMoreArchive, setLoadingMoreArchive] = useState(false);
   const [selectedArchivedDay, setSelectedArchivedDay] = useState<{
     session: DailySession | null;
     patients: PatientRecord[];
@@ -87,30 +73,35 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
       setSession(newSess);
       onSessionChange?.(newSess);
       if (onShowToast) {
-        onShowToast('تم بدء يوم عمل جديد بنجاح', `تاريخ الجلسة: ${today}`, 'success');
+        onShowToast('تم بدء يوم عمل جديد بنجاح', `تاريخ الجلسة: ${today} • يمكنك الآن استقبال المرضى`, 'success');
       }
     } catch (err: any) {
       if (onShowToast) onShowToast('تعذر بدء اليوم', err?.message, 'error');
     }
   };
 
-  // Compute live aggregates from queue
-  const waitingCount = todayPatients.filter((p) => p.status === 'waiting').length;
-  const inConsultCount = todayPatients.filter((p) => p.status === 'called').length;
-  const completedCount = todayPatients.filter((p) => p.status === 'done').length;
-  const noShowCount = todayPatients.filter((p) => p.status === 'no_show').length;
-  const totalPatientsCount = todayPatients.length;
+  const isCompletedToday = session?.status === 'completed';
 
-  // Handle Complete Day
+  // Compute live aggregates from queue (or strictly zero if day is ended)
+  const waitingCount = isCompletedToday ? 0 : todayPatients.filter((p) => p.status === 'waiting').length;
+  const inConsultCount = isCompletedToday ? 0 : todayPatients.filter((p) => p.status === 'called').length;
+  const completedCount = isCompletedToday ? 0 : todayPatients.filter((p) => p.status === 'done').length;
+  const noShowCount = isCompletedToday ? 0 : todayPatients.filter((p) => p.status === 'no_show').length;
+  const totalPatientsCount = isCompletedToday ? 0 : todayPatients.length;
+  const totalRevenue = isCompletedToday ? 0 : (session?.totalRevenue || 0);
+  const totalCollected = isCompletedToday ? 0 : (session?.totalCollected || 0);
+  const outstandingBalance = isCompletedToday ? 0 : (session?.outstandingBalance || 0);
+
+  // Handle Complete Day & Archive atomically
   const handleConfirmCompleteDay = async () => {
     setIsCompleting(true);
     try {
       const summaryToSave: Partial<DailySession> = {
-        patientsCount: totalPatientsCount,
-        waitingCount,
-        inConsultationCount: inConsultCount,
-        completedCount,
-        noShowCount,
+        patientsCount: todayPatients.length,
+        waitingCount: todayPatients.filter((p) => p.status === 'waiting').length,
+        inConsultationCount: todayPatients.filter((p) => p.status === 'called').length,
+        completedCount: todayPatients.filter((p) => p.status === 'done').length,
+        noShowCount: todayPatients.filter((p) => p.status === 'no_show').length,
         totalRevenue: session?.totalRevenue || 0,
         totalCollected: session?.totalCollected || 0,
         outstandingBalance: session?.outstandingBalance || 0,
@@ -122,13 +113,40 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
         doctorId,
         today,
         summaryToSave,
+        todayPatients,
         currentUserId,
         currentUserName || doctorName
       );
 
+      const zeroedSession: DailySession = {
+        id: today,
+        date: today,
+        doctorId,
+        status: 'completed',
+        startedAt: session?.startedAt || new Date().toISOString(),
+        patientsCount: 0,
+        waitingCount: 0,
+        inConsultationCount: 0,
+        completedCount: 0,
+        followUpsCount: 0,
+        noShowCount: 0,
+        cancelledCount: 0,
+        totalRevenue: 0,
+        totalCollected: 0,
+        outstandingCollected: 0,
+        outstandingBalance: 0,
+        completedAt: new Date().toISOString(),
+        paymentBreakdown: { cash: 0, card: 0, transfer: 0, other: 0 },
+        serviceBreakdown: {}
+      };
+
+      setSession(zeroedSession);
+      onSessionChange?.(zeroedSession);
+      if (onDayCompleted) onDayCompleted();
+
       setShowCompleteModal(false);
       if (onShowToast) {
-        onShowToast('تم إنهاء اليوم وأرشفته بنجاح', 'تم حفظ ملخص اليوم في سجل الأرشيف', 'success');
+        onShowToast('تم إنهاء اليوم وأرشفته بنجاح', 'تم تصفير العدادات وإخلاء الطابور وحفظ السجلات في الأرشيف', 'success');
       }
     } catch (err: any) {
       if (onShowToast) onShowToast('تعذر إنهاء اليوم', err?.message, 'error');
@@ -137,18 +155,35 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
     }
   };
 
-  // Load Archive List
+  // Load Archive List with pagination
   const handleOpenArchive = async () => {
     setShowArchiveModal(true);
     setSelectedArchivedDay(null);
     setLoadingArchive(true);
+    setArchiveLimit(15);
     try {
-      const days = await getArchivedDays(doctorId, 30);
+      const days = await getArchivedDays(doctorId, 15);
       setArchivedDays(days);
+      setHasMoreArchive(days.length >= 15);
     } catch (err) {
       console.warn('Error loading archive:', err);
     } finally {
       setLoadingArchive(false);
+    }
+  };
+
+  const handleLoadMoreArchive = async () => {
+    const nextLimit = archiveLimit + 15;
+    setLoadingMoreArchive(true);
+    try {
+      const days = await getArchivedDays(doctorId, nextLimit);
+      setArchivedDays(days);
+      setArchiveLimit(nextLimit);
+      setHasMoreArchive(days.length >= nextLimit);
+    } catch (err) {
+      console.warn('Error loading more archive:', err);
+    } finally {
+      setLoadingMoreArchive(false);
     }
   };
 
@@ -166,7 +201,6 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
   };
 
   const isActive = session?.status === 'active';
-  const isCompletedToday = session?.status === 'completed';
 
   return (
     <div id="daily-session-manager" className="space-y-4 text-right" dir="rtl">
@@ -186,7 +220,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                   : 'bg-amber-50 border-amber-200 text-amber-600'
               }`}
             >
-              <Calendar className="w-6 h-6" />
+              <span className="text-2xl leading-none inline-flex items-center justify-center">📅</span>
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -221,18 +255,18 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
               onClick={handleOpenArchive}
               className="px-3.5 py-2 min-h-[40px] rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
-              <Archive className="w-4 h-4 text-slate-500" />
+              <span className="text-base leading-none inline-flex items-center justify-center">🗂️</span>
               <span>أرشيف الأيام السابقة</span>
             </button>
 
-            {/* Start Day Button */}
-            {!isActive && !isCompletedToday && (
+            {/* Start Day Button - remains accessible when session is not currently active, even after completing day */}
+            {!isActive && (
               <button
                 type="button"
                 onClick={handleStartDay}
                 className="px-4 sm:px-5 py-2 sm:py-2.5 min-h-[40px] bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl text-xs sm:text-sm font-extrabold transition shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer active:scale-95"
               >
-                <Play className="w-4 h-4" />
+                <span className="text-base leading-none inline-flex items-center justify-center">▶️</span>
                 <span>بدء يوم عمل جديد</span>
               </button>
             )}
@@ -244,7 +278,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                 onClick={() => setShowCompleteModal(true)}
                 className="px-3.5 sm:px-4 py-2 sm:py-2.5 min-h-[40px] bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-white rounded-2xl text-xs sm:text-sm font-extrabold transition shadow-md shadow-slate-900/20 flex items-center gap-2 cursor-pointer active:scale-95"
               >
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span className="text-base leading-none inline-flex items-center justify-center">✅</span>
                 <span className="hidden sm:inline">إنهاء اليوم وحفظ التقرير (Complete Day)</span>
                 <span className="sm:hidden">إنهاء اليوم</span>
               </button>
@@ -257,7 +291,10 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
           
           {/* Total Patients (Indigo #6366F1: patients, visits, primary operational statistics) */}
           <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-            <span className="text-[11px] text-slate-500 font-bold block mb-1">إجمالي الحالات</span>
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mb-1">
+              <span className="text-sm leading-none inline-flex items-center justify-center">👥</span>
+              <span>إجمالي الحالات</span>
+            </span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-black text-[#6366F1] font-mono">{totalPatientsCount}</span>
               <span className="text-[10px] text-indigo-400">حالة</span>
@@ -266,7 +303,10 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
 
           {/* In Waiting (Orange #F59E0B: pending actions, attention-required states) */}
           <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-            <span className="text-[11px] text-slate-500 font-bold block mb-1">في الانتظار</span>
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mb-1">
+              <span className="text-sm leading-none inline-flex items-center justify-center">⏳</span>
+              <span>في الانتظار</span>
+            </span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-black text-[#F59E0B] font-mono">{waitingCount}</span>
               <span className="text-[10px] text-amber-500">ينتظر</span>
@@ -275,7 +315,10 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
 
           {/* In Consultation (Violet #8B5CF6: consultations, medical services, clinical activity) */}
           <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-            <span className="text-[11px] text-slate-500 font-bold block mb-1">في الكشف</span>
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mb-1">
+              <span className="text-sm leading-none inline-flex items-center justify-center">🩺</span>
+              <span>في الكشف</span>
+            </span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-black text-[#8B5CF6] font-mono">{inConsultCount}</span>
               <span className="text-[10px] text-violet-400">حالة</span>
@@ -284,7 +327,10 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
 
           {/* Completed (Violet #8B5CF6: consultations, medical services, clinical activity) */}
           <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-            <span className="text-[11px] text-slate-500 font-bold block mb-1">تم الكشف</span>
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mb-1">
+              <span className="text-sm leading-none inline-flex items-center justify-center">✅</span>
+              <span>تم الكشف</span>
+            </span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-black text-[#8B5CF6] font-mono">{completedCount}</span>
               <span className="text-[10px] text-violet-400">كشف</span>
@@ -293,7 +339,10 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
 
           {/* No Show (Red #EF4444: negative results, critical alerts, missed visits) */}
           <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-            <span className="text-[11px] text-slate-500 font-bold block mb-1">لم يحضر (No-show)</span>
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mb-1">
+              <span className="text-sm leading-none inline-flex items-center justify-center">❌</span>
+              <span>لم يحضر</span>
+            </span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-black text-[#EF4444] font-mono">{noShowCount}</span>
               <span className="text-[10px] text-rose-400">تغيّب</span>
@@ -302,10 +351,13 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
 
           {/* Total Revenue (Green #10B981: revenue, payments, collected money) */}
           <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-            <span className="text-[11px] text-slate-500 font-bold block mb-1">إيراد اليوم</span>
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mb-1">
+              <span className="text-sm leading-none inline-flex items-center justify-center">💰</span>
+              <span>إيراد اليوم</span>
+            </span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-black text-[#10B981] font-mono">
-                {session?.totalCollected || 0}
+                {totalCollected}
               </span>
               <span className="text-[10px] text-emerald-500">ج.م</span>
             </div>
@@ -313,10 +365,13 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
 
           {/* Outstanding (Red #EF4444: expenses, outgoing money, negative financial results) */}
           <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs col-span-2 sm:col-span-1">
-            <span className="text-[11px] text-slate-500 font-bold block mb-1">المتبقي المطلوب</span>
+            <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mb-1">
+              <span className="text-sm leading-none inline-flex items-center justify-center">💵</span>
+              <span>المتبقي المطلوب</span>
+            </span>
             <div className="flex items-baseline gap-1">
               <span className="text-lg sm:text-xl font-black text-[#EF4444] font-mono">
-                {session?.outstandingBalance || 0}
+                {outstandingBalance}
               </span>
               <span className="text-[10px] text-rose-400">ج.م</span>
             </div>
@@ -340,9 +395,9 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
               </div>
               <button
                 onClick={() => setShowCompleteModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer text-base leading-none font-bold"
               >
-                <X className="w-5 h-5" />
+                ✕
               </button>
             </div>
 
@@ -444,9 +499,9 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
               </div>
               <button
                 onClick={() => setShowArchiveModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer text-base leading-none font-bold"
               >
-                <X className="w-5 h-5" />
+                ✕
               </button>
             </div>
 
@@ -457,9 +512,9 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedArchivedDay(null)}
-                    className="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1.5 cursor-pointer"
                   >
-                    <ArrowRight className="w-4 h-4" />
+                    <span className="text-sm leading-none inline-flex items-center justify-center">➡️</span>
                     <span>العودة إلى قائمة الأيام</span>
                   </button>
 
@@ -549,7 +604,7 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-mono text-xs font-bold">
-                          <Calendar className="w-5 h-5" />
+                          <span className="text-lg leading-none inline-flex items-center justify-center">📅</span>
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
@@ -564,9 +619,22 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                         </div>
                       </div>
 
-                      <ChevronLeft className="w-5 h-5 text-slate-400" />
+                      <span className="text-base text-slate-400 leading-none inline-flex items-center justify-center">⬅️</span>
                     </div>
                   ))}
+
+                  {hasMoreArchive && (
+                    <div className="pt-2 text-center">
+                      <button
+                        type="button"
+                        onClick={handleLoadMoreArchive}
+                        disabled={loadingMoreArchive}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-50"
+                      >
+                        {loadingMoreArchive ? 'جاري تحميل المزيد...' : 'تحميل المزيد من الأيام 📜'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

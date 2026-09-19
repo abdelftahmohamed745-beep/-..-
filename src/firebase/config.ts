@@ -1,6 +1,11 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from "firebase/firestore";
 
 const firebaseConfigData = {
   projectId: "prefab-groove-502023-t4",
@@ -29,8 +34,16 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 auth.languageCode = 'ar';
 
-// Initialize Firestore with custom database ID if present in configuration
+// Initialize Firestore with persistentLocalCache for ultra-fast reads and offline resilience
 const databaseId = firebaseConfigData.firestoreDatabaseId || "(default)";
-const db = getFirestore(app, databaseId);
+let db: ReturnType<typeof getFirestore>;
+
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  }, databaseId);
+} catch {
+  db = getFirestore(app, databaseId);
+}
 
 export { app, auth, db };

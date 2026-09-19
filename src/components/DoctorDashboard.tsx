@@ -1,31 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  Users,
-  UserCheck,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Volume2,
-  QrCode,
-  Plus,
-  Search,
-  Filter,
-  AlertTriangle,
-  Phone,
-  ArrowLeftRight,
-  ShieldAlert,
-  ChevronRight,
-  ChevronLeft,
-  Calendar,
-  Zap,
-  Star,
-  MessageSquare,
-  DollarSign,
-  Monitor,
-  Stethoscope,
-  UserX
-} from 'lucide-react';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 import { TVQueueDisplay } from './TVQueueDisplay';
 import { DoctorProfile, PatientRecord, PatientStatus, DoctorRating, FollowUpAppointment, ClinicMember, DailySession } from '../types';
@@ -38,7 +12,8 @@ import {
   recalculateDoctorRatingStats,
   getUserClinicMember,
   markQueuePatientNoShow,
-  getTodayDateString
+  getTodayDateString,
+  recordPatientMedicalOrder
 } from '../services/firebaseService';
 import { playTurnNotificationSound, speakText } from '../utils/audio';
 import { DoctorFollowUpManager } from './DoctorFollowUpManager';
@@ -174,82 +149,159 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
     return true;
   });
 
-  // Call Next Patient
+  // Call Next Patient (Optimistic UI)
   const handleCallNext = async () => {
     if (activeDailySession?.status === 'completed') {
       onShowToast("يوم العمل مكتمل", "تم إنهاء وتوثيق هذا اليوم، لبدء طابور جديد يرجى بدء يوم عمل جديد.", "warning");
       return;
     }
 
-    if (waitingPatients.length === 0 && !calledPatient) {
+    const nextPatient = waitingPatients[0];
+    if (!nextPatient && !calledPatient) {
       onShowToast("لا يوجد مرضى في الانتظار", "الطابور فارغ حالياً", "info");
       return;
     }
 
+    if (!nextPatient) {
+      onShowToast("تم إكمال جميع الكشوفات اليوم!", "لا يوجد مرضى آخرون في الانتظار", "success");
+      return;
+    }
+
+    // Optimistic UI state update immediately
+    const prevPatients = patients;
+    const nowIso = new Date().toISOString();
+    setPatients((prev) =>
+      prev.map((p) => {
+        if (p.id === calledPatient?.id) return { ...p, status: 'done' as PatientStatus, doneAt: nowIso };
+        if (p.id === nextPatient.id) return { ...p, status: 'called' as PatientStatus, calledAt: nowIso };
+        return p;
+      })
+    );
+
+    playTurnNotificationSound('turn');
+    speakText(`مريض رقم ${nextPatient.sequenceNumber}، ${nextPatient.name}، تفضل بالدخول للطبيب`);
+    onShowToast(`تم استدعاء المريض رقم #${nextPatient.sequenceNumber}`, `${nextPatient.name} - ${nextPatient.phone}`, "success");
+
     setIsCallingNext(true);
     try {
-      const { calledPatient: nextP } = await callNextPatient(doctor.uid);
-      playTurnNotificationSound('turn');
-
-      if (nextP) {
-        speakText(`مريض رقم ${nextP.sequenceNumber}، ${nextP.name}، تفضل بالدخول للطبيب`);
-        onShowToast(
-          `تم استدعاء المريض رقم #${nextP.sequenceNumber}`,
-          `${nextP.name} - ${nextP.phone}`,
-          "success"
-        );
-      } else {
-        onShowToast("تم إكمال جميع الكشوفات اليوم!", "لا يوجد مرضى آخرون في الانتظار", "success");
-      }
+      await callNextPatient(doctor.uid);
     } catch (err) {
       console.error("Error calling next patient:", err);
-      onShowToast("خطأ في الاستدعاء", "تعذر تحديث حالة المريض", "error");
+      setPatients(prevPatients); // Revert on failure
+      onShowToast("خطأ في الاستدعاء", "تعذر تحديث حالة المريض في قاعدة البيانات", "error");
     } finally {
       setIsCallingNext(false);
     }
   };
 
-  // Action: Single Patient Status Change
+  // Action: Single Patient Status Change (Optimistic UI)
   const handleStatusChange = async (patient: PatientRecord, newStatus: PatientStatus) => {
+    const prevPatients = patients;
+    const nowIso = new Date().toISOString();
+
+    // Optimistic UI update
+    setPatients((prev) =>
+      prev.map((p) => {
+        if (p.id === patient.id) {
+          return {
+            ...p,
+            status: newStatus,
+            calledAt: newStatus === 'called' ? nowIso : p.calledAt,
+            doneAt: newStatus === 'done' ? nowIso : p.doneAt
+          };
+        }
+        return p;
+      })
+    );
+
+    if (newStatus === 'called') {
+      playTurnNotificationSound('turn');
+      speakText(`مريض رقم ${patient.sequenceNumber}، ${patient.name}`);
+      onShowToast(`تم استدعاء ${patient.name}`, `دور رقم #${patient.sequenceNumber}`, "info");
+    } else if (newStatus === 'done') {
+      playTurnNotificationSound('success');
+      onShowToast(`تم إنهاء كشف ${patient.name}`, "تم إكمال الكشف بنجاح", "success");
+    } else if (newStatus === 'cancelled') {
+      onShowToast(`تم إلغاء حجز ${patient.name}`, "تمت إزالته من الطابور النشط", "warning");
+    }
+
     try {
       await updatePatientStatus(doctor.uid, patient.id, newStatus);
-      if (newStatus === 'called') {
-        playTurnNotificationSound('turn');
-        speakText(`مريض رقم ${patient.sequenceNumber}، ${patient.name}`);
-        onShowToast(`تم استدعاء ${patient.name}`, `دور رقم #${patient.sequenceNumber}`, "info");
-      } else if (newStatus === 'done') {
-        playTurnNotificationSound('success');
-        onShowToast(`تم إنهاء كشف ${patient.name}`, "تم تحديث وقت الكشف المتوسط", "success");
-      } else if (newStatus === 'cancelled') {
-        onShowToast(`تم إلغاء حجز ${patient.name}`, "تمت إزالته من الطابور النشط", "warning");
-      }
     } catch (err) {
       console.error("Status update error:", err);
-      onShowToast("خطأ في التحديث", "تعذر تغيير حالة الحجز", "error");
+      setPatients(prevPatients); // Revert on failure
+      onShowToast("خطأ في التحديث", "تعذر تغيير حالة الحجز في قاعدة البيانات", "error");
     }
   };
 
-  // Action: Walk-In Manual Patient Add
+  // Action: Order Medical Test (X-ray, Lab, X-ray + Lab)
+  const handleQuickMedicalOrder = async (patient: PatientRecord, orderType: 'xray' | 'lab' | 'xray_and_lab') => {
+    try {
+      const { orderLabel, emoji } = await recordPatientMedicalOrder(
+        doctor.uid,
+        patient.id,
+        orderType,
+        patient.name,
+        patient.phone
+      );
+      onShowToast(`تم تسجيل طلب ${orderLabel} ${emoji}`, `تم إرفاق طلب ${orderLabel} لملف ${patient.name}`, 'success');
+    } catch (err: any) {
+      console.error('Error ordering medical test:', err);
+      onShowToast('تعذر تسجيل الطلب', err?.message, 'error');
+    }
+  };
+
+  // Action: Walk-In Manual Patient Add (Optimistic UI)
   const handleManualAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualName.trim() || !manualPhone.trim()) return;
+    const cleanName = manualName.trim();
+    const cleanPhone = manualPhone.trim();
+    if (!cleanName || !cleanPhone) return;
+
+    const nextSeq = patients.length > 0 ? Math.max(...patients.map((p) => p.sequenceNumber || 0)) + 1 : 1;
+    const tempId = `temp_${Date.now()}`;
+    const optimisticPatient: PatientRecord = {
+      id: tempId,
+      patientId: `pid_${Date.now()}`,
+      name: cleanName,
+      phone: cleanPhone,
+      sequenceNumber: nextSeq,
+      queueNumber: nextSeq,
+      status: 'waiting',
+      date: activeDailySession?.date || getTodayDateString(),
+      createdAt: new Date().toISOString(),
+      doctorId: doctor.uid,
+      clinicId: doctor.uid,
+      visitType: 'كشف عيادة',
+      serviceName: 'كشف',
+      price: doctor.consultationFee || 200
+    };
+
+    // Optimistic UI update immediately
+    setPatients((prev) => [...prev, optimisticPatient]);
+    setIsManualAddOpen(false);
+    setManualName('');
+    setManualPhone('');
+    playTurnNotificationSound('success');
+    onShowToast("تم إضافة المريض بنجاح", `تم تخصيص رقم الدور #${nextSeq}`, "success");
 
     setIsSubmittingManual(true);
     try {
-      const res = await bookPatient(doctor.uid, manualName.trim(), manualPhone.trim());
+      const res = await bookPatient(doctor.uid, cleanName, cleanPhone, doctor.uid);
       setIsSubmittingManual(false);
-      setIsManualAddOpen(false);
-      setManualName('');
-      setManualPhone('');
 
       if (res.isExisting) {
         onShowToast("لديه حجز نشط بالفعل", `المريض مسجل برقم دور #${res.sequenceNumber}`, "warning");
       } else {
-        playTurnNotificationSound('success');
-        onShowToast("تم إضافة المريض بنجاح", `تم تخصيص رقم الدور #${res.sequenceNumber}`, "success");
+        // Swap tempId with actual patientId from Firestore
+        setPatients((prev) =>
+          prev.map((p) => (p.id === tempId ? { ...p, id: res.patientId, sequenceNumber: res.sequenceNumber } : p))
+        );
       }
     } catch (err: unknown) {
       setIsSubmittingManual(false);
+      // Revert optimistic addition on failure
+      setPatients((prev) => prev.filter((p) => p.id !== tempId));
       const errMsg = err instanceof Error ? err.message : "تعذر إضافة المريض";
       onShowToast("خطأ في إضافة المريض", errMsg, "error");
     }
@@ -263,7 +315,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         <div className="bg-rose-50 border border-rose-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-rose-900 shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 font-bold">
-              <ShieldAlert className="w-5 h-5" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">⚠️</span>
             </div>
             <div>
               <div className="font-bold text-sm font-['Tajawal',sans-serif]">
@@ -330,7 +382,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
               }`}
             >
-              <Zap className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+              <span className="text-base leading-none inline-flex items-center justify-center">🔊</span>
               <span>{isCallingNext ? 'جاري الاستدعاء...' : 'استدعاء التالي'}</span>
             </button>
           </div>
@@ -351,7 +403,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             <div className="text-[10px] text-slate-400 mt-0.5">حالة مسجلة</div>
           </div>
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-[#6366F1] border border-indigo-100 flex items-center justify-center font-bold shrink-0">
-            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-[#6366F1]" />
+            <span className="text-2xl leading-none inline-flex items-center justify-center">👥</span>
           </div>
         </div>
 
@@ -365,7 +417,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             <div className="text-[10px] text-amber-600 mt-0.5 font-medium">جاهزون للدخول</div>
           </div>
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-[#F59E0B] border border-amber-100 flex items-center justify-center font-bold shrink-0">
-            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#F59E0B]" />
+            <span className="text-2xl leading-none inline-flex items-center justify-center">⏳</span>
           </div>
         </div>
 
@@ -379,7 +431,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             <div className="text-[10px] text-violet-600 mt-0.5 font-medium">داخل الغرفة</div>
           </div>
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-50 text-[#8B5CF6] border border-violet-100 flex items-center justify-center font-bold shrink-0">
-            <UserCheck className="w-4 h-4 sm:w-5 sm:h-5 text-[#8B5CF6]" />
+            <span className="text-2xl leading-none inline-flex items-center justify-center">🩺</span>
           </div>
         </div>
 
@@ -393,7 +445,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             <div className="text-[10px] text-slate-400 mt-0.5">كشوفات مكتملة</div>
           </div>
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-50 text-[#8B5CF6] border border-violet-100 flex items-center justify-center font-bold shrink-0">
-            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-[#8B5CF6]" />
+            <span className="text-2xl leading-none inline-flex items-center justify-center">✅</span>
           </div>
         </div>
 
@@ -409,7 +461,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
           </div>
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-[#0EA5E9] border border-sky-100 flex items-center justify-center font-bold shrink-0">
-            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#0EA5E9]" />
+            <span className="text-2xl leading-none inline-flex items-center justify-center">⏱️</span>
           </div>
         </div>
 
@@ -424,7 +476,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               <span className="text-[10px] text-sky-600 underline group-hover:text-sky-800">(عرض)</span>
             </div>
             <div className="text-xl sm:text-2xl font-black text-[#0EA5E9] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1 flex items-center gap-1 dir-ltr">
-              <Star className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 fill-amber-500" />
+              <span className="text-base leading-none inline-flex items-center justify-center">⭐</span>
               <span>{activeRatingAvg}</span>
             </div>
             <div className="text-[10px] text-slate-400 font-medium mt-0.5">
@@ -432,7 +484,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
           </div>
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-[#0EA5E9] border border-sky-100 flex items-center justify-center font-bold shadow-2xs shrink-0">
-            <Star className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 fill-amber-500" />
+            <span className="text-2xl leading-none inline-flex items-center justify-center">⭐</span>
           </div>
         </button>
 
@@ -448,7 +500,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-300" />
+          <span className="text-base leading-none inline-flex items-center justify-center">👥</span>
           <span>طابور اليوم ({patients.length})</span>
         </button>
 
@@ -460,7 +512,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-300" />
+          <span className="text-base leading-none inline-flex items-center justify-center">📅</span>
           <span>إعادة الكشف</span>
         </button>
 
@@ -472,7 +524,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-300" />
+          <span className="text-base leading-none inline-flex items-center justify-center">👥</span>
           <span>فريق العمل</span>
         </button>
 
@@ -485,7 +537,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+            <span className="text-base leading-none inline-flex items-center justify-center">💰</span>
             <span>المالية</span>
           </button>
         )}
@@ -528,6 +580,9 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             currentUserName={currentMember?.name || doctor.name}
             todayPatients={patients}
             onSessionChange={setActiveDailySession}
+            onDayCompleted={() => {
+              setPatients([]);
+            }}
             onShowToast={onShowToast}
           />
 
@@ -594,7 +649,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto">
               {/* Search Input */}
               <div className="relative flex-1 sm:w-64 min-w-[140px]">
-                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+                <span className="text-sm text-slate-400 absolute right-3 top-2.5 leading-none pointer-events-none">🔍</span>
                 <input
                   type="text"
                   value={searchTerm}
@@ -610,7 +665,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 className="flex items-center gap-1.5 px-3 py-2 bg-[#122c4a] hover:bg-[#0d223a] text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer min-h-[38px]"
                 title="شاشة الانتظار للتلفزيون (TV Queue Display)"
               >
-                <Monitor className="w-4 h-4 text-sky-400" />
+                <span className="text-base leading-none inline-flex items-center justify-center">📺</span>
                 <span className="hidden sm:inline">شاشة TV</span>
               </button>
 
@@ -620,7 +675,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 className="p-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl transition shadow-2xs cursor-pointer min-h-[38px] flex items-center justify-center shrink-0"
                 title="ماسح الكاميرا للتذاكر"
               >
-                <QrCode className="w-4 h-4 text-[#122c4a]" />
+                <span className="text-base leading-none inline-flex items-center justify-center">📱</span>
               </button>
 
               {/* Add Walk-In Patient with fast search & multi-payment */}
@@ -628,7 +683,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 onClick={() => setIsFastRegistrationOpen(true)}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition shadow-2xs shrink-0 cursor-pointer min-h-[38px]"
               >
-                <Plus className="w-4 h-4" />
+                <span className="text-base leading-none inline-flex items-center justify-center">➕</span>
                 <span>إضافة مريض</span>
               </button>
             </div>
@@ -645,7 +700,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
           ) : displayedPatients.length === 0 ? (
             <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4">
-              <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <span className="text-5xl block mx-auto mb-3 leading-none">👥</span>
               <h3 className="font-bold text-slate-700 text-base font-['Tajawal',sans-serif]">
                 لا يوجد مرضي في القائمة حالياً
               </h3>
@@ -712,11 +767,19 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                                isWaiting ? 'في الانتظار' :
                                isDone ? 'تم الكشف' : 'ملغي'}
                             </span>
+
+                            {/* Medical Order Badge */}
+                            {patient.medicalOrderLabel && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+                                <span>{patient.medicalOrder === 'xray' ? '🩻' : patient.medicalOrder === 'lab' ? '🧪' : '🔬'}</span>
+                                <span>{patient.medicalOrderLabel}</span>
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500 mt-1 flex-wrap">
                             <span className="flex items-center gap-1 font-mono dir-ltr">
-                              <Phone className="w-3 h-3 text-slate-400" />
+                              <span className="text-xs leading-none inline-flex items-center justify-center">📞</span>
                               {patient.phone}
                             </span>
                             <span>•</span>
@@ -728,83 +791,99 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
                       </div>
 
-                      {/* Right side actions */}
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto justify-start lg:justify-end border-t lg:border-0 pt-2.5 lg:pt-0 border-slate-100">
+                      {/* Right side actions: Organized in 3-column responsive grid on mobile, flex on desktop */}
+                      <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto justify-start lg:justify-end border-t lg:border-0 pt-2.5 lg:pt-0 border-slate-100">
+                        {/* 1. Call Patient */}
                         {isWaiting && (
                           <button
                             onClick={() => handleStatusChange(patient, 'called')}
-                            className="px-3 sm:px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shadow-2xs flex items-center gap-1 min-h-[36px] active:scale-95 cursor-pointer"
+                            className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl transition shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
                           >
-                            <Volume2 className="w-3.5 h-3.5" />
+                            <span className="text-base leading-none inline-flex items-center justify-center">🔊</span>
                             <span>استدعاء</span>
                           </button>
                         )}
 
+                        {/* 2. Done Consultation */}
                         {(isWaiting || isCalled) && (
                           <button
                             onClick={() => handleStatusChange(patient, 'done')}
-                            className="px-3 sm:px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow-2xs flex items-center gap-1 min-h-[36px] active:scale-95 cursor-pointer"
+                            className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span className="text-base leading-none inline-flex items-center justify-center">✅</span>
                             <span>تم الكشف</span>
                           </button>
                         )}
 
-                        {(isWaiting || isCalled) && (
-                          <button
-                            onClick={() => handleStatusChange(patient, 'cancelled')}
-                            className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition min-h-[36px] min-w-[36px] flex items-center justify-center cursor-pointer"
-                            title="إلغاء حجز المريض"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {(isDone || isCancelled) && (
-                          <button
-                            onClick={() => handleStatusChange(patient, 'waiting')}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition min-h-[36px] cursor-pointer"
-                          >
-                            إعادة للطابور
-                          </button>
-                        )}
-
-                        {/* Doctor Consultation Workspace Modal (Section 12, 13, 14, 15) */}
-                        <button
-                          onClick={() => setSelectedPatientForConsultation(patient)}
-                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer min-h-[36px] active:scale-95"
-                          title="بدء الكشف وحفظ السجل الطبي"
-                        >
-                          <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>كشف واستشارة</span>
-                        </button>
-
-                        {/* Quick Follow Up Appointment Registration */}
-                        <button
-                          onClick={() => setQuickFollowUpPatient({ name: patient.name, phone: patient.phone })}
-                          className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer min-h-[36px] active:scale-95"
-                          title="حجز موعد إعادة كشف للمريض"
-                        >
-                          <Calendar className="w-3.5 h-3.5 text-sky-600" />
-                          <span>إعادة كشف</span>
-                        </button>
-
-                        {/* Quick Payment Registration */}
+                        {/* 3. Quick Payment Registration */}
                         {hasPermission(currentMember, 'VIEW_FINANCE', isDoctorOwnerFallback) && (
                           <button
                             onClick={() => {
                               setSelectedPatientForPayment(patient);
                               setActiveSection('finance');
                             }}
-                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer min-h-[36px] active:scale-95"
+                            className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer active:scale-95 whitespace-nowrap"
                             title="تسجيل دفع رسوم الكشف"
                           >
-                            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-base leading-none inline-flex items-center justify-center">💵</span>
                             <span>الدفع</span>
                           </button>
                         )}
 
-                        {/* No-show 1-click action (Section 19) */}
+                        {/* 4. X-ray */}
+                        <button
+                          onClick={() => handleQuickMedicalOrder(patient, 'xray')}
+                          className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer active:scale-95 whitespace-nowrap"
+                          title="طلب فحص أشعة للمريض"
+                        >
+                          <span className="text-base leading-none inline-flex items-center justify-center">🩻</span>
+                          <span>أشعة</span>
+                        </button>
+
+                        {/* 5. Lab Analysis */}
+                        <button
+                          onClick={() => handleQuickMedicalOrder(patient, 'lab')}
+                          className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer active:scale-95 whitespace-nowrap"
+                          title="طلب فحص تحليل للمريض"
+                        >
+                          <span className="text-base leading-none inline-flex items-center justify-center">🧪</span>
+                          <span>تحليل</span>
+                        </button>
+
+                        {/* 6. X-ray & Lab Combined */}
+                        <button
+                          onClick={() => handleQuickMedicalOrder(patient, 'xray_and_lab')}
+                          className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs rounded-xl transition flex items-center gap-1 cursor-pointer active:scale-95 whitespace-nowrap"
+                          title="طلب فحص أشعة وتحليل للمريض"
+                        >
+                          <span className="text-base leading-none inline-flex items-center justify-center">🔬</span>
+                          <span>أشعة وتحليل</span>
+                        </button>
+
+                        {/* 7. Re-queue */}
+                        {(isDone || isCancelled) && (
+                          <button
+                            onClick={() => handleStatusChange(patient, 'waiting')}
+                            className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer whitespace-nowrap"
+                          >
+                            <span className="text-base leading-none inline-flex items-center justify-center">🔁</span>
+                            <span>إعادة للطابور</span>
+                          </button>
+                        )}
+
+                        {/* 8. Cancel */}
+                        {(isWaiting || isCalled) && (
+                          <button
+                            onClick={() => handleStatusChange(patient, 'cancelled')}
+                            className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition cursor-pointer whitespace-nowrap active:scale-95"
+                            title="إلغاء حجز المريض"
+                          >
+                            <span className="text-base leading-none inline-flex items-center justify-center">❌</span>
+                            <span>إلغاء</span>
+                          </button>
+                        )}
+
+                        {/* 9. No-show */}
                         {(isWaiting || isCalled) && (
                           <button
                             onClick={async () => {
@@ -815,10 +894,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                                 onShowToast('فشل التحديث', err?.message, 'error');
                               }
                             }}
-                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+                            className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-h-[38px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer whitespace-nowrap active:scale-95"
                             title="لم يحضر (No-show)"
                           >
-                            <UserX className="w-4 h-4" />
+                            <span className="text-base leading-none inline-flex items-center justify-center">❌</span>
+                            <span>لم يحضر</span>
                           </button>
                         )}
                       </div>
@@ -903,7 +983,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
-                  <Star className="w-4 h-4 fill-current" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">⭐</span>
                 </div>
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-base font-['Tajawal',sans-serif]">
@@ -925,7 +1005,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             {/* Ratings List */}
             {doctorRatings.length === 0 ? (
               <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                <MessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <span className="text-3xl block mx-auto mb-2 leading-none">💬</span>
                 <p className="text-xs text-slate-500 font-medium">لا يوجد تقييمات حتى الآن من المرضى</p>
               </div>
             ) : (
@@ -941,14 +1021,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1 dir-ltr">
+                    <div className="flex items-center gap-0.5 dir-ltr">
                       {[1, 2, 3, 4, 5].map((s) => (
-                        <Star
-                          key={s}
-                          className={`w-3.5 h-3.5 ${
-                            s <= rev.stars ? 'text-amber-400 fill-amber-400' : 'text-slate-200'
-                          }`}
-                        />
+                        <span key={s} className="text-sm">
+                          {s <= rev.stars ? '⭐' : '☆'}
+                        </span>
                       ))}
                     </div>
 
@@ -1022,6 +1099,13 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         defaultConsultationPrice={doctor.consultationFee || 300}
         currentUserId={currentMember?.uid || doctor.uid}
         currentUserName={currentMember?.name || doctor.name}
+        onPatientAdded={(newPatient) => {
+          setPatients((prev) => {
+            const exists = prev.some((p) => p.id === newPatient.id || (p.phone === newPatient.phone && p.status === 'waiting'));
+            if (exists) return prev;
+            return [...prev, newPatient];
+          });
+        }}
         onShowToast={onShowToast}
       />
 

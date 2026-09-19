@@ -1,30 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  X,
-  User,
-  Phone,
-  Search,
-  Check,
-  CreditCard,
-  Plus,
-  Trash2,
-  Calendar,
-  AlertCircle,
-  FileText,
-  UserCheck,
-  DollarSign
-} from 'lucide-react';
-import {
   ClinicService,
   PaymentMethod,
-  PaymentSplitItem
+  PaymentSplitItem,
+  PatientRecord
 } from '../types';
 import {
   searchClinicPatientsFast,
   FastPatientSearchResult,
   bookPatient,
   recordSplitPayment,
-  getClinicServicesPublic
+  getClinicServicesPublic,
+  getTodayDateString
 } from '../services/firebaseService';
 
 interface FastPatientRegistrationModalProps {
@@ -35,6 +22,7 @@ interface FastPatientRegistrationModalProps {
   defaultConsultationPrice?: number;
   currentUserId?: string;
   currentUserName?: string;
+  onPatientAdded?: (newPatient: PatientRecord) => void;
   onSuccess?: () => void;
   onShowToast?: (title: string, message?: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
@@ -47,6 +35,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
   defaultConsultationPrice = 300,
   currentUserId = 'secretary',
   currentUserName = 'السكرتارية',
+  onPatientAdded,
   onSuccess,
   onShowToast
 }) => {
@@ -218,6 +207,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
       }
 
       // 2. Book patient in queue (atomic sequence numbering)
+      const cleanServiceId = selectedServiceId !== 'custom' && selectedServiceId !== 'default_consultation' ? selectedServiceId : '';
       const bookingResult = await bookPatient(
         doctorId,
         patientName.trim(),
@@ -225,26 +215,57 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
         currentUserId,
         'two_turns',
         {
-          serviceId: selectedServiceId !== 'custom' && selectedServiceId !== 'default_consultation' ? selectedServiceId : undefined,
+          serviceId: cleanServiceId,
           serviceName: finalServiceName,
           price: totalAmount
         }
       );
 
-      // 3. Record transaction with multi-payment split
-      await recordSplitPayment({
-        organizationId: doctorId,
-        patientName: patientName.trim(),
-        patientPhone: patientPhone.trim(),
-        patientRecordId: bookingResult.patientId,
-        serviceId: selectedServiceId !== 'custom' && selectedServiceId !== 'default_consultation' ? selectedServiceId : undefined,
+      // Optimistic record for instant UI insertion
+      const nowIso = new Date().toISOString();
+      const newPatientRecord: PatientRecord = {
+        id: bookingResult.patientId,
+        patientId: bookingResult.patientId,
+        name: patientName.trim(),
+        phone: patientPhone.trim(),
+        sequenceNumber: bookingResult.sequenceNumber,
+        queueNumber: bookingResult.sequenceNumber,
+        status: 'waiting',
+        date: getTodayDateString(),
+        createdAt: nowIso,
+        doctorId: doctorId,
+        clinicId: doctorId,
+        visitType: 'كشف عيادة',
+        serviceId: cleanServiceId,
         serviceName: finalServiceName,
-        totalAmount,
-        payments,
-        notes: notes.trim() || undefined,
-        createdBy: currentUserId,
-        createdByName: currentUserName
-      });
+        price: totalAmount,
+        paidAmount: totalPaid,
+        balanceAmount: remainingAmount,
+        paymentStatus: remainingAmount <= 0 ? 'paid' : totalPaid > 0 ? 'partial' : 'pending'
+      };
+
+      if (onPatientAdded) {
+        onPatientAdded(newPatientRecord);
+      }
+
+      // 3. Record transaction with multi-payment split
+      try {
+        await recordSplitPayment({
+          organizationId: doctorId,
+          patientName: patientName.trim(),
+          patientPhone: patientPhone.trim(),
+          patientRecordId: bookingResult.patientId,
+          serviceId: cleanServiceId,
+          serviceName: finalServiceName,
+          totalAmount,
+          payments,
+          notes: notes.trim() || '',
+          createdBy: currentUserId,
+          createdByName: currentUserName
+        });
+      } catch (payErr) {
+        console.warn('Transaction split payment logged with warning:', payErr);
+      }
 
       if (onShowToast) {
         onShowToast(
@@ -278,7 +299,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
         <div className="bg-gradient-to-r from-sky-600 to-sky-800 text-white p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-              <UserCheck className="w-5 h-5 text-sky-100" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">🧑‍⚕️</span>
             </div>
             <div>
               <h3 className="text-lg font-extrabold font-['Tajawal',sans-serif]">
@@ -292,9 +313,9 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
 
           <button
             onClick={onClose}
-            className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
+            className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer text-base leading-none font-bold"
           >
-            <X className="w-5 h-5" />
+            ✕
           </button>
         </div>
 
@@ -305,7 +326,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
           {selectedPatientId && (
             <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs text-emerald-900">
               <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-sm leading-none inline-flex items-center justify-center text-emerald-600">✅</span>
                 <span>
                   تم التعرف على المريض: <strong>{patientName}</strong> • الزيارة رقم <strong>{selectedPatientVisits + 1}</strong>
                 </span>
@@ -359,26 +380,33 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
 
             {/* Suggestions Dropdown */}
             {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute top-16 left-0 right-0 z-30 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 space-y-1 max-h-48 overflow-y-auto">
-                <div className="text-[11px] text-slate-400 px-2 py-1 font-bold">
-                  مرضى مسجلين سابقًا في العيادة (اضغط للاختيار السريع):
+              <div className="sm:col-span-2 bg-white border-2 border-sky-400 rounded-2xl shadow-xl p-2.5 space-y-1.5 max-h-56 overflow-y-auto z-40">
+                <div className="flex items-center justify-between text-[11px] text-sky-800 px-2 py-1 font-extrabold border-b border-sky-100 bg-sky-50/60 rounded-lg">
+                  <span>مرضى مسجلين سابقًا في العيادة (اضغط للتعبئة التلقائية للبيانات):</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowSuggestions(false)}
+                    className="text-slate-400 hover:text-slate-700 font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                  >
+                    إغلاق ✕
+                  </button>
                 </div>
                 {suggestions.map((s) => (
                   <div
                     key={s.id}
                     onClick={() => handleSelectPatient(s)}
-                    className="p-2 rounded-xl hover:bg-sky-50 transition cursor-pointer flex items-center justify-between text-xs"
+                    className="p-2.5 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 transition cursor-pointer flex items-center justify-between text-xs active:scale-[0.99]"
                   >
                     <div>
-                      <span className="font-extrabold text-slate-900 block">{s.patientName}</span>
-                      <span className="text-[11px] text-slate-400 font-mono">{s.patientPhone}</span>
+                      <span className="font-black text-slate-900 block text-sm">{s.patientName}</span>
+                      <span className="text-xs text-slate-600 font-mono font-bold" dir="ltr">{s.patientPhone}</span>
                     </div>
-                    <div className="text-left font-mono">
-                      <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-700 font-bold block">
+                    <div className="text-left font-mono space-y-1">
+                      <span className="px-2.5 py-0.5 bg-sky-100/70 text-sky-800 rounded-md text-[10px] font-extrabold block">
                         {s.visitsCount} زيارات سابقة
                       </span>
                       {s.totalOutstandingBalance > 0 && (
-                        <span className="text-[10px] text-rose-600 font-bold">
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-700 rounded-md text-[10px] font-extrabold block">
                           متبقي: {s.totalOutstandingBalance} ج.م
                         </span>
                       )}
@@ -460,7 +488,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
                 onClick={handleAddPaymentRow}
                 className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-bold text-sky-700 flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-3 h-3" />
+                <span className="text-xs leading-none inline-flex items-center justify-center">➕</span>
                 <span>إضافة وسيلة دفع</span>
               </button>
             </div>
@@ -495,9 +523,9 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
                     <button
                       type="button"
                       onClick={() => handleRemovePaymentRow(idx)}
-                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer text-xs leading-none font-bold"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="text-xs leading-none inline-flex items-center justify-center">🗑️</span>
                     </button>
                   )}
                 </div>

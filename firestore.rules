@@ -129,6 +129,9 @@ service cloud.firestore {
       // Daily Clinic Operating Sessions & Archives (Doctor / Org Member or Admin ONLY)
       match /dailySessions/{sessionId} {
         allow read, write: if isOrgMember(doctorId) || isAdmin();
+        match /{subcollection=**} {
+          allow read, write: if isOrgMember(doctorId) || isAdmin();
+        }
       }
     }
 
@@ -137,8 +140,8 @@ service cloud.firestore {
       // Public read: allow patients to track turn in real time
       allow read: if true;
 
-      // Create: Validated ticket creation with required payload fields
-      allow create: if isValidPatientCreate();
+      // Create: Validated ticket creation with required payload fields or by clinic staff/doctor/admin
+      allow create: if isValidPatientCreate() || isOrgMember(doctorId) || isAdmin();
 
       // Update: Doctor owner, clinic member, or admin can update; or patient cancelling their ticket
       allow update: if (isOrgMember(doctorId) && isValidPatientUpdate()) 
@@ -153,7 +156,7 @@ service cloud.firestore {
     match /queues/{doctorId}/dailyCounters/{dateId} {
       allow read: if true;
       allow create, update: if request.resource.data.lastSequenceNumber is number 
-        && request.resource.data.lastSequenceNumber > 0;
+        && request.resource.data.lastSequenceNumber >= 0;
     }
 
     // Clinic Members collection
@@ -243,6 +246,13 @@ service cloud.firestore {
         allow read: if isOrgMember(orgId);
         allow create, update, delete: if isOrgMember(orgId);
       }
+    }
+
+    // Clinic Transactions collection (split payments, fees, receipts)
+    match /clinic_transactions/{txId} {
+      allow read: if isOrgMember(resource.data.organizationId) || isAdmin();
+      allow create: if isAuthenticated() || isAdmin();
+      allow update, delete: if isOrgMember(resource.data.organizationId) || isAdmin();
     }
 
     // User FCM Tokens collection

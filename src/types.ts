@@ -255,6 +255,7 @@ export interface DoctorProfile {
   trialEndDate: string; // ISO date string
   subscriptionEndDate?: string;
   avgConsultTime: number; // in minutes, e.g. 15
+  consultationFee?: number;
   workHours: DoctorWorkHours;
   createdAt: string;
   isActive?: boolean; // Platform admin control: true = active, false = deactivated
@@ -312,6 +313,9 @@ export interface PatientRecord {
   serviceName?: string;
   visitType?: string;
   price?: number;
+  paidAmount?: number;
+  balanceAmount?: number;
+  paymentStatus?: string;
   createdAt: string; // ISO string
   updatedAt?: string;
   calledAt?: string; // ISO string
@@ -324,6 +328,9 @@ export interface PatientRecord {
   notifiedForOneTurn?: boolean;
   notifiedForTenMinutes?: boolean;
   notificationPreference?: NotificationTimingPreference;
+  medicalOrder?: 'xray' | 'lab' | 'xray_and_lab';
+  medicalOrderLabel?: string;
+  medicalOrderAt?: string;
 }
 
 export interface PatientProfile {

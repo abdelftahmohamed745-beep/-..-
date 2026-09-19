@@ -13,7 +13,8 @@ import {
   orderBy,
   limit,
   runTransaction,
-  increment
+  increment,
+  writeBatch
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import {
@@ -281,6 +282,25 @@ export async function findTicketByReferenceOrPhone(
     console.error("Error searching ticket by reference/phone:", err);
     return null;
   }
+}
+
+export function removeUndefinedFields<T extends Record<string, any>>(obj: T): T {
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === undefined) continue;
+    if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+      clean[key] = removeUndefinedFields(val);
+    } else if (Array.isArray(val)) {
+      clean[key] = val.map((item) =>
+        item !== null && typeof item === 'object' && !(item instanceof Date)
+          ? removeUndefinedFields(item)
+          : item
+      );
+    } else {
+      clean[key] = val;
+    }
+  }
+  return clean as T;
 }
 
 export function normalizePhoneNumber(phone: string): string {
@@ -707,9 +727,28 @@ export async function verifyAdminStatus(user: any): Promise<{ isAdmin: boolean; 
   }
 }
 
-// Fetch Doctor Profile
-export async function getDoctorProfile(doctorId: string): Promise<DoctorProfile | null> {
+// In-memory cache for doctor profiles to drastically minimize getDoc reads
+const doctorProfileCache = new Map<string, { profile: DoctorProfile; timestamp: number }>();
+const DOCTOR_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+
+export function clearDoctorProfileCache(doctorId?: string): void {
+  if (doctorId) {
+    doctorProfileCache.delete(doctorId);
+  } else {
+    doctorProfileCache.clear();
+  }
+}
+
+// Fetch Doctor Profile with in-memory caching
+export async function getDoctorProfile(doctorId: string, bypassCache = false): Promise<DoctorProfile | null> {
   try {
+    if (!bypassCache) {
+      const cached = doctorProfileCache.get(doctorId);
+      if (cached && Date.now() - cached.timestamp < DOCTOR_CACHE_TTL) {
+        return cached.profile;
+      }
+    }
+
     const docRef = doc(db, "doctors", doctorId);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
@@ -719,6 +758,7 @@ export async function getDoctorProfile(doctorId: string): Promise<DoctorProfile 
       if (computedStatus !== data.subscriptionStatus) {
         data.subscriptionStatus = computedStatus;
       }
+      doctorProfileCache.set(doctorId, { profile: data, timestamp: Date.now() });
       return data;
     }
     return null;
@@ -860,13 +900,16 @@ export async function bookPatient(
   const pid = patientProfile?.patientId || generatePatientId(normalizedPhone);
   const bookingRef = generateBookingReference();
 
-  // 4. Anti-Spam Rate Limiting Check for NEW bookings
-  const rateCheck = checkBookingRateLimit(normalizedPhone);
-  if (!rateCheck.allowed) {
-    throw new Error(`يرجى الانتظار ${rateCheck.remainingSeconds} ثانية قبل محاولة الحجز مرة أخرى`);
+  // 4. Anti-Spam Rate Limiting Check for NEW bookings (applies ONLY to public patient bookings, never clinic staff or doctor)
+  const isClinicStaff = Boolean(userId && userId !== 'PATIENT_PUBLIC');
+  if (!isClinicStaff) {
+    const rateCheck = checkBookingRateLimit(normalizedPhone);
+    if (!rateCheck.allowed) {
+      throw new Error(`يرجى الانتظار ${rateCheck.remainingSeconds} ثانية قبل محاولة الحجز مرة أخرى`);
+    }
   }
 
-  // 5. Verify doctor subscription status & active account
+  // 5. Verify doctor subscription status & active account (cached in memory)
   const doctor = await getDoctorProfile(doctorId);
   if (!doctor) {
     throw new Error("الطبيب غير موجود في النظام");
@@ -881,7 +924,7 @@ export async function bookPatient(
     throw new Error("عذراً، نظام الحجز غير متاح حالياً لدى هذه العيادة لانتهاء فترة الاشتراك. يرجى مراجعة موظف الاستقبال.");
   }
 
-  // 6. Atomic Queue Sequence Number Generation via Transaction
+  // 6. Atomic Queue Sequence Number Generation via Transaction (Zero extra getDocs queries needed!)
   const today = getTodayDateString();
   const counterRef = doc(db, "queues", doctorId, "dailyCounters", today);
   const now = new Date().toISOString();
@@ -889,17 +932,6 @@ export async function bookPatient(
   // Deterministic booking document reference based on date + normalized phone
   const bookingDocId = `${today}_${normalizedPhone}`;
   const deterministicPatientRef = doc(db, "queues", doctorId, "patients", bookingDocId);
-
-  // Baseline fetch in case counter document hasn't been created yet today
-  const qBaseline = query(collection(db, "queues", doctorId, "patients"), where("date", "==", today));
-  const snapBaseline = await getDocs(qBaseline);
-  let baselineMaxSeq = 0;
-  snapBaseline.docs.forEach((d) => {
-    const p = d.data() as PatientRecord;
-    if (typeof p.sequenceNumber === 'number' && p.sequenceNumber > baselineMaxSeq) {
-      baselineMaxSeq = p.sequenceNumber;
-    }
-  });
 
   const transactionResult = await runTransaction(db, async (transaction) => {
     // A. Read deterministic patient doc inside transaction to prevent parallel race condition duplicates
@@ -921,13 +953,13 @@ export async function bookPatient(
       targetPatientRef = doc(collection(db, "queues", doctorId, "patients"));
     }
 
-    // B. Read daily counter inside transaction
+    // B. Read atomic daily counter inside transaction
     const counterSnap = await transaction.get(counterRef);
-    let currentMaxSeq = baselineMaxSeq;
+    let currentMaxSeq = 0;
 
     if (counterSnap.exists()) {
       const recordedSeq = counterSnap.data().lastSequenceNumber;
-      if (typeof recordedSeq === 'number' && recordedSeq > currentMaxSeq) {
+      if (typeof recordedSeq === 'number' && recordedSeq > 0) {
         currentMaxSeq = recordedSeq;
       }
     }
@@ -955,7 +987,7 @@ export async function bookPatient(
       serviceId: selectedService?.serviceId || '',
       serviceName: selectedService?.serviceName || 'كشف',
       visitType: selectedService?.visitType || selectedService?.serviceName || 'كشف جديد',
-      price: typeof selectedService?.price === 'number' ? selectedService.price : 200,
+      price: typeof selectedService?.price === 'number' ? selectedService.price : (doctor.consultationFee || 200),
       createdAt: now,
       updatedAt: now,
       estimatedMinutes: estMins,
@@ -972,7 +1004,7 @@ export async function bookPatient(
       updatedAt: now
     }, { merge: true });
 
-    transaction.set(targetPatientRef, patientData);
+    transaction.set(targetPatientRef, removeUndefinedFields(patientData));
 
     return {
       patientId: targetPatientRef.id,
@@ -983,9 +1015,10 @@ export async function bookPatient(
     };
   });
 
-    // Record rate limiting timestamp ONLY on successful transaction completion
-  if (!transactionResult.isExisting) {
+  // Record rate limiting timestamp ONLY on successful transaction completion for public bookings
+  if (!transactionResult.isExisting && !isClinicStaff) {
     recordBookingSuccess(normalizedPhone);
+  }
 
     // Update active daily session metrics at write time
     try {
@@ -1003,7 +1036,7 @@ export async function bookPatient(
       await addVisitToPatientMedicalFile(doctorId, cleanName, normalizedPhone, {
         id: `visit_${Date.now()}`,
         date: today,
-        serviceId: selectedService?.serviceId,
+        serviceId: selectedService?.serviceId || '',
         serviceName: selectedService?.serviceName || 'كشف',
         visitType: selectedService?.visitType || selectedService?.serviceName || 'كشف جديد',
         price: typeof selectedService?.price === 'number' ? selectedService.price : 200,
@@ -1015,7 +1048,6 @@ export async function bookPatient(
     } catch (e) {
       console.warn("Could not auto-link visit to patient medical file:", e);
     }
-  }
 
   // Write Audit Log
   writeAuditLog("BOOK_PATIENT_TICKET", userId || "PATIENT_PUBLIC", doctorId, {
@@ -1251,6 +1283,50 @@ export async function updatePatientStatus(
   if (newStatus === 'done') {
     recalculateDoctorAvgConsultTime(doctorId).catch(console.error);
   }
+}
+
+export async function recordPatientMedicalOrder(
+  doctorId: string,
+  patientId: string,
+  orderType: 'xray' | 'lab' | 'xray_and_lab',
+  patientName: string,
+  patientPhone?: string
+): Promise<{ orderLabel: string; emoji: string }> {
+  const labels: Record<string, { orderLabel: string; emoji: string }> = {
+    xray: { orderLabel: 'أشعة', emoji: '🩻' },
+    lab: { orderLabel: 'تحليل', emoji: '🧪' },
+    xray_and_lab: { orderLabel: 'أشعة وتحليل', emoji: '🔬' }
+  };
+  const { orderLabel, emoji } = labels[orderType] || { orderLabel: 'فحص طبي', emoji: '🔬' };
+  const nowIso = new Date().toISOString();
+
+  await updateDoc(doc(db, "queues", doctorId, "patients", patientId), {
+    medicalOrder: orderType,
+    medicalOrderLabel: orderLabel,
+    medicalOrderAt: nowIso
+  });
+
+  if (patientPhone) {
+    try {
+      await addVisitToPatientMedicalFile(doctorId, patientName, patientPhone, {
+        id: `order_${Date.now()}`,
+        date: getTodayDateString(),
+        serviceId: '',
+        serviceName: `طلب فحص: ${orderLabel}`,
+        visitType: 'كشف جديد',
+        price: 0,
+        paidAmount: 0,
+        remainingAmount: 0,
+        status: 'waiting',
+        notes: `تم طلب ${orderLabel} (${emoji}) أثناء الكشف بالعيادة`,
+        createdAt: nowIso
+      });
+    } catch (e) {
+      console.warn("Could not append medical order to patient file:", e);
+    }
+  }
+
+  return { orderLabel, emoji };
 }
 
 // Auto-recalculate doctor avg consult time from last 10 done patients
@@ -2518,14 +2594,24 @@ export function subscribeToClinicServices(
   );
 }
 
+// Cache for clinic services (5 min TTL)
+const clinicServicesCache = new Map<string, { data: ClinicService[]; timestamp: number }>();
+
 export async function getClinicServicesPublic(organizationId: string): Promise<ClinicService[]> {
   try {
+    const cached = clinicServicesCache.get(organizationId);
+    if (cached && Date.now() - cached.timestamp < 300000) {
+      return cached.data;
+    }
+
     const srvRef = collection(db, `organizations/${organizationId}/services`);
     const snap = await getDocs(query(srvRef, where("active", "==", true)));
     const list: ClinicService[] = [];
     snap.forEach((docSnap) => {
       list.push({ id: docSnap.id, ...docSnap.data() } as ClinicService);
     });
+
+    clinicServicesCache.set(organizationId, { data: list, timestamp: Date.now() });
     return list;
   } catch (err) {
     console.error("Error fetching public clinic services:", err);
@@ -3124,35 +3210,47 @@ export async function savePatientMedicalFile(
   const existingSnap = await getDoc(fileRef);
   let updatedFile: PatientMedicalFile;
 
+  // Clean visits array to remove any undefined values
+  const cleanVisits = (fileData.visits || []).map((v) =>
+    removeUndefinedFields({
+      ...v,
+      serviceId: v.serviceId || "",
+      notes: v.notes || "",
+      diagnosis: v.diagnosis || "",
+      prescription: v.prescription || ""
+    })
+  );
+
   if (existingSnap.exists()) {
     const prev = existingSnap.data() as PatientMedicalFile;
-    updatedFile = {
+    updatedFile = removeUndefinedFields({
       ...prev,
       ...fileData,
       patientId: fileData.patientId || prev.patientId,
       patientPhone: cleanPhone,
+      visits: cleanVisits.length > 0 ? cleanVisits : prev.visits || [],
       updatedAt: nowIso
-    };
+    });
     await setDoc(fileRef, updatedFile, { merge: true });
   } else {
-    updatedFile = {
+    updatedFile = removeUndefinedFields({
       id: cleanPhone,
       doctorId,
-      patientId: fileData.patientId,
+      patientId: fileData.patientId || "",
       patientName: sanitizeInput(fileData.patientName),
       patientPhone: cleanPhone,
-      age: fileData.age || undefined,
-      gender: fileData.gender || undefined,
+      age: fileData.age || 0,
+      gender: fileData.gender || "male",
       bloodGroup: fileData.bloodGroup || '',
       allergies: fileData.allergies || '',
       chronicDiseases: fileData.chronicDiseases || '',
       generalNotes: fileData.generalNotes || '',
       lastVisitDate: fileData.lastVisitDate || getTodayDateString(),
       visitsCount: fileData.visitsCount || 1,
-      visits: fileData.visits || [],
+      visits: cleanVisits,
       createdAt: nowIso,
       updatedAt: nowIso
-    };
+    });
     await setDoc(fileRef, updatedFile);
   }
   return updatedFile;
@@ -3170,19 +3268,29 @@ export async function addVisitToPatientMedicalFile(
     if (!cleanPhone) return;
     const existing = await getPatientMedicalFile(doctorId, cleanPhone);
 
+    const safeVisitEntry: PatientVisitEntry = removeUndefinedFields({
+      ...visitEntry,
+      serviceId: visitEntry.serviceId || "",
+      serviceName: visitEntry.serviceName || "كشف",
+      visitType: visitEntry.visitType || "كشف جديد",
+      notes: visitEntry.notes || "",
+      diagnosis: visitEntry.diagnosis || "",
+      prescription: visitEntry.prescription || ""
+    });
+
     if (existing) {
       const visits = existing.visits || [];
-      const existsIndex = visits.findIndex(v => v.id === visitEntry.id);
+      const existsIndex = visits.findIndex(v => v.id === safeVisitEntry.id);
       if (existsIndex >= 0) {
-        visits[existsIndex] = { ...visits[existsIndex], ...visitEntry };
+        visits[existsIndex] = { ...visits[existsIndex], ...safeVisitEntry };
       } else {
-        visits.unshift(visitEntry);
+        visits.unshift(safeVisitEntry);
       }
       await savePatientMedicalFile(doctorId, {
         patientId: patientId || existing.patientId,
         patientPhone: cleanPhone,
         patientName: patientName || existing.patientName,
-        lastVisitDate: visitEntry.date || getTodayDateString(),
+        lastVisitDate: safeVisitEntry.date || getTodayDateString(),
         visitsCount: visits.length,
         visits
       });
@@ -3191,9 +3299,9 @@ export async function addVisitToPatientMedicalFile(
         patientId,
         patientPhone: cleanPhone,
         patientName,
-        lastVisitDate: visitEntry.date || getTodayDateString(),
+        lastVisitDate: safeVisitEntry.date || getTodayDateString(),
         visitsCount: 1,
-        visits: [visitEntry]
+        visits: [safeVisitEntry]
       });
     }
   } catch (err) {
@@ -3623,23 +3731,57 @@ export async function completeDaySession(
   doctorId: string,
   date: string,
   summary: Partial<DailySession>,
+  patientsToArchive: PatientRecord[] = [],
   userUid?: string,
   userName?: string
 ): Promise<void> {
   const sessionRef = doc(db, "doctors", doctorId, "dailySessions", date);
   const nowIso = new Date().toISOString();
 
-  await setDoc(
+  // 1. Process patient archive and deletion in chunks (max 150 patients per batch to remain safely below Firestore's 500 limit)
+  const BATCH_CHUNK_SIZE = 150;
+  for (let i = 0; i < patientsToArchive.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = patientsToArchive.slice(i, i + BATCH_CHUNK_SIZE);
+    const batch = writeBatch(db);
+
+    chunk.forEach((p) => {
+      const patientId = p.id;
+      const archiveRef = doc(db, "doctors", doctorId, "dailySessions", date, "archivedPatients", patientId);
+      const queueRef = doc(db, "queues", doctorId, "patients", patientId);
+
+      batch.set(archiveRef, removeUndefinedFields({
+        ...p,
+        archivedAt: nowIso,
+        archivedDate: date
+      }));
+      batch.delete(queueRef);
+    });
+
+    await batch.commit();
+  }
+
+  // 2. Atomically finalize daily session document and reset daily counter
+  const finalBatch = writeBatch(db);
+  finalBatch.set(
     sessionRef,
-    {
+    removeUndefinedFields({
       ...summary,
       status: "completed",
       completedAt: nowIso,
       completedByUid: userUid || "",
       completedByName: userName || ""
-    },
+    }),
     { merge: true }
   );
+
+  const counterRef = doc(db, "queues", doctorId, "dailyCounters", date);
+  finalBatch.set(counterRef, {
+    lastSequenceNumber: 0,
+    date,
+    updatedAt: nowIso
+  }, { merge: true });
+
+  await finalBatch.commit();
 }
 
 /**
@@ -3697,13 +3839,23 @@ export async function getArchivedDayDetails(
       ? ({ id: sessionSnap.id, ...sessionSnap.data() } as DailySession)
       : null;
 
-    // Get patients for that date
-    const patientsCol = collection(db, "queues", doctorId, "patients");
-    const pSnap = await getDocs(query(patientsCol, where("date", "==", date), limit(150)));
-    const patients: PatientRecord[] = [];
-    pSnap.forEach((d) => patients.push({ id: d.id, ...d.data() } as PatientRecord));
+    // 1. Get patients from dedicated archivedPatients subcollection first
+    const archivedCol = collection(db, "doctors", doctorId, "dailySessions", date, "archivedPatients");
+    const arcSnap = await getDocs(query(archivedCol, limit(150)));
+    let patients: PatientRecord[] = [];
+    arcSnap.forEach((d) => patients.push({ id: d.id, ...d.data() } as PatientRecord));
 
-    // Get transactions for that date
+    // 2. Legacy fallback to queues/{doctorId}/patients if archive subcollection was not used
+    if (patients.length === 0) {
+      const patientsCol = collection(db, "queues", doctorId, "patients");
+      const pSnap = await getDocs(query(patientsCol, where("date", "==", date), limit(150)));
+      pSnap.forEach((d) => patients.push({ id: d.id, ...d.data() } as PatientRecord));
+    }
+
+    // Sort patients by sequenceNumber
+    patients.sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
+
+    // 3. Get transactions for that date
     const txCol = collection(db, "clinic_transactions");
     const txSnap = await getDocs(
       query(txCol, where("organizationId", "==", doctorId), where("date", "==", date), limit(150))
@@ -3735,8 +3887,11 @@ export interface FastPatientSearchResult {
   lastVisitDiagnosis?: string;
 }
 
+// Fast patient search cache (2 min TTL) to avoid querying dozens of documents on every keystroke
+const patientSearchCache = new Map<string, { files: PatientMedicalFile[]; queue: PatientRecord[]; timestamp: number }>();
+
 /**
- * Fast search for existing clinic patients (debounced, bounded)
+ * Fast search for existing clinic patients (debounced, bounded, cached)
  */
 export async function searchClinicPatientsFast(
   doctorId: string,
@@ -3750,26 +3905,52 @@ export async function searchClinicPatientsFast(
     const normTerm = normalizeArabicText(rawTerm);
     const isPhone = /^[0-9+]+$/.test(rawTerm);
 
-    const colRef = collection(db, "doctors", doctorId, "patientFiles");
-    const snap = await getDocs(query(colRef, limit(80)));
     const results: FastPatientSearchResult[] = [];
+    const seenPhones = new Set<string>();
 
-    snap.forEach((docSnap) => {
-      const data = docSnap.data() as PatientMedicalFile;
+    let cached = patientSearchCache.get(doctorId);
+    if (!cached || Date.now() - cached.timestamp > 120000) {
+      const files: PatientMedicalFile[] = [];
+      const queue: PatientRecord[] = [];
+
+      try {
+        const colRef = collection(db, "doctors", doctorId, "patientFiles");
+        const snap = await getDocs(query(colRef, limit(100)));
+        snap.forEach((docSnap) => files.push(docSnap.data() as PatientMedicalFile));
+      } catch (e) {
+        console.warn("Could not query patientFiles for search:", e);
+      }
+
+      try {
+        const queueColRef = collection(db, "queues", doctorId, "patients");
+        const queueSnap = await getDocs(query(queueColRef, limit(120)));
+        queueSnap.forEach((docSnap) => queue.push(docSnap.data() as PatientRecord));
+      } catch (e) {
+        console.warn("Could not query queues for search:", e);
+      }
+
+      cached = { files, queue, timestamp: Date.now() };
+      patientSearchCache.set(doctorId, cached);
+    }
+
+    // Filter in-memory from cached dataset
+    cached.files.forEach((data) => {
       const normName = normalizeArabicText(data.patientName || "");
       const phone = data.patientPhone || "";
+      const cleanPhone = normalizePhoneNumber(phone);
 
       let matched = false;
-      if (isPhone && phone.includes(rawTerm)) {
+      if (isPhone && (phone.includes(rawTerm) || cleanPhone.includes(rawTerm))) {
         matched = true;
       } else if (normName.includes(normTerm)) {
         matched = true;
       }
 
-      if (matched) {
+      if (matched && cleanPhone && !seenPhones.has(cleanPhone)) {
+        seenPhones.add(cleanPhone);
         const lastVisit = data.visits && data.visits.length > 0 ? data.visits[0] : undefined;
         results.push({
-          id: docSnap.id,
+          id: data.patientId || cleanPhone,
           patientId: data.patientId,
           patientName: data.patientName,
           patientPhone: data.patientPhone,
@@ -3779,6 +3960,32 @@ export async function searchClinicPatientsFast(
           allergies: data.allergies,
           chronicDiseases: data.chronicDiseases,
           lastVisitDiagnosis: lastVisit?.diagnosis
+        });
+      }
+    });
+
+    cached.queue.forEach((p) => {
+      const normName = normalizeArabicText(p.name || "");
+      const phone = p.phone || "";
+      const cleanPhone = normalizePhoneNumber(phone);
+
+      let matched = false;
+      if (isPhone && (phone.includes(rawTerm) || cleanPhone.includes(rawTerm))) {
+        matched = true;
+      } else if (normName.includes(normTerm)) {
+        matched = true;
+      }
+
+      if (matched && cleanPhone && !seenPhones.has(cleanPhone)) {
+        seenPhones.add(cleanPhone);
+        results.push({
+          id: p.patientId || p.id,
+          patientId: p.patientId,
+          patientName: p.name,
+          patientPhone: p.phone,
+          visitsCount: 1,
+          lastVisitDate: p.date,
+          totalOutstandingBalance: 0
         });
       }
     });
@@ -4064,25 +4271,25 @@ export async function recordSplitPayment(
     organizationId,
     patientName: sanitizeInput(patientName),
     patientPhone: cleanPhone,
-    patientRecordId,
+    patientRecordId: patientRecordId || "",
     date: today,
-    serviceId,
-    serviceName: sanitizeInput(serviceName),
-    totalAmount,
+    serviceId: serviceId || "",
+    serviceName: sanitizeInput(serviceName || "كشف"),
+    totalAmount: Number(totalAmount) || 0,
     paidAmount: totalPaid,
     remainingAmount: remaining,
     paymentStatus,
     paymentMethod: primaryMethod,
     paymentMethodsBreakdown: payments,
-    notes: notes ? sanitizeInput(notes) : undefined,
-    createdBy,
-    createdByName,
+    notes: notes ? sanitizeInput(notes) : "",
+    createdBy: createdBy || "",
+    createdByName: createdByName || "",
     createdAt: nowIso,
     updatedAt: nowIso
   };
 
   const txCol = collection(db, "clinic_transactions");
-  const docRef = await addDoc(txCol, txData);
+  const docRef = await addDoc(txCol, removeUndefinedFields(txData));
   const newTx: ClinicTransaction = { id: docRef.id, ...txData };
 
   // Update patient's outstanding balance in patient file

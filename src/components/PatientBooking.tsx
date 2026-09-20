@@ -31,6 +31,7 @@ import {
   getPatientProfile
 } from '../services/firebaseService';
 import { setPageSeo, getDoctorBookingSeoData, DEFAULT_HOMEPAGE_SEO } from '../utils/seo';
+import { sanitizePatientPhoneNumber, validatePatientPhoneNumber } from '../services/securityService';
 
 interface PatientBookingProps {
   doctorId: string;
@@ -184,20 +185,22 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim() || !doctor) return;
+    if (!name.trim() || !doctor) return;
 
-    if (phone.length < 10) {
-      onShowToast("رقم الموبايل غير صحيح", "يرجى كتابة رقم موبايل يتكون من 10 أرقام أو أكثر", "warning");
+    const phoneValidation = validatePatientPhoneNumber(phone);
+    if (!phoneValidation.isValid) {
+      onShowToast("رقم الموبايل غير صحيح", phoneValidation.error || "يرجى كتابة رقم موبايل يتكون من 10 إلى 11 رقمًا", "warning");
       return;
     }
+    const cleanPhone = phoneValidation.cleanPhone;
 
     setIsSubmitting(true);
-    console.log('[QR] EXISTING_BOOKING_SYSTEM_CALLED', { doctorId: doctor.uid, name: name.trim(), phone: phone.trim(), service: selectedService?.name });
+    console.log('[QR] EXISTING_BOOKING_SYSTEM_CALLED', { doctorId: doctor.uid, name: name.trim(), phone: cleanPhone, service: selectedService?.name });
     try {
       const res = await bookPatient(
         doctor.uid,
         name.trim(),
-        phone.trim(),
+        cleanPhone,
         undefined,
         notificationPreference,
         selectedService ? {
@@ -212,7 +215,7 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
 
       // Save for auto-fill in future
       try {
-        localStorage.setItem('dawry_last_patient_phone', phone.trim());
+        localStorage.setItem('dawry_last_patient_phone', cleanPhone);
         localStorage.setItem('dawry_last_patient_name', name.trim());
         localStorage.setItem(`dawry_ticket_${doctorId}`, res.patientId);
       } catch {
@@ -500,11 +503,17 @@ export const PatientBooking: React.FC<PatientBookingProps> = ({
                 <Phone className="w-4 h-4 text-[#1b3a5c] absolute right-3.5 top-3.5" />
                 <input
                   type="tel"
+                  dir="ltr"
+                  maxLength={11}
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(sanitizePatientPhoneNumber(e.target.value, 11))}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    setPhone(sanitizePatientPhoneNumber(e.clipboardData.getData('text'), 11));
+                  }}
                   placeholder="010XXXXXXXX"
                   required
-                  className="w-full pl-4 pr-10 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition font-mono"
+                  className="w-full pl-4 pr-10 py-3 bg-[#faf8f5] border border-[#e7e3da] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#122c4a] transition font-mono text-right"
                 />
               </div>
             </div>

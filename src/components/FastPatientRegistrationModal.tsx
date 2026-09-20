@@ -13,6 +13,10 @@ import {
   getClinicServicesPublic,
   getTodayDateString
 } from '../services/firebaseService';
+import {
+  sanitizePatientPhoneNumber,
+  validatePatientPhoneNumber
+} from '../services/securityService';
 
 interface FastPatientRegistrationModalProps {
   isOpen: boolean;
@@ -99,14 +103,16 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
 
   // Autocomplete search on typing name or phone
   const handleQueryChange = (val: string, type: 'name' | 'phone') => {
+    let effectiveVal = val;
     if (type === 'name') {
       setPatientName(val);
     } else {
-      setPatientPhone(val);
+      effectiveVal = sanitizePatientPhoneNumber(val, 11);
+      setPatientPhone(effectiveVal);
     }
     setSelectedPatientId(null);
 
-    const term = val.trim();
+    const term = effectiveVal.trim();
     if (term.length < 2) {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -190,10 +196,12 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
       if (onShowToast) onShowToast('يرجى إدخال اسم المريض', '', 'warning');
       return;
     }
-    if (!patientPhone.trim() || patientPhone.replace(/\D/g, '').length < 10) {
-      if (onShowToast) onShowToast('يرجى إدخال رقم هاتف صحيح (10-11 أرقام)', '', 'warning');
+    const phoneValidation = validatePatientPhoneNumber(patientPhone);
+    if (!phoneValidation.isValid) {
+      if (onShowToast) onShowToast(phoneValidation.error || 'رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.', '', 'warning');
       return;
     }
+    const cleanPhone = phoneValidation.cleanPhone;
 
     setIsSubmitting(true);
     try {
@@ -211,7 +219,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
       const bookingResult = await bookPatient(
         doctorId,
         patientName.trim(),
-        patientPhone.trim(),
+        cleanPhone,
         currentUserId,
         'two_turns',
         {
@@ -227,7 +235,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
         id: bookingResult.patientId,
         patientId: bookingResult.patientId,
         name: patientName.trim(),
-        phone: patientPhone.trim(),
+        phone: cleanPhone,
         sequenceNumber: bookingResult.sequenceNumber,
         queueNumber: bookingResult.sequenceNumber,
         status: 'waiting',
@@ -371,8 +379,15 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
                 type="tel"
                 required
                 dir="ltr"
+                maxLength={11}
                 value={patientPhone}
                 onChange={(e) => handleQueryChange(e.target.value, 'phone')}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasted = e.clipboardData.getData('text');
+                  const sanitized = sanitizePatientPhoneNumber(pasted, 11);
+                  handleQueryChange(sanitized, 'phone');
+                }}
                 placeholder="01012345678"
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-sky-500 focus:bg-white text-right"
               />

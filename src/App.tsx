@@ -565,7 +565,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 pb-20 sm:pb-24">
+      <main className="flex-1 pb-28 sm:pb-16">
         
         {/* Global Back Button (Shown when navigation history exists) */}
         {navHistory.length > 0 && (

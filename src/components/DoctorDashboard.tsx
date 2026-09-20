@@ -25,6 +25,7 @@ import { DailySessionManager } from './DailySessionManager';
 import { FastPatientRegistrationModal } from './FastPatientRegistrationModal';
 import { hasPermission } from '../utils/permissions';
 import { auth } from '../firebase/config';
+import { sanitizePatientPhoneNumber, validatePatientPhoneNumber } from '../services/securityService';
 
 interface DoctorDashboardProps {
   doctor: DoctorProfile;
@@ -255,8 +256,16 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   const handleManualAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = manualName.trim();
-    const cleanPhone = manualPhone.trim();
-    if (!cleanName || !cleanPhone) return;
+    if (!cleanName) {
+      onShowToast("يرجى إدخال اسم المريض", "", "warning");
+      return;
+    }
+    const phoneValidation = validatePatientPhoneNumber(manualPhone);
+    if (!phoneValidation.isValid) {
+      onShowToast(phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.", "", "warning");
+      return;
+    }
+    const cleanPhone = phoneValidation.cleanPhone;
 
     const nextSeq = patients.length > 0 ? Math.max(...patients.map((p) => p.sequenceNumber || 0)) + 1 : 1;
     const tempId = `temp_${Date.now()}`;
@@ -952,11 +961,17 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">رقم الموبايل</label>
                 <input
                   type="tel"
+                  dir="ltr"
+                  maxLength={11}
                   value={manualPhone}
-                  onChange={(e) => setManualPhone(e.target.value)}
+                  onChange={(e) => setManualPhone(sanitizePatientPhoneNumber(e.target.value, 11))}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    setManualPhone(sanitizePatientPhoneNumber(e.clipboardData.getData('text'), 11));
+                  }}
                   placeholder="01012345678"
                   required
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-mono"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-hidden focus:ring-2 focus:ring-sky-500 font-mono text-right"
                 />
               </div>
 

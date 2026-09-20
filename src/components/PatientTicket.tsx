@@ -301,10 +301,10 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
               #{patient.sequenceNumber}
             </div>
             {(patient.visitType || patient.serviceName) && (
-              <div className="mt-2 pt-2 border-t border-sky-200/60 flex items-center justify-center gap-3 text-xs text-[#122c4a] font-bold">
-                <span>نوع الزيارة: {patient.visitType || patient.serviceName}</span>
+              <div className="mt-2 pt-2 border-t border-sky-200/60 flex flex-wrap items-center justify-center gap-2 text-xs text-[#122c4a] font-bold">
+                <span className="truncate max-w-[200px]">نوع الزيارة: {patient.visitType || patient.serviceName}</span>
                 {typeof patient.price === 'number' && (
-                  <span className="bg-sky-100 text-sky-900 px-2.5 py-0.5 rounded-full font-mono">
+                  <span className="bg-sky-100 text-sky-900 px-2.5 py-0.5 rounded-full font-mono shrink-0">
                     {patient.price} جنيه
                   </span>
                 )}
@@ -361,9 +361,9 @@ export const PatientTicket: React.FC<PatientTicketProps> = ({
               </div>
 
               {/* Currently Called Patient in Clinic */}
-              <div className="bg-slate-900 text-white p-3 rounded-2xl text-xs flex items-center justify-between">
-                <span className="text-slate-400 font-medium">داخل غرفة الكشف الآن:</span>
-                <span className="font-extrabold text-amber-400 font-['Tajawal',sans-serif] text-sm">
+              <div className="bg-slate-900 text-white p-3 rounded-2xl text-xs flex items-center justify-between gap-2">
+                <span className="text-slate-400 font-medium shrink-0">داخل غرفة الكشف الآن:</span>
+                <span className="font-extrabold text-amber-400 font-['Tajawal',sans-serif] text-sm truncate max-w-[60%] text-left">
                   {currentCalledPatient ? `#${currentCalledPatient.sequenceNumber} - ${currentCalledPatient.name}` : 'لا يوجد أحد'}
                 </span>
               </div>

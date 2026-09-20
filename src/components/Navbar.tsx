@@ -1,5 +1,4 @@
 import React from 'react';
-import { Stethoscope, QrCode, CreditCard, Settings, LogOut, UserCheck, ExternalLink, Building2, ShieldAlert, Bell } from 'lucide-react';
 import { DoctorProfile } from '../types';
 
 export type NavTabType =
@@ -53,7 +52,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="flex items-center gap-2.5 text-right group focus:outline-hidden cursor-pointer"
             >
               <div className="w-10 h-10 rounded-xl bg-[#122c4a] flex items-center justify-center text-white shadow-md shadow-[#122c4a]/15 group-hover:bg-[#0d223a] transition-all">
-                <Stethoscope className="w-5 h-5 text-sky-300" />
+                <span className="text-xl leading-none inline-flex items-center justify-center">🩺</span>
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -82,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       : 'text-slate-600 hover:text-slate-900 hover:bg-[#f4efe6]'
                   }`}
                 >
-                  <Stethoscope className="w-4 h-4 text-emerald-300" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">🏥</span>
                   <span>لوحة تشغيل العيادة</span>
                 </button>
               )}
@@ -108,7 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                   title="لوحة تحكم إدارة المنصة"
                 >
-                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">🛡️</span>
                   <span>إدارة المنصة</span>
                 </button>
               )}
@@ -122,11 +121,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             {onOpenNotificationModal && (
               <button
                 onClick={onOpenNotificationModal}
-                className="p-2 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition relative cursor-pointer"
+                className="p-2 text-slate-600 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition relative cursor-pointer flex items-center justify-center"
                 title="مركز التنبيهات والإعلانات"
                 aria-label="مركز التنبيهات والإعلانات"
               >
-                <Bell className="w-5 h-5" />
+                <span className="text-base leading-none inline-flex items-center justify-center">🔔</span>
                 {unreadNotificationCount > 0 ? (
                   <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-purple-600 text-white rounded-full text-[10px] font-black flex items-center justify-center border-2 border-white shadow-2xs">
                     {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
@@ -150,7 +149,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                   }`}
                 >
-                  <CreditCard className="w-3.5 h-3.5" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">💳</span>
                   <span>
                     {currentDoctor.subscriptionStatus === 'active'
                       ? 'اشتراك نشط'
@@ -170,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                   title="معاينة صفحة حجز المريض كأنك قمت بمسح QR Code"
                 >
-                  <ExternalLink className="w-4 h-4 text-sky-600" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">🔗</span>
                   <span className="hidden sm:inline">معاينة صفحة الحجز</span>
                 </button>
 
@@ -180,18 +179,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[#122c4a] hover:bg-[#0d223a] text-white rounded-xl text-xs sm:text-sm font-bold shadow-2xs transition cursor-pointer"
                   title="عرض وطباعة QR Code العيادة"
                 >
-                  <QrCode className="w-4 h-4 text-sky-300" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">📱</span>
                   <span className="hidden sm:inline">رمز QR</span>
                 </button>
 
                 {/* Settings */}
                 <button
                   onClick={onOpenSettingsModal}
-                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-[#f4efe6] rounded-xl transition cursor-pointer"
+                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-[#f4efe6] rounded-xl transition cursor-pointer flex items-center justify-center"
                   title="إعدادات العيادة وتعديل الملف"
                   aria-label="إعدادات العيادة"
                 >
-                  <Settings className="w-4 h-4" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">⚙️</span>
                 </button>
 
                 {/* Sign Out */}
@@ -201,11 +200,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onSignOut();
                     }
                   }}
-                  className="p-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                  className="p-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition cursor-pointer flex items-center justify-center"
                   title="تسجيل الخروج"
                   aria-label="تسجيل الخروج"
                 >
-                  <LogOut className="w-4 h-4 rtl:rotate-180" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">🚪</span>
                 </button>
               </>
             ) : (
@@ -219,7 +218,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       : 'bg-[#122c4a] hover:bg-[#0d223a] text-white'
                   }`}
                 >
-                  <UserCheck className="w-4 h-4 text-sky-300" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">🔑</span>
                   <span>دخول العيادة</span>
                 </button>
               </div>

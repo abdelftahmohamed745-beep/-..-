@@ -58,26 +58,26 @@ export const TVQueueDisplay: React.FC<TVQueueDisplayProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col font-['Tajawal',sans-serif] overflow-hidden dir-rtl select-none">
       
       {/* Top TV Bar */}
-      <header className="bg-slate-900/90 border-b border-slate-800 px-6 sm:px-10 py-5 flex items-center justify-between shadow-2xl shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-900/50">
-            <Stethoscope className="w-6 h-6" />
+      <header className="bg-slate-900/90 border-b border-slate-800 px-4 sm:px-10 py-3 sm:py-5 flex flex-wrap sm:flex-nowrap items-center justify-between shadow-2xl shrink-0 gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-900/50 shrink-0">
+            <Stethoscope className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">{clinicName}</h1>
-            <p className="text-xs sm:text-sm font-semibold text-slate-400 mt-0.5">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white truncate">{clinicName}</h1>
+            <p className="text-xs sm:text-sm font-semibold text-slate-400 mt-0.5 truncate">
               {doctorName} • <span className="text-teal-400">{specialty}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3 sm:gap-6 shrink-0">
           {/* Live Clock */}
           <div className="text-left font-mono">
-            <div className="text-xl sm:text-2xl font-black text-teal-400 dir-ltr">
+            <div className="text-base sm:text-2xl font-black text-teal-400 dir-ltr">
               {currentTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </div>
-            <div className="text-xs text-slate-400 font-medium dir-ltr">
+            <div className="text-[10px] sm:text-xs text-slate-400 font-medium dir-ltr">
               {currentTime.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
             </div>
           </div>
@@ -86,19 +86,19 @@ export const TVQueueDisplay: React.FC<TVQueueDisplayProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={toggleFullscreen}
-              className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-2xl transition border border-slate-700 flex items-center gap-2 text-xs font-bold"
+              className="p-2 sm:p-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-2xl transition border border-slate-700 flex items-center gap-2 text-xs font-bold cursor-pointer"
               title="ملء الشاشة للتلفزيون"
             >
-              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              {isFullscreen ? <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />}
               <span className="hidden sm:inline">{isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}</span>
             </button>
 
             <button
               onClick={onClose}
-              className="p-3 bg-rose-950 hover:bg-rose-900 text-rose-200 rounded-2xl transition border border-rose-800"
+              className="p-2 sm:p-3 bg-rose-950 hover:bg-rose-900 text-rose-200 rounded-2xl transition border border-rose-800 cursor-pointer"
               title="إغلاق الشاشة"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
@@ -137,7 +137,7 @@ export const TVQueueDisplay: React.FC<TVQueueDisplayProps> = ({
               </div>
 
               {/* PATIENT NAME */}
-              <div className="text-3xl sm:text-5xl font-black text-white font-['Tajawal',sans-serif] tracking-tight">
+              <div className="text-3xl sm:text-5xl font-black text-white font-['Tajawal',sans-serif] tracking-tight break-words px-2">
                 {calledPatient.name}
               </div>
             </div>
@@ -166,14 +166,14 @@ export const TVQueueDisplay: React.FC<TVQueueDisplayProps> = ({
         <div className="lg:col-span-5 flex flex-col gap-6">
           
           {/* NEXT UP CARD */}
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 flex items-center justify-between shadow-xl">
-            <div>
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 flex items-center justify-between shadow-xl gap-3">
+            <div className="min-w-0">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
                 المريض القادم (التالي)
               </span>
               {nextPatient ? (
                 <div>
-                  <div className="text-2xl sm:text-3xl font-black text-teal-400 font-['Tajawal',sans-serif]">
+                  <div className="text-2xl sm:text-3xl font-black text-teal-400 font-['Tajawal',sans-serif] break-words">
                     {nextPatient.name}
                   </div>
                   <div className="text-xs text-slate-400 mt-1">
@@ -198,7 +198,7 @@ export const TVQueueDisplay: React.FC<TVQueueDisplayProps> = ({
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 flex-1 flex flex-col min-h-0 shadow-xl">
             <h3 className="text-sm font-black text-slate-300 mb-4 flex items-center gap-2 pb-3 border-b border-slate-800">
               <Users className="w-4 h-4 text-teal-400" />
-              <span>أدوار الانتظار التادمة</span>
+              <span>أدوار الانتظار القادمة</span>
             </h3>
 
             {upcomingPatients.length === 0 ? (
@@ -210,16 +210,16 @@ export const TVQueueDisplay: React.FC<TVQueueDisplayProps> = ({
                 {upcomingPatients.map((p, idx) => (
                   <div
                     key={p.id}
-                    className="bg-slate-950 border border-slate-800/80 p-4 rounded-2xl flex items-center justify-between"
+                    className="bg-slate-950 border border-slate-800/80 p-4 rounded-2xl flex items-center justify-between gap-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="w-7 h-7 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold flex items-center justify-center font-mono">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-7 h-7 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold flex items-center justify-center font-mono shrink-0">
                         {idx + 2}
                       </span>
-                      <span className="font-bold text-slate-200 text-sm sm:text-base">{p.name}</span>
+                      <span className="font-bold text-slate-200 text-sm sm:text-base truncate">{p.name}</span>
                     </div>
 
-                    <span className="font-mono font-bold text-teal-400 bg-teal-950/80 px-3 py-1 rounded-xl border border-teal-900 text-sm">
+                    <span className="font-mono font-bold text-teal-400 bg-teal-950/80 px-3 py-1 rounded-xl border border-teal-900 text-sm shrink-0">
                       #{p.sequenceNumber}
                     </span>
                   </div>

@@ -27,28 +27,7 @@ import {
 import { hasPermission } from '../utils/permissions';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { PatientFileModal } from './PatientFileModal';
-import {
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Plus,
-  Search,
-  Filter,
-  FileText,
-  RotateCcw,
-  Tag,
-  Trash2,
-  Edit,
-  ShieldAlert,
-  Wallet,
-  Receipt,
-  Users,
-  CreditCard,
-  X
-} from 'lucide-react';
+import { sanitizePatientPhoneNumber, validatePatientPhoneNumber } from '../services/securityService';
 
 interface ClinicFinanceManagerProps {
   currentMember: ClinicMember | null;
@@ -413,13 +392,23 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
       return;
     }
 
+    let validatedPhone: string | undefined = undefined;
+    if (patientPhoneInput.trim()) {
+      const phoneValidation = validatePatientPhoneNumber(patientPhoneInput);
+      if (!phoneValidation.isValid) {
+        onShowToast("خطأ في رقم الهاتف", phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.", "warning");
+        return;
+      }
+      validatedPhone = phoneValidation.cleanPhone;
+    }
+
     setIsSubmittingTx(true);
     try {
       const newTx = await createClinicTransaction(currentMember, isDoctorOwnerFallback, {
         organizationId,
         patientId: selectedPatientId || undefined,
         patientName: patientNameInput.trim(),
-        patientPhone: patientPhoneInput.trim() || undefined,
+        patientPhone: validatedPhone,
         serviceId: selectedServiceId || undefined,
         serviceName,
         totalAmount: numTotal,
@@ -703,7 +692,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
     return (
       <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xs text-center font-['Tajawal',sans-serif] space-y-4">
         <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
-          <ShieldAlert className="w-8 h-8" />
+          <span className="text-2xl leading-none inline-flex items-center justify-center">🛡️</span>
         </div>
         <div>
           <h2 className="text-xl font-bold text-slate-900">قسم المالية الحسابية مغلق</h2>
@@ -726,7 +715,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">إيرادات اليوم (المسجلة)</span>
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#10B981] border border-emerald-100 flex items-center justify-center font-bold">
-              <DollarSign className="w-4 h-4" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">💵</span>
             </div>
           </div>
           <div className="mt-3">
@@ -742,7 +731,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">المدفوع الكاش والفيزا</span>
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#10B981] border border-emerald-100 flex items-center justify-center font-bold">
-              <CheckCircle2 className="w-4 h-4" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">✅</span>
             </div>
           </div>
           <div className="mt-3">
@@ -758,7 +747,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">المستحقات المتبقية</span>
             <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#EF4444] border border-rose-100 flex items-center justify-center font-bold">
-              <Clock className="w-4 h-4" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">⏰</span>
             </div>
           </div>
           <div className="mt-3">
@@ -774,7 +763,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-bold">مصروفات العيادة</span>
             <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#EF4444] border border-rose-100 flex items-center justify-center font-bold">
-              <TrendingDown className="w-4 h-4" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">📉</span>
             </div>
           </div>
           <div className="mt-3">
@@ -794,7 +783,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                 ? 'bg-emerald-50 text-[#10B981] border-emerald-100' 
                 : 'bg-rose-50 text-[#EF4444] border-rose-100'
             }`}>
-              <TrendingUp className="w-4 h-4" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">📈</span>
             </div>
           </div>
           <div className="mt-3">
@@ -818,7 +807,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <Receipt className="w-4 h-4 text-emerald-400" />
+          <span className="text-base leading-none inline-flex items-center justify-center">🧾</span>
           <span>تسجيل دفعة</span>
         </button>
 
@@ -830,7 +819,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <Clock className="w-4 h-4 text-amber-400" />
+          <span className="text-base leading-none inline-flex items-center justify-center">⏳</span>
           <span>المستحقات</span>
           {outstandingTransactions.length > 0 && (
             <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full">
@@ -847,7 +836,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <FileText className="w-4 h-4 text-sky-400" />
+          <span className="text-base leading-none inline-flex items-center justify-center">📄</span>
           <span>سجل المعاملات</span>
         </button>
 
@@ -859,7 +848,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <TrendingDown className="w-4 h-4 text-rose-400" />
+          <span className="text-base leading-none inline-flex items-center justify-center">💸</span>
           <span>المصروفات</span>
         </button>
 
@@ -871,7 +860,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <Tag className="w-4 h-4 text-purple-400" />
+          <span className="text-base leading-none inline-flex items-center justify-center">🏷️</span>
           <span>الخدمات والأسعار</span>
         </button>
 
@@ -888,7 +877,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               </p>
             </div>
             <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
-              <Wallet className="w-5 h-5" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">👛</span>
             </div>
           </div>
 
@@ -900,7 +889,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               {/* Search Patient Auto-Fill */}
               <div className="md:col-span-2 relative">
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                  <Search className="w-3.5 h-3.5 text-emerald-700" />
+                  <span className="text-base leading-none inline-flex items-center justify-center">🔍</span>
                   <span>بحث عن مريض للتعبئة التلقائية (بالاسم أو رقم الموبايل):</span>
                 </label>
                 <div className="relative">
@@ -991,9 +980,15 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                 </label>
                 <input
                   type="tel"
+                  dir="ltr"
+                  maxLength={11}
                   placeholder="مثال: 01012345678"
                   value={patientPhoneInput}
-                  onChange={e => setPatientPhoneInput(e.target.value)}
+                  onChange={e => setPatientPhoneInput(sanitizePatientPhoneNumber(e.target.value, 11))}
+                  onPaste={e => {
+                    e.preventDefault();
+                    setPatientPhoneInput(sanitizePatientPhoneNumber(e.clipboardData.getData('text'), 11));
+                  }}
                   className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-sky-500 transition dir-ltr text-right"
                 />
               </div>
@@ -1135,7 +1130,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                     : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                 }`}
               >
-                <Receipt className="w-5 h-5 fill-current" />
+                <span className="text-base leading-none inline-flex items-center justify-center">✔️</span>
                 <span>{isSubmittingTx ? 'جاري التحصيل وإنشاء الإيصال...' : 'تأكيد الدفع وطباعة الإيصال'}</span>
               </button>
             </div>
@@ -1155,13 +1150,13 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
               </p>
             </div>
             <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0">
-              <Clock className="w-5 h-5" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">⏰</span>
             </div>
           </div>
 
           {outstandingTransactions.length === 0 ? (
             <div className="text-center py-12 text-slate-400 space-y-2">
-              <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto opacity-80" />
+              <span className="text-4xl leading-none inline-flex items-center justify-center mx-auto opacity-80">✅</span>
               <div className="font-bold text-slate-700 text-sm">لا توجد مبالغ مستحقة حالياً!</div>
               <p className="text-xs text-slate-400">جميع كشوفات ومدفوعات العيادة مسددة بالكامل.</p>
             </div>
@@ -1196,7 +1191,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                       onClick={() => setSelectedReceiptTx(tx)}
                       className="flex-1 sm:flex-initial px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                     >
-                      <Receipt className="w-4 h-4 text-sky-600" />
+                      <span className="text-base leading-none inline-flex items-center justify-center">🧾</span>
                       <span>عرض الإيصال</span>
                     </button>
 
@@ -1212,7 +1207,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                           : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                       }`}
                     >
-                      <Plus className="w-4 h-4" />
+                      <span className="text-base leading-none inline-flex items-center justify-center">➕</span>
                       <span>سداد المتبقي</span>
                     </button>
                   </div>
@@ -1236,7 +1231,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
 
             {/* Search Box */}
             <div className="relative w-full md:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3 pointer-events-none" />
+              <span className="text-base leading-none inline-flex items-center justify-center absolute right-3.5 top-2.5 pointer-events-none">🔍</span>
               <input
                 type="text"
                 placeholder="بحث باسم المريض أو الهاتف..."
@@ -1251,7 +1246,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200/60 text-xs">
             
             <div className="flex items-center gap-1 text-slate-500 font-bold shrink-0">
-              <Filter className="w-3.5 h-3.5" />
+              <span className="text-base leading-none inline-flex items-center justify-center">🔍</span>
               <span>التصفية:</span>
             </div>
 
@@ -1329,7 +1324,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
           {/* Table / List */}
           {filteredTransactions.length === 0 ? (
             <div className="text-center py-12 text-slate-400 space-y-2">
-              <FileText className="w-12 h-12 text-slate-300 mx-auto" />
+              <span className="text-4xl leading-none inline-flex items-center justify-center mx-auto">📄</span>
               <div className="font-bold text-slate-700 text-sm">لا توجد معاملات مطابقة للتصفية</div>
               <p className="text-xs text-slate-400">حاول تغيير معايير التصفية أو البحث بالأعلى.</p>
             </div>
@@ -1396,7 +1391,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                             title="عرض وطباعة الإيصال"
                             className="p-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg transition cursor-pointer"
                           >
-                            <Receipt className="w-4 h-4" />
+                            <span className="text-base leading-none inline-flex items-center justify-center">🧾</span>
                           </button>
 
                           {tx.paymentStatus !== 'REFUNDED' && (
@@ -1413,7 +1408,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                                   : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                               }`}
                             >
-                              <RotateCcw className="w-4 h-4" />
+                              <span className="text-base leading-none inline-flex items-center justify-center">↩️</span>
                             </button>
                           )}
                         </div>
@@ -1454,14 +1449,14 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >
-              <Plus className="w-4 h-4" />
+              <span className="text-base leading-none inline-flex items-center justify-center">➕</span>
               <span>إضافة مصروف جديد</span>
             </button>
           </div>
 
           {expenses.length === 0 ? (
             <div className="text-center py-12 text-slate-400 space-y-2">
-              <TrendingDown className="w-12 h-12 text-slate-300 mx-auto" />
+              <span className="text-4xl leading-none inline-flex items-center justify-center mx-auto">💸</span>
               <div className="font-bold text-slate-700 text-sm">لا توجد مصروفات مسجلة حتى الآن</div>
               <p className="text-xs text-slate-400">انقر على "إضافة مصروف جديد" لبدء تتبع المصروفات.</p>
             </div>
@@ -1495,7 +1490,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                       disabled={!canManage}
                       className="p-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl transition cursor-pointer"
                     >
-                      <Edit className="w-4 h-4" />
+                      <span className="text-base leading-none inline-flex items-center justify-center">✏️</span>
                     </button>
 
                     <button
@@ -1503,7 +1498,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                       disabled={!canManage}
                       className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl transition cursor-pointer"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <span className="text-base leading-none inline-flex items-center justify-center">🗑️</span>
                     </button>
                   </div>
                 </div>
@@ -1539,14 +1534,14 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >
-              <Plus className="w-4 h-4" />
+              <span className="text-base leading-none inline-flex items-center justify-center">➕</span>
               <span>إضافة خدمة / سعر جديد</span>
             </button>
           </div>
 
           {services.length === 0 ? (
             <div className="text-center py-12 text-slate-400 space-y-2">
-              <Tag className="w-12 h-12 text-slate-300 mx-auto" />
+              <span className="text-4xl leading-none inline-flex items-center justify-center mx-auto">🏷️</span>
               <div className="font-bold text-slate-700 text-sm">لا توجد خدمات معرفة حتى الآن</div>
             </div>
           ) : (
@@ -1584,7 +1579,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                         }}
                         className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer flex items-center gap-1 text-[11px]"
                       >
-                        <Edit className="w-3.5 h-3.5" />
+                        <span className="text-base leading-none inline-flex items-center justify-center">✏️</span>
                         <span>تعديل</span>
                       </button>
                     )}
@@ -1614,7 +1609,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
                 aria-label="إغلاق"
               >
-                <X className="w-5 h-5" />
+                <span className="text-base font-bold select-none leading-none">✕</span>
               </button>
             </div>
 
@@ -1693,7 +1688,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
                 aria-label="إغلاق"
               >
-                <X className="w-5 h-5" />
+                <span className="text-base font-bold select-none leading-none">✕</span>
               </button>
             </div>
 
@@ -1762,7 +1757,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
                 aria-label="إغلاق"
               >
-                <X className="w-5 h-5" />
+                <span className="text-base font-bold select-none leading-none">✕</span>
               </button>
             </div>
 
@@ -1853,7 +1848,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
                 aria-label="إغلاق"
               >
-                <X className="w-5 h-5" />
+                <span className="text-base font-bold select-none leading-none">✕</span>
               </button>
             </div>
 

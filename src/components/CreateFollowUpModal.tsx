@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, Phone, FileText, Bell, AlertCircle, X, Check } from 'lucide-react';
 import { FollowUpAppointment, FollowUpReminderSettings } from '../types';
 import { createFollowUpAppointment, updateFollowUpAppointment, isDateTimeInPast } from '../services/firebaseService';
+import { sanitizePatientPhoneNumber, validatePatientPhoneNumber } from '../services/securityService';
 
 interface CreateFollowUpModalProps {
   isOpen: boolean;
@@ -88,10 +88,12 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
       return;
     }
 
-    if (!patientPhone.trim()) {
-      setError("يرجى إدخال رقم هاتف المريض");
+    const phoneValidation = validatePatientPhoneNumber(patientPhone);
+    if (!phoneValidation.isValid) {
+      setError(phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.");
       return;
     }
+    const cleanPhone = phoneValidation.cleanPhone;
 
     if (!appointmentDate || !appointmentTime) {
       setError("يرجى تحديد تاريخ ووقت الموعد");
@@ -116,7 +118,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
         // Edit existing follow-up appointment
         await updateFollowUpAppointment(editingAppointment.id, {
           patientName: patientName.trim(),
-          patientPhone: patientPhone.trim(),
+          patientPhone: cleanPhone,
           appointmentDate,
           appointmentTime,
           reason: reason.trim(),
@@ -131,7 +133,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           onSuccess({
             ...editingAppointment,
             patientName: patientName.trim(),
-            patientPhone: patientPhone.trim(),
+            patientPhone: cleanPhone,
             appointmentDate,
             appointmentTime,
             reason: reason.trim(),
@@ -143,7 +145,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
         // Create new follow-up appointment
         const createdApp = await createFollowUpAppointment({
           patientName: patientName.trim(),
-          patientPhone: patientPhone.trim(),
+          patientPhone: cleanPhone,
           patientId: initialPatientId,
           doctorId,
           doctorName,
@@ -182,7 +184,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold border border-sky-100">
-              <Calendar className="w-5 h-5" />
+              <span className="text-xl leading-none inline-flex items-center justify-center">📅</span>
             </div>
             <div>
               <h3 className="font-extrabold text-slate-900 text-base sm:text-lg font-['Tajawal',sans-serif]">
@@ -196,15 +198,15 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition"
+            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <span className="text-base font-bold select-none leading-none">✕</span>
           </button>
         </div>
 
         {error && (
           <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-2xl flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span className="text-base leading-none inline-flex items-center justify-center">⚠️</span>
             <span className="font-semibold">{error}</span>
           </div>
         )}
@@ -214,7 +216,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           {/* Patient Name */}
           <div>
             <label className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-              <User className="w-3.5 h-3.5 text-sky-600" />
+              <span className="text-xs leading-none inline-flex items-center justify-center">👤</span>
               <span>اسم المريض <span className="text-rose-500">*</span></span>
             </label>
             <input
@@ -230,13 +232,19 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           {/* Patient Phone */}
           <div>
             <label className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-              <Phone className="w-3.5 h-3.5 text-sky-600" />
+              <span className="text-xs leading-none inline-flex items-center justify-center">📞</span>
               <span>رقم هاتف المريض <span className="text-rose-500">*</span></span>
             </label>
             <input
               type="tel"
+              dir="ltr"
+              maxLength={11}
               value={patientPhone}
-              onChange={(e) => setPatientPhone(e.target.value)}
+              onChange={(e) => setPatientPhone(sanitizePatientPhoneNumber(e.target.value, 11))}
+              onPaste={(e) => {
+                e.preventDefault();
+                setPatientPhone(sanitizePatientPhoneNumber(e.clipboardData.getData('text'), 11));
+              }}
               placeholder="مثال: 01012345678"
               required
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-900 font-semibold dir-ltr text-right focus:outline-hidden focus:ring-2 focus:ring-sky-500 transition"
@@ -247,7 +255,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                <span className="text-xs leading-none inline-flex items-center justify-center">📅</span>
                 <span>تاريخ إعادة الكشف <span className="text-rose-500">*</span></span>
               </label>
               <div className="flex items-center gap-1 text-[11px]">
@@ -314,7 +322,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           {/* Reason for Follow Up */}
           <div>
             <label className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5 text-teal-700" />
+              <span className="text-xs leading-none inline-flex items-center justify-center">📝</span>
               <span>سبب إعادة الكشف (اختياري)</span>
             </label>
             <input
@@ -329,7 +337,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           {/* Notes / Instructions */}
           <div>
             <label className="text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5 text-sky-600" />
+              <span className="text-xs leading-none inline-flex items-center justify-center">📋</span>
               <span>ملاحظات وتعليمات للمريض (اختياري)</span>
             </label>
             <textarea
@@ -344,7 +352,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           {/* Reminder Settings Options */}
           <div className="bg-sky-50/70 border border-sky-100 rounded-2xl p-4 space-y-2.5">
             <div className="flex items-center gap-2 mb-1">
-              <Bell className="w-4 h-4 text-sky-600" />
+              <span className="text-sm leading-none inline-flex items-center justify-center">🔔</span>
               <span className="text-xs font-extrabold text-sky-950 font-['Tajawal',sans-serif]">
                 مواعيد التنبيه والتذكيرات
               </span>
@@ -376,7 +384,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+              className="px-5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
             >
               إلغاء
             </button>
@@ -384,7 +392,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-sky-500/20 flex items-center gap-2 transition disabled:opacity-50"
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-sky-500/20 flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <>
@@ -393,7 +401,7 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
                 </>
               ) : (
                 <>
-                  <Check className="w-4 h-4" />
+                  <span className="text-sm font-bold leading-none inline-flex items-center justify-center">✓</span>
                   <span>{editingAppointment ? "تحديث الموعد" : "تسجيل موعد إعادة الكشف"}</span>
                 </>
               )}

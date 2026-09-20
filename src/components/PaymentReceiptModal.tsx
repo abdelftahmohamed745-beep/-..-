@@ -1,6 +1,5 @@
 import React from 'react';
 import { ClinicTransaction, DoctorProfile } from '../types';
-import { X, Printer, CheckCircle2, AlertCircle, Clock, RotateCcw, Receipt } from 'lucide-react';
 
 interface PaymentReceiptModalProps {
   transaction: ClinicTransaction | null;
@@ -24,28 +23,28 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
       case 'PAID':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span className="text-xs font-bold leading-none inline-flex items-center justify-center">✓</span>
             <span>مدفوع بالكامل</span>
           </span>
         );
       case 'PARTIAL':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
-            <Clock className="w-4 h-4 text-amber-600" />
+            <span className="text-xs leading-none inline-flex items-center justify-center">⏰</span>
             <span>مدفوع جزئياً (مستحق)</span>
           </span>
         );
       case 'UNPAID':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
-            <AlertCircle className="w-4 h-4 text-rose-600" />
+            <span className="text-xs leading-none inline-flex items-center justify-center">⚠️</span>
             <span>غير مدفوع</span>
           </span>
         );
       case 'REFUNDED':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
-            <RotateCcw className="w-4 h-4 text-purple-600" />
+            <span className="text-xs leading-none inline-flex items-center justify-center">🔄</span>
             <span>مبلغ مسترد (ملغاة)</span>
           </span>
         );
@@ -72,7 +71,7 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6 print:hidden">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
-              <Receipt className="w-5 h-5" />
+              <span className="text-lg leading-none inline-flex items-center justify-center">🧾</span>
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-base">إيصال سداد رسوم كشف</h3>
@@ -85,14 +84,14 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
               onClick={handlePrint}
               className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
             >
-              <Printer className="w-4 h-4" />
+              <span className="text-sm leading-none inline-flex items-center justify-center">🖨️</span>
               <span>طباعة</span>
             </button>
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <span className="text-base font-bold select-none leading-none">✕</span>
             </button>
           </div>
         </div>
@@ -177,7 +176,7 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
           {transaction.paymentStatus === 'REFUNDED' && transaction.refundDetails && (
             <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 text-xs text-purple-900 space-y-1">
               <div className="font-bold flex items-center gap-1 text-purple-800">
-                <RotateCcw className="w-4 h-4" />
+                <span className="text-sm leading-none inline-flex items-center justify-center">🔄</span>
                 <span>تم استرداد مبلغ المعاملة</span>
               </div>
               <div>مبلغ الاسترداد: {transaction.refundDetails.refundAmount} جنيه</div>

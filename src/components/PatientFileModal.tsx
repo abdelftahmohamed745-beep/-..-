@@ -1,21 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  X,
-  User,
-  Phone,
-  Calendar,
-  Clock,
-  DollarSign,
-  FileText,
-  CheckCircle2,
-  AlertCircle,
-  Tag,
-  Stethoscope,
-  ChevronLeft,
-  Search,
-  Activity
-} from 'lucide-react';
 import { PatientMedicalFile, ClinicTransaction, PatientVisitEntry } from '../types';
 import { getPatientMedicalFile, subscribeToClinicTransactions } from '../services/firebaseService';
 
@@ -84,7 +68,7 @@ export const PatientFileModal: React.FC<PatientFileModalProps> = ({
           <div className="bg-[#143d30] text-white p-6 relative flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-white/10 text-emerald-300 flex items-center justify-center font-bold text-lg border border-white/20">
-                <User className="w-6 h-6" />
+                <span className="text-2xl leading-none inline-flex items-center justify-center">👤</span>
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -98,7 +82,7 @@ export const PatientFileModal: React.FC<PatientFileModalProps> = ({
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-emerald-200 mt-0.5 dir-ltr">
-                  <Phone className="w-3.5 h-3.5" />
+                  <span className="text-xs leading-none inline-flex items-center justify-center">📞</span>
                   <span>{patientPhone}</span>
                 </div>
               </div>
@@ -108,7 +92,7 @@ export const PatientFileModal: React.FC<PatientFileModalProps> = ({
               onClick={onClose}
               className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <span className="text-base font-bold select-none leading-none">✕</span>
             </button>
           </div>
 
@@ -142,7 +126,7 @@ export const PatientFileModal: React.FC<PatientFileModalProps> = ({
             {/* Visit Timeline Section */}
             <div>
               <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-700" />
+                <span className="text-base leading-none inline-flex items-center justify-center">📈</span>
                 <span>سجل الزيارات والحجوزات (Timeline)</span>
               </h3>
 
@@ -153,7 +137,7 @@ export const PatientFileModal: React.FC<PatientFileModalProps> = ({
                 </div>
               ) : visits.length === 0 && transactions.length === 0 ? (
                 <div className="bg-slate-50 border border-dashed border-slate-200 p-8 rounded-2xl text-center text-xs text-slate-500">
-                  <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <span className="text-4xl leading-none inline-flex items-center justify-center mx-auto mb-2 text-slate-300">📄</span>
                   <p>لا توجد زيارات سابقة مسجلة بهذا الهاتف حتى الآن.</p>
                 </div>
               ) : (

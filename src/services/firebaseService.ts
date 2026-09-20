@@ -56,6 +56,8 @@ import { hasPermission } from "../utils/permissions";
 import {
   sanitizeInput,
   isValidPhoneNumber,
+  validatePatientPhoneNumber,
+  sanitizePatientPhoneNumber,
   isValidUrl,
   checkBookingRateLimit,
   recordBookingSuccess,
@@ -106,12 +108,12 @@ export async function getOrCreatePatientProfile(
   additionalData?: Partial<PatientProfile>
 ): Promise<PatientProfile> {
   const cleanName = sanitizeInput(name);
-  const cleanPhone = normalizePhoneNumber(phone);
-  const nowIso = new Date().toISOString();
-
-  if (!cleanPhone) {
-    throw new Error("رقم الهاتف مطلوب لتسجيل ملف المريض");
+  const phoneValidation = validatePatientPhoneNumber(phone);
+  if (!phoneValidation.isValid) {
+    throw new Error(phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.");
   }
+  const cleanPhone = phoneValidation.cleanPhone;
+  const nowIso = new Date().toISOString();
 
   try {
     // 1. Check if patient profile already exists by phone in 'patients' collection
@@ -305,26 +307,7 @@ export function removeUndefinedFields<T extends Record<string, any>>(obj: T): T 
 
 export function normalizePhoneNumber(phone: string): string {
   if (!phone) return "";
-  
-  // 1. Convert Eastern Arabic / Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩ and ۰۱۲۳۴۵۶۷۸۹) to standard ASCII (0123456789)
-  let str = phone.replace(/[٠-٩]/g, (d) => (d.charCodeAt(0) - 1632).toString());
-  str = str.replace(/[۰-۹]/g, (d) => (d.charCodeAt(0) - 1776).toString());
-
-  // 2. Remove all non-digit characters
-  const digits = str.replace(/\D/g, '');
-
-  // 3. Normalize Egyptian mobile phone numbers
-  if (digits.length === 12 && digits.startsWith('201')) {
-    return '0' + digits.slice(2);
-  }
-  if (digits.length === 14 && digits.startsWith('00201')) {
-    return '0' + digits.slice(4);
-  }
-  if (digits.length === 11 && digits.startsWith('01')) {
-    return digits;
-  }
-
-  return digits || phone.trim();
+  return sanitizePatientPhoneNumber(phone, 0) || phone.trim();
 }
 
 export function getTodayDateString(): string {
@@ -864,7 +847,7 @@ export async function bookPatient(
 ): Promise<{ patientId: string; sequenceNumber: number; isExisting?: boolean; bookingReference?: string; patientProfileId?: string }> {
   // 1. Sanitize & Validate Inputs
   const cleanName = sanitizeInput(name);
-  const normalizedPhone = normalizePhoneNumber(phone);
+  const phoneValidation = validatePatientPhoneNumber(phone);
 
   if (!cleanName || cleanName.length < 2) {
     throw new Error("يرجى إدخال اسم صحيح لا يقل عن حرفين");
@@ -874,9 +857,10 @@ export async function bookPatient(
     throw new Error("الاسم أطول من الحد المسموح به (100 حرف)");
   }
 
-  if (!isValidPhoneNumber(normalizedPhone)) {
-    throw new Error("رقم الهاتف غير صحيح. يرجى كتابة رقم هاتف صالح");
+  if (!phoneValidation.isValid) {
+    throw new Error(phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.");
   }
+  const normalizedPhone = phoneValidation.cleanPhone;
 
   // 2. Check for active duplicate booking today first (idempotent ticket recovery)
   const existingBooking = await checkActiveBooking(doctorId, normalizedPhone);
@@ -1624,8 +1608,9 @@ export async function createFollowUpAppointment(params: {
     throw new Error("اسم المريض مطلوب لحجز موعد إعادة الكشف");
   }
 
-  if (!patientPhone || !patientPhone.trim()) {
-    throw new Error("رقم هاتف المريض مطلوب");
+  const phoneValidation = validatePatientPhoneNumber(patientPhone);
+  if (!phoneValidation.isValid) {
+    throw new Error(phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.");
   }
 
   if (!appointmentDate || !appointmentTime) {
@@ -1637,7 +1622,7 @@ export async function createFollowUpAppointment(params: {
   }
 
   const cleanName = sanitizeInput(patientName);
-  const cleanPhone = patientPhone.trim();
+  const cleanPhone = phoneValidation.cleanPhone;
   const cleanNotes = notes ? sanitizeInput(notes) : "";
   const cleanReason = reason ? sanitizeInput(reason) : "";
   const nowIso = new Date().toISOString();
@@ -1886,6 +1871,14 @@ export async function updateFollowUpAppointment(
     if (isDateTimeInPast(updates.appointmentDate, updates.appointmentTime)) {
       throw new Error("لا يمكن تعديل الموعد إلى تاريخ أو وقت في الماضي");
     }
+  }
+
+  if (updates.patientPhone) {
+    const phoneValidation = validatePatientPhoneNumber(updates.patientPhone);
+    if (!phoneValidation.isValid) {
+      throw new Error(phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.");
+    }
+    updates.patientPhone = phoneValidation.cleanPhone;
   }
 
   const docRef = doc(db, "followUpAppointments", appointmentId);
@@ -3203,7 +3196,11 @@ export async function savePatientMedicalFile(
   doctorId: string,
   fileData: Partial<PatientMedicalFile> & { patientPhone: string; patientName: string; patientId?: string }
 ): Promise<PatientMedicalFile> {
-  const cleanPhone = normalizePhoneNumber(fileData.patientPhone);
+  const phoneValidation = validatePatientPhoneNumber(fileData.patientPhone);
+  if (!phoneValidation.isValid) {
+    throw new Error(phoneValidation.error || "رقم الهاتف يجب أن يكون من 10 إلى 11 رقمًا.");
+  }
+  const cleanPhone = phoneValidation.cleanPhone;
   const nowIso = new Date().toISOString();
   const fileRef = doc(db, "doctors", doctorId, "patientFiles", cleanPhone);
 

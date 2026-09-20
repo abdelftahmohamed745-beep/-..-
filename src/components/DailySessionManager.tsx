@@ -519,11 +519,11 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                   </button>
 
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
                       <h4 className="text-base font-black text-slate-900">
                         تقرير يوم {selectedArchivedDay.session?.date} ({selectedArchivedDay.session?.dayName || ''})
                       </h4>
-                      <span className="text-slate-500 font-mono">
+                      <span className="text-slate-500 font-mono text-xs">
                         مغلق بواسطة: {selectedArchivedDay.session?.completedByName || 'طبيب العيادة'}
                       </span>
                     </div>
@@ -563,17 +563,17 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                       {selectedArchivedDay.patients.map((p) => (
                         <div
                           key={p.id}
-                          className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs flex items-center justify-between"
+                          className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs flex flex-wrap sm:flex-nowrap items-center justify-between gap-2"
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-700 font-mono text-[11px]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-700 font-mono text-[11px] shrink-0">
                               #{p.sequenceNumber}
                             </span>
-                            <span className="font-bold text-slate-900">{p.name}</span>
-                            <span className="text-slate-400 font-mono text-[11px]">{p.phone}</span>
+                            <span className="font-bold text-slate-900 truncate">{p.name}</span>
+                            <span className="text-slate-400 font-mono text-[11px] shrink-0">{p.phone}</span>
                           </div>
                           <span
-                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0 ${
                               p.status === 'done'
                                 ? 'bg-violet-50 text-violet-700 border border-violet-200'
                                 : p.status === 'no_show'
@@ -602,16 +602,16 @@ export const DailySessionManager: React.FC<DailySessionManagerProps> = ({
                       onClick={() => handleViewArchivedDay(d.date)}
                       className="bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 transition flex items-center justify-between gap-3 cursor-pointer"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-mono text-xs font-bold">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-mono text-xs font-bold shrink-0">
                           <span className="text-lg leading-none inline-flex items-center justify-center">📅</span>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="font-extrabold text-slate-900 text-sm font-mono">{d.date}</span>
                             {d.dayName && <span className="text-xs text-slate-500">({d.dayName})</span>}
                           </div>
-                          <div className="text-xs text-slate-500 flex items-center gap-3 mt-0.5 font-mono">
+                          <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5 font-mono">
                             <span>الحالات: {d.patientsCount || 0}</span>
                             <span>الكشوفات: {d.completedCount || 0}</span>
                             <span>المتحصل: {d.totalCollected || 0} ج.م</span>

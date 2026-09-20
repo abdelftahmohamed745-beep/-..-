@@ -1,22 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  X,
-  User,
-  Phone,
-  Clock,
-  Calendar,
-  AlertCircle,
-  FileText,
-  Pill,
-  CheckCircle2,
-  Stethoscope,
-  ChevronDown,
-  ChevronUp,
-  CreditCard,
-  History,
-  Activity
-} from 'lucide-react';
-import {
   PatientRecord,
   PatientMedicalFile,
   VisitType,
@@ -168,7 +151,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
         <div className="bg-gradient-to-r from-sky-700 via-sky-800 to-indigo-900 text-white p-5 sm:p-6 flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0">
-              <Stethoscope className="w-6 h-6 text-sky-200" />
+              <span className="text-2xl leading-none inline-flex items-center justify-center">🩺</span>
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -180,7 +163,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
                 </span>
                 {outstandingBalance > 0 && (
                   <span className="px-2.5 py-0.5 rounded-full bg-rose-500/30 border border-rose-400/40 text-rose-200 text-xs font-extrabold flex items-center gap-1">
-                    <CreditCard className="w-3 h-3" />
+                    <span className="text-xs leading-none inline-flex items-center justify-center">💳</span>
                     مستحق سابق: {outstandingBalance} ج.م
                   </span>
                 )}
@@ -190,7 +173,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
               </h2>
               <div className="flex items-center gap-4 text-xs text-sky-200 font-mono mt-0.5">
                 <span className="flex items-center gap-1">
-                  <Phone className="w-3.5 h-3.5" />
+                  <span className="text-xs leading-none inline-flex items-center justify-center">📞</span>
                   {patient.phone}
                 </span>
                 {patientFile?.age && <span>العمر: {patientFile.age} سنة</span>}
@@ -203,7 +186,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
             onClick={onClose}
             className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <span className="text-base font-bold select-none leading-none">✕</span>
           </button>
         </div>
 
@@ -214,7 +197,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
           <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 sm:p-5">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-                <History className="w-4 h-4 text-sky-600" />
+                <span className="text-base leading-none inline-flex items-center justify-center">📜</span>
                 <span>سجل الزيارات السابقة للمريض ({patientFile?.visits?.length || 0} زيارات سابقة)</span>
               </div>
               <button
@@ -223,7 +206,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
                 className="text-xs text-sky-600 font-extrabold flex items-center gap-1 hover:underline cursor-pointer"
               >
                 <span>{showHistoryDetails ? 'طي السجل' : 'عرض السجل بالتفصيل'}</span>
-                {showHistoryDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                <span className="text-[10px]">{showHistoryDetails ? '▲' : '▼'}</span>
               </button>
             </div>
 
@@ -239,7 +222,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
                   <div key={v.id || idx} className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-right space-y-1">
                     <div className="flex items-center justify-between text-slate-500 font-mono">
                       <span className="font-bold text-sky-700 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
+                        <span className="text-xs leading-none inline-flex items-center justify-center">📅</span>
                         {v.date}
                       </span>
                       <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-700 font-sans font-bold">
@@ -321,7 +304,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
             {/* Prescription */}
             <div>
               <label className="block text-xs font-extrabold text-slate-800 mb-1.5 flex items-center gap-1.5">
-                <Pill className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-sm leading-none inline-flex items-center justify-center">💊</span>
                 <span>الروشتة والعلاج الموصوف (Prescription / Rx)</span>
               </label>
               <textarea
@@ -418,7 +401,7 @@ export const DoctorConsultationModal: React.FC<DoctorConsultationModalProps> = (
             disabled={isSubmitting}
             className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg shadow-emerald-600/25 flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
           >
-            <CheckCircle2 className="w-5 h-5" />
+            <span className="text-base leading-none inline-flex items-center justify-center font-bold">✓</span>
             <span>{isSubmitting ? 'جاري الحفظ...' : 'إنهاء الكشف وحفظ الزيارة (Exam Completed)'}</span>
           </button>
         </div>

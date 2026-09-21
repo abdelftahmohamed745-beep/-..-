@@ -444,9 +444,6 @@ export default function App() {
         setActiveTab('booking');
       }
     } else {
-      // Clean up test accounts automatically from Firestore
-      purgeTestAccounts().catch(console.error);
-
       // Default landing for root: Clinic OS Dashboard (or Auth workspace if not logged in)
       if (pathname === '/' || pathname === '') {
         setActiveTab('dashboard');
@@ -475,11 +472,8 @@ export default function App() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        try {
-          await user.reload();
-        } catch (e) {
-          console.warn("Could not reload user state:", e);
-        }
+        // Non-blocking background reload to keep token fresh without stalling initial render
+        user.reload().catch(() => {});
 
         const adminRes = await verifyAdminStatus(user);
         setIsPlatformAdmin(adminRes.isAdmin);

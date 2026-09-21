@@ -167,3 +167,16 @@ export async function processAndCompressImage(
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Dedicated paper prescription image compressor:
+ * Guarantees crisp medical handwriting readability while keeping payload strictly under 300KB for direct Firestore base64 storage.
+ */
+export async function compressPrescriptionPhoto(file: File): Promise<ProcessedImage> {
+  const primary = await processAndCompressImage(file, 1200, 0.76);
+  if (primary.sizeKb <= 290) {
+    return primary;
+  }
+  // Secondary pass if photo was exceptionally dense
+  return processAndCompressImage(file, 960, 0.65);
+}

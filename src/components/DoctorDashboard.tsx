@@ -23,6 +23,7 @@ import { ClinicFinanceManager } from './ClinicFinanceManager';
 import { DoctorConsultationModal } from './DoctorConsultationModal';
 import { DailySessionManager } from './DailySessionManager';
 import { FastPatientRegistrationModal } from './FastPatientRegistrationModal';
+import { PatientFileSidePanel } from './PatientFileSidePanel';
 import { hasPermission } from '../utils/permissions';
 import { auth } from '../firebase/config';
 import { sanitizePatientPhoneNumber, validatePatientPhoneNumber } from '../services/securityService';
@@ -80,6 +81,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
   // Doctor Consultation Modal state
   const [selectedPatientForConsultation, setSelectedPatientForConsultation] = useState<PatientRecord | null>(null);
+
+  // Patient File Side Panel Drawer state
+  const [isPatientFileOpen, setIsPatientFileOpen] = useState(false);
+  const [selectedPatientForFile, setSelectedPatientForFile] = useState<PatientRecord | null>(null);
+  const [patientFileInitialTab, setPatientFileInitialTab] = useState<'overview' | 'consultation' | 'prescriptions' | 'investigations' | 'history' | 'payments' | 'growth'>('overview');
 
   // Fast Patient Registration & Split Payment Modal state
   const [isFastRegistrationOpen, setIsFastRegistrationOpen] = useState(false);
@@ -359,6 +365,14 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               <span className="text-xs text-slate-500 font-medium">
                 • {doctor.clinicName}
               </span>
+              <button
+                onClick={() => setShowReviewsModal(true)}
+                className="px-2.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-full text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                title="عرض تقييمات وآراء المرضى"
+              >
+                <span>⭐</span>
+                <span>{activeRatingAvg} ({activeRatingCount})</span>
+              </button>
             </div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 font-['Tajawal',sans-serif] tracking-tight">
               {doctor.name}
@@ -397,106 +411,6 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           </div>
 
         </div>
-      </div>
-
-      {/* Semantic Stats Grid Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5">
-        
-        {/* Total Registered Patients (Indigo #6366F1: patients, visits, primary operational statistics) */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">إجمالي الحالات اليوم</div>
-            <div className="text-xl sm:text-2xl font-black text-[#6366F1] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
-              {patients.length}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">حالة مسجلة</div>
-          </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-[#6366F1] border border-indigo-100 flex items-center justify-center font-bold shrink-0">
-            <span className="text-2xl leading-none inline-flex items-center justify-center">👥</span>
-          </div>
-        </div>
-
-        {/* Waiting (Orange #F59E0B: pending actions, attention-required states) */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">في الانتظار</div>
-            <div className="text-xl sm:text-2xl font-black text-[#F59E0B] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
-              {waitingPatients.length}
-            </div>
-            <div className="text-[10px] text-amber-600 mt-0.5 font-medium">جاهزون للدخول</div>
-          </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-[#F59E0B] border border-amber-100 flex items-center justify-center font-bold shrink-0">
-            <span className="text-2xl leading-none inline-flex items-center justify-center">⏳</span>
-          </div>
-        </div>
-
-        {/* In Consultation (Violet #8B5CF6: consultations, medical services, clinical activity) */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">في الكشف الآن</div>
-            <div className="text-xl sm:text-2xl font-black text-[#8B5CF6] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
-              {calledPatient ? `#${calledPatient.sequenceNumber}` : '—'}
-            </div>
-            <div className="text-[10px] text-violet-600 mt-0.5 font-medium">داخل الغرفة</div>
-          </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-50 text-[#8B5CF6] border border-violet-100 flex items-center justify-center font-bold shrink-0">
-            <span className="text-2xl leading-none inline-flex items-center justify-center">🩺</span>
-          </div>
-        </div>
-
-        {/* Done / Completed (Violet #8B5CF6: consultations, medical services, clinical activity) */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">تم الكشف اليوم</div>
-            <div className="text-xl sm:text-2xl font-black text-[#8B5CF6] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
-              {donePatients.length}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">كشوفات مكتملة</div>
-          </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-violet-50 text-[#8B5CF6] border border-violet-100 flex items-center justify-center font-bold shrink-0">
-            <span className="text-2xl leading-none inline-flex items-center justify-center">✅</span>
-          </div>
-        </div>
-
-        {/* Avg Consult Time (Blue #0EA5E9: informational and secondary statistics) */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-[11px] sm:text-xs text-slate-500 font-bold">متوسط وقت الكشف</div>
-            <div className="text-xl sm:text-2xl font-black text-[#0EA5E9] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1">
-              {doctor.avgConsultTime} دقيقة
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5">
-              محسوب تلقائياً
-            </div>
-          </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-[#0EA5E9] border border-sky-100 flex items-center justify-center font-bold shrink-0">
-            <span className="text-2xl leading-none inline-flex items-center justify-center">⏱️</span>
-          </div>
-        </div>
-
-        {/* Doctor Rating Card (Blue #0EA5E9: informational and secondary statistics) */}
-        <button
-          onClick={() => setShowReviewsModal(true)}
-          className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between hover:border-sky-300 transition text-right group cursor-pointer col-span-2 sm:col-span-1"
-        >
-          <div>
-            <div className="text-[11px] sm:text-xs text-slate-600 font-bold flex items-center gap-1">
-              <span>تقييم العيادة</span>
-              <span className="text-[10px] text-sky-600 underline group-hover:text-sky-800">(عرض)</span>
-            </div>
-            <div className="text-xl sm:text-2xl font-black text-[#0EA5E9] font-['Tajawal',sans-serif] mt-0.5 sm:mt-1 flex items-center gap-1 dir-ltr">
-              <span className="text-base leading-none inline-flex items-center justify-center">⭐</span>
-              <span>{activeRatingAvg}</span>
-            </div>
-            <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-              {activeRatingCount} تقييم
-            </div>
-          </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-[#0EA5E9] border border-sky-100 flex items-center justify-center font-bold shadow-2xs shrink-0">
-            <span className="text-2xl leading-none inline-flex items-center justify-center">⭐</span>
-          </div>
-        </button>
-
       </div>
 
       {/* Section Navigation Tabs */}
@@ -752,17 +666,33 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                       <div className="flex items-center gap-3 w-full lg:w-auto">
                         
                         {/* Sequence Badge */}
-                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl font-black text-base sm:text-lg flex items-center justify-center shrink-0 shadow-2xs font-['Tajawal',sans-serif] ${
-                          isCalled ? 'bg-[#8B5CF6] text-white animate-pulse' :
-                          isWaiting ? 'bg-[#F59E0B] text-white' :
-                          isDone ? 'bg-[#8B5CF6]/90 text-white' : 'bg-slate-400 text-white'
-                        }`}>
+                        <div
+                          onClick={() => {
+                            setSelectedPatientForFile(patient);
+                            setPatientFileInitialTab('overview');
+                            setIsPatientFileOpen(true);
+                          }}
+                          className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl font-black text-base sm:text-lg flex items-center justify-center shrink-0 shadow-2xs font-['Tajawal',sans-serif] cursor-pointer hover:opacity-90 transition ${
+                            isCalled ? 'bg-[#8B5CF6] text-white animate-pulse' :
+                            isWaiting ? 'bg-[#F59E0B] text-white' :
+                            isDone ? 'bg-[#8B5CF6]/90 text-white' : 'bg-slate-400 text-white'
+                          }`}
+                          title="فتح الملف الطبي للمريض"
+                        >
                           #{patient.sequenceNumber}
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-bold text-slate-900 text-sm sm:text-base font-['Tajawal',sans-serif] truncate max-w-[200px] sm:max-w-none">
+                            <h4
+                              onClick={() => {
+                                setSelectedPatientForFile(patient);
+                                setPatientFileInitialTab('overview');
+                                setIsPatientFileOpen(true);
+                              }}
+                              className="font-bold text-slate-900 text-sm sm:text-base font-['Tajawal',sans-serif] whitespace-normal break-words cursor-pointer hover:text-teal-700 transition"
+                              title="انقر لفتح الملف الطبي الشامل والروشتات"
+                            >
                               {patient.name}
                             </h4>
 
@@ -802,6 +732,48 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
                       {/* Right side actions: Organized in 3-column responsive grid on mobile, flex on desktop */}
                       <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto justify-start lg:justify-end border-t lg:border-0 pt-2.5 lg:pt-0 border-slate-100">
+                        {/* 0. Open Patient File */}
+                        <button
+                          onClick={() => {
+                            setSelectedPatientForFile(patient);
+                            setPatientFileInitialTab('overview');
+                            setIsPatientFileOpen(true);
+                          }}
+                          className="flex items-center justify-center gap-1 px-2 py-1.5 min-h-[38px] bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-xs rounded-xl transition shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
+                          title="فتح الملف الطبي الشامل للمريض"
+                        >
+                          <span className="text-base leading-none inline-flex items-center justify-center">📂</span>
+                          <span>الملف</span>
+                        </button>
+
+                        {/* 0.1 Prescription Photo Shortcut */}
+                        <button
+                          onClick={() => {
+                            setSelectedPatientForFile(patient);
+                            setPatientFileInitialTab('prescriptions');
+                            setIsPatientFileOpen(true);
+                          }}
+                          className="flex items-center justify-center gap-1 px-2 py-1.5 min-h-[38px] bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold text-xs rounded-xl transition shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
+                          title="📷 تصوير روشتة ورقية أو عرض الروشتات"
+                        >
+                          <span className="text-base leading-none inline-flex items-center justify-center">📷</span>
+                          <span>روشتة</span>
+                        </button>
+
+                        {/* 0.2 Clinical Consultation Shortcut */}
+                        <button
+                          onClick={() => {
+                            setSelectedPatientForFile(patient);
+                            setPatientFileInitialTab('consultation');
+                            setIsPatientFileOpen(true);
+                          }}
+                          className="flex items-center justify-center gap-1 px-2 py-1.5 min-h-[38px] bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold text-xs rounded-xl transition shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
+                          title="بدء الكشف الطبي وتوثيق التشخيص"
+                        >
+                          <span className="text-base leading-none inline-flex items-center justify-center">🩺</span>
+                          <span>كشف</span>
+                        </button>
+
                         {/* 1. Call Patient */}
                         {isWaiting && (
                           <button
@@ -1123,6 +1095,36 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         }}
         onShowToast={onShowToast}
       />
+
+      {/* Mobile Floating Action Button (FAB) for Walk-in Patient Registration */}
+      <div className="fixed bottom-6 left-6 z-40 sm:hidden">
+        <button
+          onClick={() => setIsFastRegistrationOpen(true)}
+          className="w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl flex items-center justify-center font-bold text-2xl transition active:scale-90 cursor-pointer ring-4 ring-indigo-200/50"
+          title="تسجيل مريض جديد"
+        >
+          ➕
+        </button>
+      </div>
+
+      {/* Comprehensive Patient Medical File Side Panel Drawer */}
+      {selectedPatientForFile && (
+        <PatientFileSidePanel
+          isOpen={isPatientFileOpen}
+          onClose={() => setIsPatientFileOpen(false)}
+          doctorId={doctor.uid}
+          doctorName={doctor.name}
+          clinicName={doctor.clinicName}
+          patientPhone={selectedPatientForFile.phone}
+          patientName={selectedPatientForFile.name}
+          patientRecord={selectedPatientForFile}
+          initialTab={patientFileInitialTab}
+          onShowToast={onShowToast}
+          onConsultationComplete={() => {
+            handleStatusChange(selectedPatientForFile, 'done');
+          }}
+        />
+      )}
 
     </div>
   );

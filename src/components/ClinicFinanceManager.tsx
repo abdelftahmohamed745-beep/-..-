@@ -277,11 +277,11 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
     autoFillFormForPatient(p);
   };
 
-  // Subscribe to Realtime Firebase Data
+  // Subscribe to Realtime Firebase Data (stable per organizationId)
   useEffect(() => {
     if (!organizationId) return;
 
-    // Seed default services if empty
+    // Seed default services if empty (runs once per organization mount)
     seedDefaultServicesIfEmpty(organizationId, doctor || undefined);
 
     const unsubServices = subscribeToClinicServices(organizationId, (data) => setServices(data));
@@ -293,7 +293,7 @@ export const ClinicFinanceManager: React.FC<ClinicFinanceManagerProps> = ({
       unsubTx();
       unsubExp();
     };
-  }, [organizationId, doctor]);
+  }, [organizationId]);
 
   // Calculate Today's Summary Metrics
   const todaySummary = useMemo(() => {

@@ -228,9 +228,45 @@
         "status": { "type": "string" }
       },
       "required": ["labId", "orderId", "status"]
+    },
+    "prescriptions": {
+      "title": "prescriptions",
+      "description": "Paper photo and electronic prescriptions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string" },
+        "photoBase64": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["patientId", "doctorId", "date", "type"]
+    },
+    "prescriptionTemplates": {
+      "title": "prescriptionTemplates",
+      "description": "Doctor reusable prescription templates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["doctorId", "title"]
     }
   },
   "firestore": {
+    "doctors/{doctorId}/templates/{templateId}": {
+      "schema": "prescriptionTemplates",
+      "description": "Doctor prescription templates"
+    },
+    "patients/{patientId}/prescriptions/{prescriptionId}": {
+      "schema": "prescriptions",
+      "description": "Patient paper and electronic prescriptions"
+    },
     "doctors/{doctorId}": {
       "schema": "doctors",
       "description": "Doctors collection"

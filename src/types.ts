@@ -471,6 +471,73 @@ export interface PatientVisitEntry {
   prescription?: string;
   status: PatientStatus;
   createdAt: string;
+  vitals?: PatientVitals;
+  paperPrescriptionUrl?: string;
+  doctorNotesPrivate?: string;
+}
+
+export interface PatientVitals {
+  bloodPressure?: string; // e.g. "120/80"
+  heartRate?: number; // bpm
+  temperature?: number; // °C
+  weightKg?: number; // kg
+  heightCm?: number; // cm
+  bmi?: number; // kg/m²
+  bloodSugar?: number; // mg/dL
+  oxygenSaturation?: number; // %
+  measuredAt?: string;
+}
+
+export interface PrescriptionMedicineItem {
+  id?: string;
+  name: string;
+  dosage?: string;
+  timing?: string;
+  duration?: string;
+  instructions?: string;
+}
+
+export interface PrescriptionRecord {
+  id: string;
+  patientId: string;
+  patientName?: string;
+  patientPhone?: string;
+  doctorId: string;
+  doctorName?: string;
+  clinicName?: string;
+  date: string; // YYYY-MM-DD
+  type: 'paper_photo' | 'digital' | 'template';
+  photoBase64?: string;
+  thumbnailBase64?: string;
+  diagnosis?: string;
+  medicines?: PrescriptionMedicineItem[];
+  manualText?: string;
+  notes?: string;
+  createdAt: string;
+  createdByUid: string;
+  createdByName?: string;
+  sizeKb?: number;
+}
+
+export interface PrescriptionTemplate {
+  id: string;
+  doctorId: string;
+  title: string; // e.g. "روشتة نزلة معوية حادة"
+  category?: string; // e.g. "باطنة", "أطفال"
+  diagnosis?: string;
+  medicines: PrescriptionMedicineItem[];
+  instructions?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface GrowthRecord {
+  date: string; // YYYY-MM-DD
+  ageMonths: number;
+  weightKg: number;
+  heightCm?: number;
+  headCircumferenceCm?: number;
+  notes?: string;
 }
 
 export interface PatientMedicalFile {

@@ -50,7 +50,12 @@ import {
   AdminAnnouncement,
   AnnouncementType,
   AnnouncementTarget,
-  PatientProfile
+  PatientProfile,
+  PrescriptionRecord,
+  PrescriptionTemplate,
+  PatientVitals,
+  PrescriptionMedicineItem,
+  GrowthRecord
 } from "../types";
 import { hasPermission } from "../utils/permissions";
 import {
@@ -87,6 +92,26 @@ export function generateBookingReference(): string {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return `D-${code}`;
+}
+
+// Strip all undefined fields recursively to protect Firestore setDoc/updateDoc
+export function removeUndefinedFields<T extends Record<string, any>>(obj: T): T {
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === undefined) continue;
+    if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+      clean[key] = removeUndefinedFields(val);
+    } else if (Array.isArray(val)) {
+      clean[key] = val.map((item) =>
+        item !== null && typeof item === 'object' && !(item instanceof Date)
+          ? removeUndefinedFields(item)
+          : item
+      );
+    } else {
+      clean[key] = val;
+    }
+  }
+  return clean as T;
 }
 
 // Generate unified, permanent Patient Identity ID (e.g., PID-849201)
@@ -144,10 +169,13 @@ export async function getOrCreatePatientProfile(
         if (additionalData.uid) updates.uid = additionalData.uid;
       }
 
-      await updateDoc(doc(db, "patients", docId), updates);
+      const safeUpdates = removeUndefinedFields(updates);
+      if (Object.keys(safeUpdates).length > 0) {
+        await updateDoc(doc(db, "patients", docId), safeUpdates);
+      }
       return {
         ...existingData,
-        ...updates,
+        ...safeUpdates,
         id: docId,
         patientId: existingData.patientId || docId
       };
@@ -155,15 +183,12 @@ export async function getOrCreatePatientProfile(
 
     // 2. Create brand new unified patient profile
     const pid = generatePatientId(cleanPhone);
-    const newProfile: PatientProfile = {
+    const newProfile: Partial<PatientProfile> = {
       id: pid,
       patientId: pid,
       name: cleanName || "مريض",
       phone: cleanPhone,
       accountType: 'patient',
-      gender: additionalData?.gender,
-      birthDate: additionalData?.birthDate,
-      age: additionalData?.age,
       bloodGroup: additionalData?.bloodGroup || '',
       allergies: additionalData?.allergies || '',
       chronicDiseases: additionalData?.chronicDiseases || '',
@@ -174,8 +199,13 @@ export async function getOrCreatePatientProfile(
       updatedAt: nowIso
     };
 
-    await setDoc(doc(db, "patients", pid), newProfile);
-    return newProfile;
+    if (additionalData?.gender) newProfile.gender = additionalData.gender;
+    if (additionalData?.birthDate) newProfile.birthDate = additionalData.birthDate;
+    if (additionalData?.age !== undefined) newProfile.age = additionalData.age;
+
+    const safeProfile = removeUndefinedFields(newProfile as PatientProfile);
+    await setDoc(doc(db, "patients", pid), safeProfile);
+    return safeProfile;
   } catch (err) {
     console.error("Error creating or getting patient profile:", err);
     // Fallback in-memory patient profile to prevent blocking booking flow
@@ -284,25 +314,6 @@ export async function findTicketByReferenceOrPhone(
     console.error("Error searching ticket by reference/phone:", err);
     return null;
   }
-}
-
-export function removeUndefinedFields<T extends Record<string, any>>(obj: T): T {
-  const clean: Record<string, any> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val === undefined) continue;
-    if (val !== null && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
-      clean[key] = removeUndefinedFields(val);
-    } else if (Array.isArray(val)) {
-      clean[key] = val.map((item) =>
-        item !== null && typeof item === 'object' && !(item instanceof Date)
-          ? removeUndefinedFields(item)
-          : item
-      );
-    } else {
-      clean[key] = val;
-    }
-  }
-  return clean as T;
 }
 
 export function normalizePhoneNumber(phone: string): string {
@@ -3308,17 +3319,25 @@ export async function addVisitToPatientMedicalFile(
 
 export async function searchPatientsForDoctor(doctorId: string, searchTerm: string, limitCount = 20): Promise<PatientMedicalFile[]> {
   try {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return [];
+    const rawTerm = searchTerm.trim();
+    if (!rawTerm) return [];
+
+    const normQuery = normalizeArabicSearchText(rawTerm);
+    const cleanPhoneQuery = normalizePhoneNumber(rawTerm);
 
     const colRef = collection(db, "doctors", doctorId, "patientFiles");
-    const snap = await getDocs(query(colRef, limit(100)));
+    const snap = await getDocs(query(colRef, limit(120)));
     const results: PatientMedicalFile[] = [];
 
     snap.forEach((docSnap) => {
       const data = { id: docSnap.id, ...docSnap.data() } as PatientMedicalFile;
-      const nameMatch = data.patientName?.toLowerCase().includes(term);
-      const phoneMatch = data.patientPhone?.includes(term);
+      const normName = normalizeArabicSearchText(data.patientName || "");
+      const phone = data.patientPhone || "";
+      const cleanPhone = normalizePhoneNumber(phone);
+
+      const nameMatch = normName.includes(normQuery);
+      const phoneMatch = cleanPhoneQuery ? (phone.includes(cleanPhoneQuery) || cleanPhone.includes(cleanPhoneQuery)) : phone.includes(rawTerm);
+
       if (nameMatch || phoneMatch) {
         results.push(data);
       }
@@ -3619,16 +3638,21 @@ export async function saveUserReadAnnouncements(userId: string, readIds: string[
 // DAILY OPERATING SYSTEM & ARCHIVE (SECTIONS 4, 5, 6, 7)
 // ============================================================================
 
-export function normalizeArabicText(text: string): string {
+export function normalizeArabicSearchText(text: string): string {
   if (!text) return "";
   return text
     .trim()
     .toLowerCase()
-    .replace(/[أإآ]/g, "ا")
+    .replace(/[أإآء]/g, "ا")
     .replace(/ة/g, "ه")
-    .replace(/ى/g, "ي")
-    .replace(/[\u064B-\u065F]/g, "");
+    .replace(/[ىي]/g, "ي")
+    .replace(/[\u064B-\u065F\u0670]/g, "") // tashkeel
+    .replace(/\u0640/g, "") // tatweel (kashida)
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))) // Hindi/Arabic numerals
+    .replace(/\s+/g, " ");
 }
+
+export const normalizeArabicText = normalizeArabicSearchText;
 
 /**
  * Lightweight real-time listener for today's clinic operating session summary
@@ -3735,10 +3759,25 @@ export async function completeDaySession(
   const sessionRef = doc(db, "doctors", doctorId, "dailySessions", date);
   const nowIso = new Date().toISOString();
 
+  // Ensure all queue patients are swept so no orphaned tickets remain
+  let allPatients = [...patientsToArchive];
+  try {
+    const queueCol = collection(db, "queues", doctorId, "patients");
+    const qSnap = await getDocs(query(queueCol, limit(200)));
+    const existingIds = new Set(allPatients.map((p) => p.id));
+    qSnap.forEach((d) => {
+      if (!existingIds.has(d.id)) {
+        allPatients.push({ id: d.id, ...d.data() } as PatientRecord);
+      }
+    });
+  } catch (e) {
+    console.warn("Could not sweep remaining queue docs:", e);
+  }
+
   // 1. Process patient archive and deletion in chunks (max 150 patients per batch to remain safely below Firestore's 500 limit)
   const BATCH_CHUNK_SIZE = 150;
-  for (let i = 0; i < patientsToArchive.length; i += BATCH_CHUNK_SIZE) {
-    const chunk = patientsToArchive.slice(i, i + BATCH_CHUNK_SIZE);
+  for (let i = 0; i < allPatients.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = allPatients.slice(i, i + BATCH_CHUNK_SIZE);
     const batch = writeBatch(db);
 
     chunk.forEach((p) => {
@@ -3902,6 +3941,35 @@ export async function searchClinicPatientsFast(
     const normTerm = normalizeArabicText(rawTerm);
     const isPhone = /^[0-9+]+$/.test(rawTerm);
 
+    // Fast-path: Direct O(1) patient file lookup by normalized phone
+    if (isPhone && rawTerm.length >= 10) {
+      const cleanTargetPhone = normalizePhoneNumber(rawTerm);
+      if (cleanTargetPhone && cleanTargetPhone.length >= 10) {
+        try {
+          const directFileRef = doc(db, "doctors", doctorId, "patientFiles", cleanTargetPhone);
+          const directSnap = await getDoc(directFileRef);
+          if (directSnap.exists()) {
+            const d = directSnap.data() as PatientMedicalFile;
+            const lastVisit = d.visits && d.visits.length > 0 ? d.visits[0] : undefined;
+            return [{
+              id: d.patientId || cleanTargetPhone,
+              patientId: d.patientId,
+              patientName: d.patientName,
+              patientPhone: d.patientPhone || cleanTargetPhone,
+              visitsCount: d.visitsCount || (d.visits ? d.visits.length : 1),
+              lastVisitDate: d.lastVisitDate || lastVisit?.date,
+              totalOutstandingBalance: d.totalOutstandingBalance || 0,
+              allergies: d.allergies,
+              chronicDiseases: d.chronicDiseases,
+              lastVisitDiagnosis: lastVisit?.diagnosis
+            }];
+          }
+        } catch {
+          // Fall through to standard cached search
+        }
+      }
+    }
+
     const results: FastPatientSearchResult[] = [];
     const seenPhones = new Set<string>();
 
@@ -3913,7 +3981,7 @@ export async function searchClinicPatientsFast(
       try {
         const colRef = collection(db, "doctors", doctorId, "patientFiles");
         const snap = await getDocs(query(colRef, limit(100)));
-        snap.forEach((docSnap) => files.push(docSnap.data() as PatientMedicalFile));
+        snap.forEach((docSnap) => files.push({ id: docSnap.id, patientId: (docSnap.data() as any).patientId || docSnap.id, ...docSnap.data() } as PatientMedicalFile));
       } catch (e) {
         console.warn("Could not query patientFiles for search:", e);
       }
@@ -3921,7 +3989,7 @@ export async function searchClinicPatientsFast(
       try {
         const queueColRef = collection(db, "queues", doctorId, "patients");
         const queueSnap = await getDocs(query(queueColRef, limit(120)));
-        queueSnap.forEach((docSnap) => queue.push(docSnap.data() as PatientRecord));
+        queueSnap.forEach((docSnap) => queue.push({ id: docSnap.id, ...docSnap.data() } as PatientRecord));
       } catch (e) {
         console.warn("Could not query queues for search:", e);
       }
@@ -3946,11 +4014,12 @@ export async function searchClinicPatientsFast(
       if (matched && cleanPhone && !seenPhones.has(cleanPhone)) {
         seenPhones.add(cleanPhone);
         const lastVisit = data.visits && data.visits.length > 0 ? data.visits[0] : undefined;
+        const resultId = data.patientId || data.id || cleanPhone || generatePatientId(cleanPhone);
         results.push({
-          id: data.patientId || cleanPhone,
-          patientId: data.patientId,
+          id: resultId,
+          patientId: data.patientId || resultId,
           patientName: data.patientName,
-          patientPhone: data.patientPhone,
+          patientPhone: data.patientPhone || cleanPhone,
           visitsCount: data.visitsCount || (data.visits ? data.visits.length : 1),
           lastVisitDate: data.lastVisitDate || lastVisit?.date,
           totalOutstandingBalance: data.totalOutstandingBalance || 0,
@@ -3975,11 +4044,12 @@ export async function searchClinicPatientsFast(
 
       if (matched && cleanPhone && !seenPhones.has(cleanPhone)) {
         seenPhones.add(cleanPhone);
+        const resultId = p.patientId || p.id || cleanPhone || generatePatientId(cleanPhone);
         results.push({
-          id: p.patientId || p.id,
-          patientId: p.patientId,
+          id: resultId,
+          patientId: p.patientId || resultId,
           patientName: p.name,
-          patientPhone: p.phone,
+          patientPhone: p.phone || cleanPhone,
           visitsCount: 1,
           lastVisitDate: p.date,
           totalOutstandingBalance: 0
@@ -4286,56 +4356,279 @@ export async function recordSplitPayment(
   };
 
   const txCol = collection(db, "clinic_transactions");
-  const docRef = await addDoc(txCol, removeUndefinedFields(txData));
+  const orgTxRef = doc(db, `organizations/${organizationId}/transactions`, `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+  
+  const [docRef] = await Promise.all([
+    addDoc(txCol, removeUndefinedFields(txData)),
+    setDoc(orgTxRef, removeUndefinedFields({ id: orgTxRef.id, ...txData })).catch(() => {})
+  ]);
   const newTx: ClinicTransaction = { id: docRef.id, ...txData };
 
-  // Update patient's outstanding balance in patient file
-  if (cleanPhone) {
-    try {
-      const newAccBalance = await getPatientAccumulatedBalance(organizationId, cleanPhone);
-      const fileRef = doc(db, "doctors", organizationId, "patientFiles", cleanPhone);
-      await setDoc(fileRef, { totalOutstandingBalance: newAccBalance }, { merge: true });
-    } catch (err) {
+  // Atomically adjust patient's outstanding balance in patient file without heavy 50-doc scan
+  if (cleanPhone && remaining > 0) {
+    const fileRef = doc(db, "doctors", organizationId, "patientFiles", cleanPhone);
+    setDoc(fileRef, { totalOutstandingBalance: increment(remaining) }, { merge: true }).catch((err) => {
       console.warn("Could not sync balance to patient file:", err);
-    }
+    });
   }
 
-  // Update daily session revenue & breakdown
+  // Atomically update daily session revenue & metrics (non-blocking, zero extra read roundtrips)
   try {
     const sessionRef = doc(db, "doctors", organizationId, "dailySessions", today);
-    const snap = await getDoc(sessionRef);
-    if (snap.exists()) {
-      const data = snap.data() as DailySession;
-      const pb = data.paymentBreakdown || { cash: 0, card: 0, transfer: 0, other: 0 };
-
-      payments.forEach((p) => {
-        const amt = Number(p.amount) || 0;
-        if (p.method === "CASH") pb.cash = (pb.cash || 0) + amt;
-        else if (p.method === "CARD") pb.card = (pb.card || 0) + amt;
-        else if (p.method === "BANK_TRANSFER") pb.transfer = (pb.transfer || 0) + amt;
-        else pb.other = (pb.other || 0) + amt;
-      });
-
-      const sb = data.serviceBreakdown || {};
-      const sKey = serviceName || "كشف";
-      if (!sb[sKey]) sb[sKey] = { count: 0, revenue: 0 };
-      sb[sKey].count += 1;
-      sb[sKey].revenue += totalPaid;
-
-      await updateDoc(sessionRef, {
-        totalRevenue: (data.totalRevenue || 0) + totalAmount,
-        totalCollected: (data.totalCollected || 0) + totalPaid,
-        outstandingBalance: (data.outstandingBalance || 0) + remaining,
-        paymentBreakdown: pb,
-        serviceBreakdown: sb
-      });
-    }
-  } catch (err) {
+    updateDoc(sessionRef, {
+      totalRevenue: increment(totalAmount),
+      totalCollected: increment(totalPaid),
+      outstandingBalance: increment(remaining)
+    }).catch(() => {
+      // Fallback if session doc not yet created
+    });
+  } catch {
     // Non-blocking
   }
 
   return newTx;
 }
 
+// ============================================================================
+// PRESCRIPTION SYSTEM (PAPER PHOTO & DIGITAL RX) & TEMPLATES
+// ============================================================================
 
+/**
+ * Save a new prescription (Paper photo or Digital) for a patient.
+ * Persists to both unified patient collection and doctor's patientFiles for fast offline/online lookup.
+ */
+export async function savePatientPrescription(
+  patientIdOrPhone: string,
+  prescriptionData: {
+    patientId?: string;
+    patientName?: string;
+    patientPhone?: string;
+    doctorId: string;
+    doctorName?: string;
+    clinicName?: string;
+    date: string;
+    type: 'paper_photo' | 'digital' | 'template';
+    photoBase64?: string;
+    thumbnailBase64?: string;
+    diagnosis?: string;
+    medicines?: PrescriptionMedicineItem[];
+    manualText?: string;
+    notes?: string;
+    createdByUid?: string;
+    createdByName?: string;
+    sizeKb?: number;
+  }
+): Promise<PrescriptionRecord> {
+  const cleanPhone = normalizePhoneNumber(patientIdOrPhone) || patientIdOrPhone;
+  const nowIso = new Date().toISOString();
+  const rxCol = collection(db, "patients", cleanPhone, "prescriptions");
+  const newDocRef = doc(rxCol);
+  const rxId = newDocRef.id;
 
+  const record: PrescriptionRecord = {
+    id: rxId,
+    patientId: cleanPhone,
+    patientName: prescriptionData.patientName || "",
+    patientPhone: cleanPhone,
+    doctorId: prescriptionData.doctorId,
+    doctorName: prescriptionData.doctorName || "",
+    clinicName: prescriptionData.clinicName || "",
+    date: prescriptionData.date || getTodayDateString(),
+    type: prescriptionData.type,
+    photoBase64: prescriptionData.photoBase64 || "",
+    thumbnailBase64: prescriptionData.thumbnailBase64 || "",
+    diagnosis: prescriptionData.diagnosis || "",
+    medicines: prescriptionData.medicines || [],
+    manualText: prescriptionData.manualText || "",
+    notes: prescriptionData.notes || "",
+    createdAt: nowIso,
+    createdByUid: prescriptionData.createdByUid || prescriptionData.doctorId,
+    createdByName: prescriptionData.createdByName || "",
+    sizeKb: prescriptionData.sizeKb || 0
+  };
+
+  const safeData = removeUndefinedFields(record);
+
+  // 1. Primary write to patients/{cleanPhone}/prescriptions/{rxId}
+  await setDoc(newDocRef, safeData);
+
+  // 2. Also save to doctors/{doctorId}/patientFiles/{cleanPhone}/prescriptions/{rxId}
+  try {
+    const docFileRxRef = doc(db, "doctors", prescriptionData.doctorId, "patientFiles", cleanPhone, "prescriptions", rxId);
+    await setDoc(docFileRxRef, safeData);
+  } catch (err) {
+    console.warn("Could not mirror prescription to doctor patientFile:", err);
+  }
+
+  // 3. Link last prescription info in patient medical file
+  try {
+    const fileRef = doc(db, "doctors", prescriptionData.doctorId, "patientFiles", cleanPhone);
+    await setDoc(fileRef, removeUndefinedFields({
+      updatedAt: nowIso,
+      lastPrescriptionDate: record.date,
+      lastPrescriptionType: record.type
+    }), { merge: true });
+  } catch (err) {
+    console.warn("Could not update lastPrescriptionDate on patientFile:", err);
+  }
+
+  return record;
+}
+
+/**
+ * Retrieve all prescriptions (photos and digital) for a patient.
+ */
+export async function getPatientPrescriptions(
+  patientIdOrPhone: string,
+  doctorId?: string
+): Promise<PrescriptionRecord[]> {
+  const cleanPhone = normalizePhoneNumber(patientIdOrPhone) || patientIdOrPhone;
+  const list: PrescriptionRecord[] = [];
+  const seenIds = new Set<string>();
+
+  // 1. Try unified patient collection
+  try {
+    const rxCol = collection(db, "patients", cleanPhone, "prescriptions");
+    const snap = await getDocs(query(rxCol, orderBy("createdAt", "desc"), limit(50)));
+    snap.forEach((d) => {
+      seenIds.add(d.id);
+      list.push({ id: d.id, ...d.data() } as PrescriptionRecord);
+    });
+  } catch (err) {
+    console.warn("Could not read from patients/{phone}/prescriptions:", err);
+  }
+
+  // 2. Fallback / merge from doctors/{doctorId}/patientFiles/{cleanPhone}/prescriptions
+  if (doctorId) {
+    try {
+      const docRxCol = collection(db, "doctors", doctorId, "patientFiles", cleanPhone, "prescriptions");
+      const docSnap = await getDocs(query(docRxCol, orderBy("createdAt", "desc"), limit(50)));
+      docSnap.forEach((d) => {
+        if (!seenIds.has(d.id)) {
+          seenIds.add(d.id);
+          list.push({ id: d.id, ...d.data() } as PrescriptionRecord);
+        }
+      });
+    } catch (err) {
+      console.warn("Could not read from doctor patientFiles prescriptions:", err);
+    }
+  }
+
+  // Sort descending by date / createdAt
+  list.sort((a, b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date));
+  return list;
+}
+
+/**
+ * Delete a prescription (both paper photo or digital)
+ */
+export async function deletePatientPrescription(
+  patientIdOrPhone: string,
+  prescriptionId: string,
+  doctorId?: string
+): Promise<void> {
+  const cleanPhone = normalizePhoneNumber(patientIdOrPhone) || patientIdOrPhone;
+  try {
+    const rxRef = doc(db, "patients", cleanPhone, "prescriptions", prescriptionId);
+    await deleteDoc(rxRef);
+  } catch (err) {
+    console.warn("Could not delete from patients prescriptions:", err);
+  }
+
+  if (doctorId) {
+    try {
+      const docRxRef = doc(db, "doctors", doctorId, "patientFiles", cleanPhone, "prescriptions", prescriptionId);
+      await deleteDoc(docRxRef);
+    } catch (err) {
+      console.warn("Could not delete from doctor patientFiles prescriptions:", err);
+    }
+  }
+}
+
+/**
+ * Save or update a reusable prescription template for a doctor.
+ */
+export async function savePrescriptionTemplate(
+  doctorId: string,
+  templateData: {
+    id?: string;
+    title: string;
+    category?: string;
+    diagnosis?: string;
+    medicines: PrescriptionMedicineItem[];
+    instructions?: string;
+  }
+): Promise<PrescriptionTemplate> {
+  const nowIso = new Date().toISOString();
+  const colRef = collection(db, "doctors", doctorId, "templates");
+  const docRef = templateData.id ? doc(colRef, templateData.id) : doc(colRef);
+
+  const template: PrescriptionTemplate = {
+    id: docRef.id,
+    doctorId,
+    title: templateData.title.trim(),
+    category: templateData.category?.trim() || "عام",
+    diagnosis: templateData.diagnosis?.trim() || "",
+    medicines: templateData.medicines || [],
+    instructions: templateData.instructions?.trim() || "",
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+
+  await setDoc(docRef, removeUndefinedFields(template), { merge: true });
+  return template;
+}
+
+/**
+ * Fetch all prescription templates for a doctor.
+ */
+export async function getDoctorPrescriptionTemplates(doctorId: string): Promise<PrescriptionTemplate[]> {
+  try {
+    const colRef = collection(db, "doctors", doctorId, "templates");
+    const snap = await getDocs(query(colRef, orderBy("createdAt", "desc"), limit(50)));
+    const list: PrescriptionTemplate[] = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() } as PrescriptionTemplate));
+    return list;
+  } catch (err) {
+    console.error("Error fetching prescription templates:", err);
+    return [];
+  }
+}
+
+/**
+ * Delete a prescription template.
+ */
+export async function deletePrescriptionTemplate(doctorId: string, templateId: string): Promise<void> {
+  const docRef = doc(db, "doctors", doctorId, "templates", templateId);
+  await deleteDoc(docRef);
+}
+
+/**
+ * Update patient vitals and clinical summary notes in patient file.
+ */
+export async function updatePatientVitalsAndNotes(
+  doctorId: string,
+  patientPhone: string,
+  updateData: {
+    vitals?: PatientVitals;
+    allergies?: string;
+    chronicDiseases?: string;
+    generalNotes?: string;
+    bloodGroup?: string;
+    age?: number;
+    gender?: 'male' | 'female';
+    nationalId?: string;
+  }
+): Promise<void> {
+  const cleanPhone = normalizePhoneNumber(patientPhone);
+  if (!cleanPhone) return;
+  const fileRef = doc(db, "doctors", doctorId, "patientFiles", cleanPhone);
+  await setDoc(
+    fileRef,
+    removeUndefinedFields({
+      ...updateData,
+      updatedAt: new Date().toISOString()
+    }),
+    { merge: true }
+  );
+}

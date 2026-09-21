@@ -261,7 +261,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
         await recordSplitPayment({
           organizationId: doctorId,
           patientName: patientName.trim(),
-          patientPhone: patientPhone.trim(),
+          patientPhone: cleanPhone,
           patientRecordId: bookingResult.patientId,
           serviceId: cleanServiceId,
           serviceName: finalServiceName,
@@ -406,9 +406,9 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
                     إغلاق ✕
                   </button>
                 </div>
-                {suggestions.map((s) => (
+                {suggestions.map((s, idx) => (
                   <div
-                    key={s.id}
+                    key={s.id ? `suggestion-${s.id}-${idx}` : `suggestion-${s.patientPhone || idx}-${idx}`}
                     onClick={() => handleSelectPatient(s)}
                     className="p-2.5 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 transition cursor-pointer flex items-center justify-between text-xs active:scale-[0.99]"
                   >
@@ -446,8 +446,8 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500"
                 >
                   <option value="default_consultation">كشف عادي ({defaultConsultationPrice} ج.م)</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
+                  {services.map((s, idx) => (
+                    <option key={s.id ? `srv-${s.id}` : `srv-opt-${idx}`} value={s.id}>
                       {s.name} ({s.price} ج.م)
                     </option>
                   ))}
@@ -511,7 +511,7 @@ export const FastPatientRegistrationModal: React.FC<FastPatientRegistrationModal
             {/* Payment Rows */}
             <div className="space-y-2">
               {payments.map((row, idx) => (
-                <div key={idx} className="flex items-center gap-2">
+                <div key={`split-pay-row-${idx}`} className="flex items-center gap-2">
                   <select
                     value={row.method}
                     onChange={(e) => handlePaymentMethodChange(idx, e.target.value as PaymentMethod)}

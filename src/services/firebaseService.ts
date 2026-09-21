@@ -24,6 +24,9 @@ import {
   SubscriptionStatus,
   SubscriptionPlan,
   SubscriptionLog,
+  SubscriptionDurationUnit,
+  SubscriptionRenewalMode,
+  SubscriptionAuditAction,
   NotificationTimingPreference,
   DoctorRating,
   FollowUpAppointment,
@@ -58,6 +61,7 @@ import {
   GrowthRecord
 } from "../types";
 import { hasPermission } from "../utils/permissions";
+import { calculateExpirationDate } from "../utils/subscriptionUtils";
 import {
   sanitizeInput,
   isValidPhoneNumber,
@@ -341,14 +345,25 @@ export function getTodayDateString(): string {
 
 // Check doctor subscription state dynamically
 export function evaluateSubscriptionStatus(docData: DoctorProfile): SubscriptionStatus {
+  if (!docData) return 'expired';
+
+  if (docData.subscriptionStatus === 'suspended') {
+    return 'suspended';
+  }
+
   if (docData.subscriptionStatus === 'cancelled') {
     return 'cancelled';
   }
 
+  if (docData.isLifetime === true || docData.subscriptionStatus === 'lifetime') {
+    return 'lifetime';
+  }
+
   if (docData.subscriptionStatus === 'active') {
-    if (docData.subscriptionEndDate) {
-      const end = new Date(docData.subscriptionEndDate);
-      if (new Date() > end) return 'expired';
+    const expStr = docData.subscriptionExpiresAt || docData.subscriptionEndDate;
+    if (expStr) {
+      const end = new Date(expStr);
+      if (!isNaN(end.getTime()) && new Date() > end) return 'expired';
     }
     return 'active';
   }
@@ -356,9 +371,25 @@ export function evaluateSubscriptionStatus(docData: DoctorProfile): Subscription
   if (docData.subscriptionStatus === 'trial') {
     if (docData.trialEndDate) {
       const trialEnd = new Date(docData.trialEndDate);
-      if (new Date() > trialEnd) return 'expired';
+      if (!isNaN(trialEnd.getTime()) && new Date() > trialEnd) return 'expired';
     }
     return 'trial';
+  }
+
+  if (docData.subscriptionStatus === 'expired') {
+    return 'expired';
+  }
+
+  // Graceful fallback for older profiles
+  const fallbackEnd = docData.subscriptionExpiresAt || docData.subscriptionEndDate;
+  if (fallbackEnd) {
+    const end = new Date(fallbackEnd);
+    if (!isNaN(end.getTime()) && new Date() <= end) return 'active';
+  }
+
+  if (docData.trialEndDate) {
+    const trialEnd = new Date(docData.trialEndDate);
+    if (!isNaN(trialEnd.getTime()) && new Date() <= trialEnd) return 'trial';
   }
 
   return 'expired';
@@ -492,7 +523,284 @@ export async function toggleLabStatusAdmin(labId: string, isActive: boolean): Pr
   });
 }
 
-// Admin action: Activate or Extend Subscription (Server-side validation & audit log)
+export interface AdminSubscriptionUpdateParams {
+  clinicId: string;
+  adminId: string;
+  adminEmail?: string;
+  action: SubscriptionAuditAction;
+  durationType: SubscriptionDurationUnit;
+  durationValue: number;
+  customExpiresAt?: string | null;
+  renewalMode?: SubscriptionRenewalMode;
+  notes?: string;
+  plan?: SubscriptionPlan | string;
+  amount?: number;
+}
+
+// Authoritative transactional subscription update engine
+export async function updateClinicSubscriptionByAdmin(
+  params: AdminSubscriptionUpdateParams
+): Promise<{
+  success: boolean;
+  newStatus: SubscriptionStatus;
+  expiresAt: string | null;
+  isLifetime: boolean;
+  referenceCode: string;
+}> {
+  const {
+    clinicId,
+    adminId,
+    adminEmail,
+    action,
+    durationType,
+    durationValue,
+    customExpiresAt,
+    renewalMode = 'extend',
+    notes,
+    plan,
+    amount
+  } = params;
+
+  if (!clinicId) {
+    throw new Error("معرّف العيادة مطلوب لإتمام العملية");
+  }
+
+  const clinicRef = doc(db, "doctors", clinicId);
+
+  const result = await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(clinicRef);
+    if (!snap.exists()) {
+      throw new Error("عذراً، العيادة غير موجودة في قاعدة البيانات");
+    }
+
+    const doctor = snap.data() as DoctorProfile;
+    const previousStatus: SubscriptionStatus = evaluateSubscriptionStatus(doctor);
+    const previousExpiresAt: string | null = doctor.subscriptionExpiresAt || doctor.subscriptionEndDate || null;
+    const previousIsLifetime: boolean = Boolean(doctor.isLifetime || doctor.subscriptionStatus === 'lifetime');
+    const refCode = doctor.referenceCode || generateReferenceCode(doctor.uid);
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    let newStatus: SubscriptionStatus = 'active';
+    let newIsLifetime = false;
+    let newExpiresAt: string | null = null;
+
+    if (action === 'SUBSCRIPTION_CANCELLED' || action === 'cancel') {
+      newStatus = 'cancelled';
+      newIsLifetime = false;
+      newExpiresAt = null;
+    } else if (action === 'SUBSCRIPTION_SUSPENDED') {
+      newStatus = 'suspended';
+      newIsLifetime = previousIsLifetime;
+      // Preserve existing expiration date so clinic does not forfeit their purchased time
+      newExpiresAt = previousExpiresAt;
+    } else if (action === 'SUBSCRIPTION_SET_LIFETIME' || durationType === 'lifetime') {
+      newStatus = 'lifetime';
+      newIsLifetime = true;
+      newExpiresAt = null;
+    } else if (action === 'SUBSCRIPTION_REACTIVATED') {
+      // If resuming a suspended subscription
+      if (previousIsLifetime) {
+        newStatus = 'lifetime';
+        newIsLifetime = true;
+        newExpiresAt = null;
+      } else if (previousExpiresAt && new Date(previousExpiresAt).getTime() > now.getTime()) {
+        // Still has active remaining time
+        newStatus = 'active';
+        newIsLifetime = false;
+        newExpiresAt = previousExpiresAt;
+      } else {
+        // Was expired prior to resumption, calculate from now using provided duration
+        const targetDate = calculateExpirationDate(now, durationType, durationValue, customExpiresAt);
+        if (!targetDate || isNaN(targetDate.getTime())) {
+          throw new Error("تاريخ انتهاء الاشتراك غير صالح");
+        }
+        newStatus = 'active';
+        newIsLifetime = false;
+        newExpiresAt = targetDate.toISOString();
+      }
+    } else {
+      // Active, Renewal, Extension, Shortening or Modification
+      newStatus = 'active';
+      newIsLifetime = false;
+
+      let baseDate = now;
+      if (
+        renewalMode === 'extend' &&
+        previousExpiresAt &&
+        !previousIsLifetime &&
+        new Date(previousExpiresAt).getTime() > now.getTime()
+      ) {
+        baseDate = new Date(previousExpiresAt);
+      }
+
+      const targetDate = calculateExpirationDate(baseDate, durationType, durationValue, customExpiresAt);
+      if (!targetDate || isNaN(targetDate.getTime())) {
+        throw new Error("تاريخ انتهاء الاشتراك المحسوب غير صالح");
+      }
+      newExpiresAt = targetDate.toISOString();
+    }
+
+    const updatePayload: Record<string, any> = {
+      subscriptionStatus: newStatus,
+      isLifetime: newIsLifetime,
+      subscriptionLastModified: nowIso,
+      subscriptionModifiedBy: adminEmail || adminId || 'admin',
+      subscriptionDurationType: durationType,
+      subscriptionDurationValue: durationValue,
+      referenceCode: refCode
+    };
+
+    if (newIsLifetime) {
+      updatePayload.subscriptionExpiresAt = null;
+      updatePayload.subscriptionEndDate = null;
+    } else if (newExpiresAt) {
+      updatePayload.subscriptionExpiresAt = newExpiresAt;
+      updatePayload.subscriptionEndDate = newExpiresAt; // Maintain backward compatibility
+    } else if (newStatus === 'cancelled') {
+      updatePayload.subscriptionExpiresAt = null;
+      updatePayload.subscriptionEndDate = null;
+    }
+
+    if (!doctor.subscriptionStartedAt && newStatus === 'active') {
+      updatePayload.subscriptionStartedAt = nowIso;
+    }
+
+    if (notes !== undefined) {
+      updatePayload.subscriptionNotes = notes.trim();
+    }
+
+    transaction.update(clinicRef, updatePayload);
+
+    // Create persistent audit log entry
+    const logRef = doc(collection(db, "subscription_logs"));
+    const calculatedAmount = amount !== undefined
+      ? amount
+      : (durationType === 'years'
+          ? OFFICIAL_SUBSCRIPTION_PRICES.yearly
+          : (durationType === 'months' && durationValue === 1
+              ? OFFICIAL_SUBSCRIPTION_PRICES.monthly
+              : 0));
+
+    const logData: SubscriptionLog = {
+      id: logRef.id,
+      clinicId: doctor.uid,
+      clinicName: doctor.clinicName,
+      doctorName: doctor.name,
+      referenceCode: refCode,
+      plan: plan || (durationType === 'years' ? 'yearly' : durationType === 'lifetime' ? 'lifetime' : 'monthly'),
+      amount: calculatedAmount,
+      activatedAt: nowIso,
+      expiresAt: newExpiresAt,
+      previousExpiresAt,
+      previousStatus,
+      newStatus,
+      previousIsLifetime,
+      newIsLifetime,
+      durationType,
+      durationValue,
+      renewalMode,
+      adminId,
+      adminEmail: adminEmail || 'admin',
+      action,
+      notes: notes || '',
+      timestamp: nowIso
+    };
+
+    transaction.set(logRef, logData);
+
+    return {
+      success: true,
+      newStatus,
+      expiresAt: newExpiresAt,
+      isLifetime: newIsLifetime,
+      referenceCode: refCode,
+      clinicName: doctor.clinicName
+    };
+  });
+
+  // Secondary central audit log
+  try {
+    await writeAuditLog(action, adminId, clinicId, {
+      newStatus: result.newStatus,
+      expiresAt: result.expiresAt,
+      isLifetime: result.isLifetime,
+      durationType,
+      durationValue,
+      notes: notes || ''
+    });
+  } catch (err) {
+    console.warn("Secondary audit log write failed:", err);
+  }
+
+  return {
+    success: true,
+    newStatus: result.newStatus,
+    expiresAt: result.expiresAt,
+    isLifetime: result.isLifetime,
+    referenceCode: result.referenceCode
+  };
+}
+
+// Suspend Clinic Subscription
+export async function suspendClinicSubscriptionByAdmin(params: {
+  clinicId: string;
+  adminId: string;
+  adminEmail?: string;
+  notes?: string;
+}) {
+  return updateClinicSubscriptionByAdmin({
+    clinicId: params.clinicId,
+    adminId: params.adminId,
+    adminEmail: params.adminEmail,
+    action: 'SUBSCRIPTION_SUSPENDED',
+    durationType: 'custom',
+    durationValue: 0,
+    notes: params.notes || 'تم تعليق الاشتراك مؤقتاً بواسطة الإدارة'
+  });
+}
+
+// Reactivate / Resume Clinic Subscription
+export async function reactivateClinicSubscriptionByAdmin(params: {
+  clinicId: string;
+  adminId: string;
+  adminEmail?: string;
+  durationType?: SubscriptionDurationUnit;
+  durationValue?: number;
+  notes?: string;
+}) {
+  return updateClinicSubscriptionByAdmin({
+    clinicId: params.clinicId,
+    adminId: params.adminId,
+    adminEmail: params.adminEmail,
+    action: 'SUBSCRIPTION_REACTIVATED',
+    durationType: params.durationType || 'months',
+    durationValue: params.durationValue || 1,
+    renewalMode: 'now',
+    notes: params.notes || 'تم استئناف وتنشيط الاشتراك بواسطة الإدارة'
+  });
+}
+
+// Grant Lifetime Subscription
+export async function setClinicLifetimeSubscriptionByAdmin(params: {
+  clinicId: string;
+  adminId: string;
+  adminEmail?: string;
+  notes?: string;
+}) {
+  return updateClinicSubscriptionByAdmin({
+    clinicId: params.clinicId,
+    adminId: params.adminId,
+    adminEmail: params.adminEmail,
+    action: 'SUBSCRIPTION_SET_LIFETIME',
+    durationType: 'lifetime',
+    durationValue: 0,
+    plan: 'lifetime',
+    notes: params.notes || 'تم منح اشتراك دائم مدى الحياة بواسطة الإدارة'
+  });
+}
+
+// Admin action: Activate or Extend Subscription (Backwards-compatible wrapper)
 export async function activateSubscriptionByAdmin(params: {
   clinicId: string;
   plan: SubscriptionPlan;
@@ -501,120 +809,41 @@ export async function activateSubscriptionByAdmin(params: {
   notes?: string;
 }): Promise<{ success: boolean; expiresAt: string; referenceCode: string }> {
   const { clinicId, plan, adminId, isExtension, notes } = params;
+  const isYearly = plan === 'yearly';
 
-  // 1. Fetch Doctor Profile
-  const docRef = doc(db, "doctors", clinicId);
-  const snap = await getDoc(docRef);
-  if (!snap.exists()) {
-    throw new Error("عذراً، العيادة غير موجودة في النظام");
-  }
-
-  const doctor = snap.data() as DoctorProfile;
-
-  // 2. Validate Clinic Active Status
-  if (doctor.isActive === false) {
-    throw new Error("لا يمكن تفعيل أو تمديد اشتراك لعيادة غير نشطة أو معطلة من قبل مدير المنصة");
-  }
-
-  // 3. Server-side enforce official price & reference code
-  const amount = plan === 'yearly' ? OFFICIAL_SUBSCRIPTION_PRICES.yearly : OFFICIAL_SUBSCRIPTION_PRICES.monthly;
-  const refCode = doctor.referenceCode || generateReferenceCode(doctor.uid);
-
-  // 4. Calculate Expiration Date
-  const now = new Date();
-  let baseDate = now;
-
-  // If extending an active subscription, add onto current expiration
-  if (isExtension && doctor.subscriptionEndDate && evaluateSubscriptionStatus(doctor) === 'active') {
-    const currentEnd = new Date(doctor.subscriptionEndDate);
-    if (currentEnd > now) {
-      baseDate = currentEnd;
-    }
-  }
-
-  const newEnd = new Date(baseDate.getTime());
-  if (plan === 'yearly') {
-    newEnd.setFullYear(newEnd.getFullYear() + 1);
-  } else {
-    newEnd.setMonth(newEnd.getMonth() + 1);
-  }
-
-  const expiresAtIso = newEnd.toISOString();
-  const activatedAtIso = now.toISOString();
-
-  // 5. Update Doctor Doc in Firestore
-  await updateDoc(docRef, {
-    subscriptionStatus: 'active',
-    subscriptionEndDate: expiresAtIso,
-    referenceCode: refCode
+  const res = await updateClinicSubscriptionByAdmin({
+    clinicId,
+    adminId,
+    action: isExtension ? 'SUBSCRIPTION_EXTENDED' : 'SUBSCRIPTION_CREATED',
+    durationType: isYearly ? 'years' : 'months',
+    durationValue: 1,
+    renewalMode: isExtension ? 'extend' : 'now',
+    plan,
+    amount: isYearly ? OFFICIAL_SUBSCRIPTION_PRICES.yearly : OFFICIAL_SUBSCRIPTION_PRICES.monthly,
+    notes
   });
 
-  // 6. Record Subscription Log in Firestore
-  const logData: Omit<SubscriptionLog, 'id'> = {
-    clinicId: doctor.uid,
-    clinicName: doctor.clinicName,
-    doctorName: doctor.name,
-    referenceCode: refCode,
-    plan,
-    amount,
-    activatedAt: activatedAtIso,
-    expiresAt: expiresAtIso,
-    adminId: adminId || 'admin-session',
-    action: isExtension ? 'extend' : 'activate',
-    notes: notes || ''
+  return {
+    success: true,
+    expiresAt: res.expiresAt || '',
+    referenceCode: res.referenceCode
   };
-
-  await addDoc(collection(db, "subscription_logs"), logData);
-
-  writeAuditLog("ACTIVATE_SUBSCRIPTION", adminId || "ADMIN", doctor.uid, {
-    plan,
-    amount,
-    expiresAt: expiresAtIso,
-    isExtension: !!isExtension
-  });
-
-  return { success: true, expiresAt: expiresAtIso, referenceCode: refCode };
 }
 
-// Admin action: Cancel Subscription
+// Admin action: Cancel Subscription (Backwards-compatible wrapper)
 export async function cancelSubscriptionByAdmin(params: {
   clinicId: string;
   adminId: string;
   notes?: string;
 }): Promise<void> {
-  const { clinicId, adminId, notes } = params;
-  const docRef = doc(db, "doctors", clinicId);
-  const snap = await getDoc(docRef);
-
-  if (!snap.exists()) {
-    throw new Error("العيادة غير موجودة في النظام");
-  }
-
-  const doctor = snap.data() as DoctorProfile;
-  const refCode = doctor.referenceCode || generateReferenceCode(doctor.uid);
-  const nowIso = new Date().toISOString();
-
-  await updateDoc(docRef, {
-    subscriptionStatus: 'cancelled'
+  await updateClinicSubscriptionByAdmin({
+    clinicId: params.clinicId,
+    adminId: params.adminId,
+    action: 'SUBSCRIPTION_CANCELLED',
+    durationType: 'custom',
+    durationValue: 0,
+    notes: params.notes || 'تم إلغاء الاشتراك من لوحة الإدارة'
   });
-
-  const logData: Omit<SubscriptionLog, 'id'> = {
-    clinicId: doctor.uid,
-    clinicName: doctor.clinicName,
-    doctorName: doctor.name,
-    referenceCode: refCode,
-    plan: 'monthly',
-    amount: 0,
-    activatedAt: nowIso,
-    expiresAt: nowIso,
-    adminId: adminId || 'admin-session',
-    action: 'cancel',
-    notes: notes || 'تم إلغاء الاشتراك من لوحة الإدارة'
-  };
-
-  await addDoc(collection(db, "subscription_logs"), logData);
-
-  writeAuditLog("CANCEL_SUBSCRIPTION", adminId || "ADMIN", doctor.uid, { notes });
 }
 
 // Fetch all subscription logs for Admin view
@@ -915,8 +1144,8 @@ export async function bookPatient(
   }
 
   const effectiveSubStatus = evaluateSubscriptionStatus(doctor);
-  if (effectiveSubStatus === 'expired') {
-    throw new Error("عذراً، نظام الحجز غير متاح حالياً لدى هذه العيادة لانتهاء فترة الاشتراك. يرجى مراجعة موظف الاستقبال.");
+  if (effectiveSubStatus === 'expired' || effectiveSubStatus === 'suspended' || effectiveSubStatus === 'cancelled') {
+    throw new Error("عذراً، نظام الحجز غير متاح حالياً لدى هذه العيادة لانتهاء أو توقف فترة الاشتراك. يرجى مراجعة موظف الاستقبال أو إدارة العيادة.");
   }
 
   // 6. Atomic Queue Sequence Number Generation via Transaction (Zero extra getDocs queries needed!)

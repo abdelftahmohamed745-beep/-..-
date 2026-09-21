@@ -58,6 +58,14 @@ service cloud.firestore {
         'isActive', 
         'subscriptionStatus', 
         'subscriptionEndDate', 
+        'subscriptionExpiresAt',
+        'isLifetime',
+        'subscriptionDurationType',
+        'subscriptionDurationValue',
+        'subscriptionStartedAt',
+        'subscriptionLastModified',
+        'subscriptionModifiedBy',
+        'subscriptionNotes',
         'createdAt', 
         'ownerId'
       ]);
@@ -320,9 +328,8 @@ service cloud.firestore {
 
     // Subscription Logs collection
     match /subscription_logs/{logId} {
-      allow read: if isAuthenticated() || isAdmin();
-      allow create, update: if isAuthenticated() || isAdmin();
-      allow delete: if isAdmin();
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.clinicId == request.auth.uid);
+      allow create, update, delete: if isAdmin();
     }
 
     // Labs collection & subcollections

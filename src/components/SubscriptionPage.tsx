@@ -4,6 +4,7 @@ import { Check, ShieldCheck, Clock, AlertTriangle, MessageSquare, ArrowRight, In
 import { DoctorProfile } from '../types';
 import { CustomWebsiteSection } from './CustomWebsiteSection';
 import { generateReferenceCode, OFFICIAL_SUBSCRIPTION_PRICES } from '../services/firebaseService';
+import { getEffectiveSubscriptionState } from '../utils/subscriptionUtils';
 
 interface SubscriptionPageProps {
   doctor: DoctorProfile;
@@ -20,9 +21,7 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
 
   const refCode = doctor.referenceCode || generateReferenceCode(doctor.uid);
-
-  const trialEnd = doctor.trialEndDate ? new Date(doctor.trialEndDate) : new Date();
-  const daysLeftTrial = Math.max(0, Math.ceil((trialEnd.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
+  const subState = getEffectiveSubscriptionState(doctor);
 
   const handleCopyRefCode = () => {
     navigator.clipboard.writeText(refCode);
@@ -81,16 +80,18 @@ export const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           </p>
         </div>
 
-        <div className="text-left sm:text-right shrink-0">
+        <div className="text-left sm:text-right shrink-0 space-y-1">
           <span className="text-xs text-slate-300 font-medium block">الحالة الحالية:</span>
-          <span className={`inline-block px-3 py-1 rounded-full text-xs font-extrabold mt-1 ${
-            doctor.subscriptionStatus === 'active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' :
-            doctor.subscriptionStatus === 'trial' ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30' :
-            'bg-rose-500/20 text-rose-300 border border-rose-400/30'
+          <span className={`inline-block px-3 py-1 rounded-full text-xs font-extrabold border ${
+            subState.isLifetime || subState.isActive ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' :
+            subState.isTrial ? 'bg-amber-500/20 text-amber-300 border-amber-400/30' :
+            subState.isSuspended ? 'bg-amber-500/20 text-amber-300 border-amber-400/30' :
+            'bg-rose-500/20 text-rose-300 border-rose-400/30'
           }`}>
-            {doctor.subscriptionStatus === 'active' ? 'مفعل مدفوع (Active)' :
-             doctor.subscriptionStatus === 'trial' ? `فترة تجريبية (${daysLeftTrial} أيام متبقية)` :
-             doctor.subscriptionStatus === 'cancelled' ? 'ملغى (Cancelled)' : 'منتهي (Expired)'}
+            {subState.statusLabelAr} ({subState.remainingTimeText})
+          </span>
+          <span className="block text-[11px] text-slate-400 font-medium">
+            الانتهاء: {subState.formattedExpiresAt}
           </span>
         </div>
       </div>

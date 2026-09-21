@@ -1,6 +1,32 @@
 export type PatientStatus = 'waiting' | 'called' | 'done' | 'cancelled' | 'no_show';
-export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled';
-export type SubscriptionPlan = 'monthly' | 'yearly';
+export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'suspended' | 'cancelled' | 'lifetime';
+export type SubscriptionPlan = 'monthly' | 'yearly' | 'custom' | 'lifetime';
+
+export type SubscriptionDurationUnit =
+  | 'minutes'
+  | 'hours'
+  | 'days'
+  | 'weeks'
+  | 'months'
+  | 'years'
+  | 'custom'
+  | 'lifetime';
+
+export type SubscriptionRenewalMode = 'extend' | 'now';
+
+export type SubscriptionAuditAction =
+  | 'SUBSCRIPTION_CREATED'
+  | 'SUBSCRIPTION_EXTENDED'
+  | 'SUBSCRIPTION_RENEWED'
+  | 'SUBSCRIPTION_SHORTENED'
+  | 'SUBSCRIPTION_CANCELLED'
+  | 'SUBSCRIPTION_SUSPENDED'
+  | 'SUBSCRIPTION_REACTIVATED'
+  | 'SUBSCRIPTION_SET_LIFETIME'
+  | 'SUBSCRIPTION_MODIFIED'
+  | 'activate'
+  | 'extend'
+  | 'cancel';
 
 export type VisitType =
   | 'new_consultation' // كشف جديد
@@ -253,7 +279,15 @@ export interface DoctorProfile {
   clinicPhotos?: string[];
   subscriptionStatus: SubscriptionStatus;
   trialEndDate: string; // ISO date string
-  subscriptionEndDate?: string;
+  subscriptionEndDate?: string; // Legacy field, kept in sync with subscriptionExpiresAt
+  subscriptionExpiresAt?: string | null; // Authoritative expiration ISO timestamp (null for lifetime)
+  isLifetime?: boolean; // Flag indicating lifetime subscription
+  subscriptionStartedAt?: string; // ISO date string when active subscription started
+  subscriptionDurationType?: SubscriptionDurationUnit;
+  subscriptionDurationValue?: number;
+  subscriptionLastModified?: string; // ISO timestamp of last admin action
+  subscriptionModifiedBy?: string; // Admin UID or email
+  subscriptionNotes?: string;
   avgConsultTime: number; // in minutes, e.g. 15
   consultationFee?: number;
   workHours: DoctorWorkHours;
@@ -276,13 +310,23 @@ export interface SubscriptionLog {
   clinicName: string;
   doctorName: string;
   referenceCode: string;
-  plan: SubscriptionPlan;
-  amount: number; // Fixed 200 or 1500 EGP
+  plan?: SubscriptionPlan | string;
+  amount?: number; // Fixed or custom amount in EGP
   activatedAt: string; // ISO string
-  expiresAt: string; // ISO string
+  expiresAt: string | null; // ISO string or null for lifetime
+  previousExpiresAt?: string | null;
+  previousStatus?: SubscriptionStatus;
+  newStatus?: SubscriptionStatus;
+  previousIsLifetime?: boolean;
+  newIsLifetime?: boolean;
+  durationType?: SubscriptionDurationUnit | string;
+  durationValue?: number;
+  renewalMode?: SubscriptionRenewalMode;
   adminId: string;
-  action: 'activate' | 'extend' | 'cancel';
+  adminEmail?: string;
+  action: SubscriptionAuditAction;
   notes?: string;
+  timestamp?: string;
 }
 
 export interface DoctorRating {

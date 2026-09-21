@@ -27,6 +27,7 @@ import { PatientFileSidePanel } from './PatientFileSidePanel';
 import { hasPermission } from '../utils/permissions';
 import { auth } from '../firebase/config';
 import { sanitizePatientPhoneNumber, validatePatientPhoneNumber } from '../services/securityService';
+import { getEffectiveSubscriptionState } from '../utils/subscriptionUtils';
 
 interface DoctorDashboardProps {
   doctor: DoctorProfile;
@@ -50,6 +51,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   const [filterStatus, setFilterStatus] = useState<'all' | PatientStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isCallingNext, setIsCallingNext] = useState(false);
+  const subState = getEffectiveSubscriptionState(doctor);
 
   // Dashboard section mode: 'queue', 'followups', 'team', or 'finance'
   const [activeSection, setActiveSection] = useState<'queue' | 'followups' | 'team' | 'finance'>('queue');
@@ -325,8 +327,32 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
-      {/* Expired / Trial Warning Banner */}
-      {doctor.subscriptionStatus === 'expired' && (
+      {/* Subscription Banners */}
+      {subState.isSuspended && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-900 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 font-bold">
+              <span className="text-xl leading-none inline-flex items-center justify-center">⏸️</span>
+            </div>
+            <div>
+              <div className="font-bold text-sm font-['Tajawal',sans-serif]">
+                اشتراك العيادة معلق مؤقتاً
+              </div>
+              <p className="text-xs text-amber-800">
+                {doctor.subscriptionSuspendedReason || 'تم تعليق الاشتراك مؤقتاً من قبل إدارة المنصة. يرجى التواصل مع الإدارة لإعادة التفعيل.'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onNavigateSubscription}
+            className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer"
+          >
+            تفاصيل الاشتراك
+          </button>
+        </div>
+      )}
+
+      {subState.isExpired && (
         <div className="bg-rose-50 border border-rose-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-rose-900 shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 font-bold">
@@ -334,7 +360,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
             <div>
               <div className="font-bold text-sm font-['Tajawal',sans-serif]">
-                اشتراك العيادة متوقف حالياً!
+                اشتراك العيادة منتهي حالياً!
               </div>
               <p className="text-xs text-rose-700">
                 لا يمكن للمرضى الجدد حجز أدوار جديدة عبر QR Code حتى يتم تجديد الاشتراك. المرضى الحاليون يستطيعون متابعة دورهم.
@@ -344,6 +370,30 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           <button
             onClick={onNavigateSubscription}
             className="shrink-0 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer"
+          >
+            تجديد الاشتراك الآن
+          </button>
+        </div>
+      )}
+
+      {!subState.isLifetime && subState.remainingDays !== null && subState.remainingDays <= 3 && subState.remainingDays > 0 && (
+        <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-900 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 font-bold">
+              <span className="text-xl leading-none inline-flex items-center justify-center">⏳</span>
+            </div>
+            <div>
+              <div className="font-bold text-sm font-['Tajawal',sans-serif]">
+                تنبيه: اقترب موعد انتهاء الاشتراك ({subState.remainingTimeText})
+              </div>
+              <p className="text-xs text-amber-800">
+                سينتهي الاشتراك في {subState.formattedExpiresAt}. جدد اشتراكك الآن لتجنب توقف حجوزات المرضى.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onNavigateSubscription}
+            className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition shadow-xs cursor-pointer"
           >
             تجديد الاشتراك الآن
           </button>
@@ -365,6 +415,15 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               <span className="text-xs text-slate-500 font-medium">
                 • {doctor.clinicName}
               </span>
+              <button
+                onClick={onNavigateSubscription}
+                className={`px-2.5 py-0.5 rounded-full text-xs font-bold border transition flex items-center gap-1 cursor-pointer ${subState.badgeClass}`}
+                title={`حالة الاشتراك: ${subState.statusLabelAr} - ينتهي: ${subState.formattedExpiresAt}`}
+              >
+                <span>⚡</span>
+                <span>{subState.statusLabelAr}</span>
+                <span className="text-[10px] opacity-80">({subState.remainingTimeText})</span>
+              </button>
               <button
                 onClick={() => setShowReviewsModal(true)}
                 className="px-2.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-full text-xs font-bold flex items-center gap-1 transition cursor-pointer"

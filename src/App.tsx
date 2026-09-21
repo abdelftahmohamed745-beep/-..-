@@ -23,6 +23,7 @@ import { Navbar, NavTabType } from './components/Navbar';
 import { DoctorsDirectory } from './components/DoctorsDirectory';
 import { ClinicProfilePage } from './components/ClinicProfilePage';
 import { DoctorDashboard } from './components/DoctorDashboard';
+import { SubscriptionGate } from './components/SubscriptionGate';
 import { PatientBooking } from './components/PatientBooking';
 import { PatientTicket } from './components/PatientTicket';
 import { SubscriptionPage } from './components/SubscriptionPage';
@@ -680,14 +681,20 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <DoctorDashboard
+                  <SubscriptionGate
                     doctor={currentDoctor}
-                    onOpenQRModal={() => setIsQRModalOpen(true)}
-                    onOpenScannerModal={() => setIsScannerModalOpen(true)}
-                    onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
                     onNavigateSubscription={() => navigateTo('subscription')}
-                    onShowToast={addToast}
-                  />
+                    onSignOut={handleSignOut}
+                  >
+                    <DoctorDashboard
+                      doctor={currentDoctor}
+                      onOpenQRModal={() => setIsQRModalOpen(true)}
+                      onOpenScannerModal={() => setIsScannerModalOpen(true)}
+                      onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+                      onNavigateSubscription={() => navigateTo('subscription')}
+                      onShowToast={addToast}
+                    />
+                  </SubscriptionGate>
                 )
               ) : (
                 <AuthPage

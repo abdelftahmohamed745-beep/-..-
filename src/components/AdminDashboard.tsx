@@ -35,6 +35,13 @@ import {
   Megaphone
 } from 'lucide-react';
 import { DoctorProfile, SubscriptionStatus, SubscriptionPlan, SubscriptionLog, LabAdminView, AdminAnnouncement, AnnouncementType, AnnouncementTarget } from '../types';
+import { AdminSubscriptionModal } from './AdminSubscriptionModal';
+import {
+  getEffectiveSubscriptionState,
+  formatDateTimeAr,
+  formatRemainingTimeAr,
+  SUBSCRIPTION_ACTION_LABELS_AR
+} from '../utils/subscriptionUtils';
 import {
   getAllDoctorsAdmin,
   toggleDoctorStatus,
@@ -95,6 +102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
   const [processingLabId, setProcessingLabId] = useState<string | null>(null);
 
   // Manual Subscription Activation Modal / Form state
+  const [selectedDoctorForModal, setSelectedDoctorForModal] = useState<DoctorProfile | null>(null);
   const [selectedDoctorForSub, setSelectedDoctorForSub] = useState<DoctorProfile | null>(null);
   const [searchRefCodeInput, setSearchRefCodeInput] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('monthly');
@@ -695,6 +703,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
                       const refCode = doc.referenceCode || generateReferenceCode(doc.uid);
                       const phoneClean = formatPhoneNumberForUrl(doc.phone);
                       const whatsappClean = formatPhoneNumberForUrl(doc.whatsappNumber || doc.phone);
+                      const clinicSubState = getEffectiveSubscriptionState(doc);
 
                       return (
                         <tr key={doc.uid} className={`hover:bg-slate-50/80 transition ${isDeactivated ? 'bg-amber-50/30' : ''}`}>
@@ -782,42 +791,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
                           {/* Subscription Status & End Date */}
                           <td className="py-3.5 px-4">
                             <div className="space-y-1">
-                              <span className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-black ${
-                                doc.subscriptionStatus === 'active' ? 'bg-emerald-100 text-emerald-800' :
-                                doc.subscriptionStatus === 'trial' ? 'bg-amber-100 text-amber-800' :
-                                'bg-rose-100 text-rose-800'
-                              }`}>
-                                {doc.subscriptionStatus === 'active' ? 'مفعل مدفوع' :
-                                 doc.subscriptionStatus === 'trial' ? 'تجريبي (Trial)' :
-                                 doc.subscriptionStatus === 'cancelled' ? 'ملغى' : 'منتهي'}
+                              <span className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-black border ${clinicSubState.badgeClass}`}>
+                                {clinicSubState.statusLabelAr}
                               </span>
                               
+                              <span className="block text-[11px] text-slate-800 font-bold">
+                                {clinicSubState.formattedExpiresAt}
+                              </span>
+
                               <span className="block text-[10px] text-slate-500 font-medium">
-                                {doc.subscriptionEndDate
-                                  ? `ينتهي: ${new Date(doc.subscriptionEndDate).toLocaleDateString('ar-EG')}`
-                                  : doc.trialEndDate
-                                  ? `تجريبي حتى: ${new Date(doc.trialEndDate).toLocaleDateString('ar-EG')}`
-                                  : 'غير محدد'}
+                                ({clinicSubState.remainingTimeText})
                               </span>
                             </div>
                           </td>
 
                           {/* Actions Buttons */}
                           <td className="py-3.5 px-4 text-center">
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-1.5">
                               
-                              {/* Open Subscription Panel for this Clinic */}
+                              {/* Open Full Subscription Modal */}
                               <button
-                                onClick={() => {
-                                  setSelectedDoctorForSub(doc);
-                                  setSearchRefCodeInput(refCode);
-                                  setActiveTab('subscriptions');
-                                }}
-                                className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[11px] font-bold transition flex items-center gap-1"
-                                title="تفعيل أو تمديد اشتراك العيادة"
+                                onClick={() => setSelectedDoctorForModal(doc)}
+                                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-[11px] font-black transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                title="إدارة وتمديد وتعديل اشتراك العيادة"
                               >
-                                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                                <span>تفعيل</span>
+                                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                                <span>إدارة الاشتراك</span>
                               </button>
 
                               {/* Toggle Active Status */}
@@ -1364,26 +1363,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
                   ? 'bg-rose-50 border-rose-200 text-rose-900'
                   : 'bg-sky-50/80 border-sky-200 text-slate-900'
               }`}>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <span className="text-xs text-slate-500 font-bold block">العيادة المحددة:</span>
                     <span className="text-base font-black text-slate-900 font-['Tajawal',sans-serif]">
                       {selectedDoctorForSub.clinicName} - {selectedDoctorForSub.name}
                     </span>
-                    <div className="text-xs text-slate-600 mt-1 flex items-center gap-3">
+                    <div className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-3">
                       <span>الكود: <strong className="font-mono text-amber-700">{selectedDoctorForSub.referenceCode || generateReferenceCode(selectedDoctorForSub.uid)}</strong></span>
                       <span>•</span>
                       <span>الهاتف: {selectedDoctorForSub.phone || 'غير محدد'}</span>
+                      <span>•</span>
+                      <span>الانتهاء الحالي: <strong>{getEffectiveSubscriptionState(selectedDoctorForSub).formattedExpiresAt}</strong></span>
                     </div>
                   </div>
 
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    selectedDoctorForSub.isActive === false
-                      ? 'bg-rose-200 text-rose-900'
-                      : 'bg-emerald-100 text-emerald-800'
-                  }`}>
-                    {selectedDoctorForSub.isActive === false ? 'معطل' : 'نشط'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDoctorForModal(selectedDoctorForSub)}
+                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 font-black text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>إدارة متقدمة للاشتراك</span>
+                    </button>
+
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      selectedDoctorForSub.isActive === false
+                        ? 'bg-rose-200 text-rose-900'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {selectedDoctorForSub.isActive === false ? 'معطل' : 'نشط'}
+                    </span>
+                  </div>
                 </div>
               </div>
             ) : searchRefCodeInput.trim() ? (
@@ -1551,20 +1563,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
                       </td>
 
                       <td className="py-3 px-4 font-bold text-slate-800">
-                        {log.plan === 'yearly' ? 'سنوية (Yearly)' : 'شهرية (Monthly)'} - <span className="text-emerald-700 font-black">{log.amount} EGP</span>
+                        <span>{log.plan === 'yearly' ? 'سنوية (Yearly)' : log.plan === 'lifetime' || log.newIsLifetime ? 'مدى الحياة' : log.plan === 'monthly' ? 'شهرية (Monthly)' : log.plan || 'مخصص'}</span>
+                        {log.amount !== undefined && (
+                          <> - <span className="text-emerald-700 font-black">{log.amount} EGP</span></>
+                        )}
                       </td>
 
-                      <td className="py-3 px-4 text-slate-600 font-medium">
-                        {new Date(log.expiresAt).toLocaleDateString('ar-EG')}
+                      <td className="py-3 px-4 text-slate-700 font-medium">
+                        {log.expiresAt ? formatDateTimeAr(log.expiresAt) : (
+                          <span className="text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            مدى الحياة (Lifetime)
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
-                          log.action === 'extend' ? 'bg-sky-100 text-sky-800' :
-                          log.action === 'cancel' ? 'bg-rose-100 text-rose-800' :
-                          'bg-emerald-100 text-emerald-800'
+                        <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-extrabold ${
+                          log.action === 'SUBSCRIPTION_SET_LIFETIME' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
+                          log.action === 'SUBSCRIPTION_SUSPENDED' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
+                          log.action === 'SUBSCRIPTION_CANCELLED' || log.action === 'cancel' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                          log.action === 'extend' || log.action === 'SUBSCRIPTION_EXTENDED' ? 'bg-sky-100 text-sky-800 border border-sky-200' :
+                          'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}>
-                          {log.action === 'extend' ? 'تمديد' : log.action === 'cancel' ? 'إلغاء' : 'تفعيل جديد'}
+                          {SUBSCRIPTION_ACTION_LABELS_AR[log.action] || log.action}
                         </span>
                       </td>
 
@@ -2077,6 +2098,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onShowToast }) =
 
           </div>
         </div>
+      )}
+
+      {/* Platform Admin Subscription Management Modal */}
+      {selectedDoctorForModal && (
+        <AdminSubscriptionModal
+          clinic={selectedDoctorForModal}
+          adminId="admin-session"
+          adminEmail="admin@dawry.app"
+          existingLogs={subscriptionLogs}
+          onClose={() => setSelectedDoctorForModal(null)}
+          onSuccess={(updated) => {
+            setDoctors((prev) =>
+              prev.map((d) => (d.uid === selectedDoctorForModal.uid ? { ...d, ...updated } : d))
+            );
+            getAllSubscriptionLogs().then(setSubscriptionLogs);
+            onShowToast('تم تحديث الاشتراك بنجاح', `تم حفظ إعدادات اشتراك ${selectedDoctorForModal.clinicName}`, 'success');
+            setSelectedDoctorForModal(null);
+          }}
+        />
       )}
 
     </div>
